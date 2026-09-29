@@ -24,8 +24,10 @@ const DRIVE_MODEL_URL =
 // AI Engine Configuration State
 let OLLAMA_HOST = process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
 let activeProvider: "ollama" | "gemini" = (process.env.AI_PROVIDER as any) || "ollama";
-let activeOllamaModel = process.env.OLLAMA_CHAT_MODEL || "minicpm-v:latest";
-let activeOllamaVisionModel = process.env.OLLAMA_VISION_MODEL || "minicpm-v:latest";
+const DEFAULT_OLLAMA_MODEL = "minicpm-magic-assistant:latest";
+const DEFAULT_OLLAMA_VISION_MODEL = "minicpm-v:latest";
+let activeOllamaModel = process.env.OLLAMA_CHAT_MODEL || DEFAULT_OLLAMA_MODEL;
+let activeOllamaVisionModel = process.env.OLLAMA_VISION_MODEL || DEFAULT_OLLAMA_VISION_MODEL;
 let activeGeminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 function describeOllamaError(error: any): string {
@@ -579,7 +581,7 @@ Return ONLY valid JSON matching this structure:
 
         let rawContent: string;
         let lastChatError: any;
-        for (const model of [activeOllamaModel, "magic-assistant:latest", "minicpm-v:latest"].filter(
+        for (const model of [activeOllamaModel, DEFAULT_OLLAMA_MODEL, "minicpm-v:latest"].filter(
           (model, index, models) => model && models.indexOf(model) === index
         )) {
           try {

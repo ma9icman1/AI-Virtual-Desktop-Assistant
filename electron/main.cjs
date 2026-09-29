@@ -13,7 +13,42 @@ let speechProcess = null;
 let speechWindow = null;
 let speechStopRequested = false;
 const ollamaWorkingDirectory = process.env.MAGIC_APP_ROOT || process.cwd();
-const supportedOllamaModels = new Set(["qwen2.5vl:3b", "llama3.2:3b", "minicpm-v"]);
+const CUSTOM_OLLAMA_MODEL = "minicpm-magic-assistant:latest";
+const BASE_OLLAMA_MODEL = "minicpm-v:latest";
+
+function getBundledMiniCPMModelfile() {
+  const source = path.join(
+    app.getAppPath(),
+    "public",
+    "models",
+    "minicpm-magic-assistant",
+    "Modelfile"
+  );
+
+  if (!fs.existsSync(source)) {
+    throw new Error("The bundled MiniCPM Magic Assistant Modelfile is missing.");
+  }
+
+  const targetDir = path.join(
+    app.getPath("userData"),
+    "models",
+    "minicpm-magic-assistant"
+  );
+
+  const target = path.join(targetDir, "Modelfile");
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.copyFileSync(source, target);
+
+  return target;
+}
+
+const supportedOllamaModels = new Set([
+  "qwen2.5vl:3b",
+  "llama3.2:3b",
+  "minicpm-v",
+  CUSTOM_OLLAMA_MODEL,
+]);
 
 function stopWhisperSpeech() {
   speechStopRequested = true;
@@ -323,7 +358,7 @@ ipcMain.on("magic-window-close", (event) => {
 
 ipcMain.handle("magic-ollama-start", (event) => {
   assertTrustedRenderer(event);
-  const command = 'ollama run minicpm-v';
+  const command = `ollama run ${CUSTOM_OLLAMA_MODEL}`;
   const child = spawn("cmd.exe", ["/c", "start", "", "/min", "cmd.exe", "/k", `cd /d "${ollamaWorkingDirectory}" && ${command}`], {
     windowsHide: false,
     detached: true,
@@ -336,15 +371,39 @@ ipcMain.handle("magic-ollama-start", (event) => {
 
 ipcMain.handle("magic-ollama-download", (event, model) => {
   assertTrustedRenderer(event);
+
   if (typeof model !== "string" || !supportedOllamaModels.has(model)) {
     throw new Error("That Ollama model is not available in the download menu.");
   }
-  const child = spawn("cmd.exe", ["/c", "start", "", "/min", "cmd.exe", "/k", `cd /d "${ollamaWorkingDirectory}" && ollama pull ${model}`], {
-    windowsHide: false,
-    detached: true,
-    stdio: "ignore",
-    cwd: ollamaWorkingDirectory,
-  });
+
+  const modelFile = model === CUSTOM_OLLAMA_MODEL
+    ? getBundledMiniCPMModelfile()
+    : null;
+
+  const command =
+    model === CUSTOM_OLLAMA_MODEL
+      ? `ollama pull ${BASE_OLLAMA_MODEL} && ollama create ${CUSTOM_OLLAMA_MODEL} -f "${modelFile}"`
+      : `ollama pull ${model}`;
+
+  const child = spawn(
+    "cmd.exe",
+    [
+      "/c",
+      "start",
+      "",
+      "/min",
+      "cmd.exe",
+      "/k",
+      `cd /d "${ollamaWorkingDirectory}" && ${command}`,
+    ],
+    {
+      windowsHide: false,
+      detached: true,
+      stdio: "ignore",
+      cwd: ollamaWorkingDirectory,
+    }
+  );
+
   child.unref();
   return true;
 });
