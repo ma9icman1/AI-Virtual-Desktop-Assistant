@@ -1,0 +1,1140 @@
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  AssistantState,
+  ChatMessage,
+  MemoryItem,
+  MultiStepPlan,
+  VisionDetection,
+  VoiceSettings,
+  PermissionLevel,
+} from "./types";
+import { VoiceEngine } from "./services/voiceEngine";
+import { VisionService } from "./services/visionService";
+import { MemoryService } from "./services/memoryService";
+
+import { VoiceOrb } from "./components/assistant/VoiceOrb";
+import { AvatarCanvas } from "./components/avatar/AvatarCanvas";
+import { ChatFeed } from "./components/assistant/ChatFeed";
+import { InputBar } from "./components/assistant/InputBar";
+import { VoiceSettingsModal } from "./components/assistant/VoiceSettingsModal";
+import { MemoryModal } from "./components/assistant/MemoryModal";
+import { VisionModal } from "./components/assistant/VisionModal";
+import { SuperAIPermissionDialog } from "./components/desktop/SuperAIPermissionDialog";
+import { TakeControlModal } from "./components/desktop/TakeControlModal";
+
+import {
+  Sparkles,
+  Trash2,
+  Mic,
+  Volume2,
+  User,
+  X,
+  Eye,
+  EyeOff,
+  Loader2,
+  Cpu,
+  Terminal,
+  Download,
+} from "lucide-react";
+
+function describeError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return message && message !== "[object Object]" ? message : fallback;
+}
+
+export default function App() {
+  const isDesktopShell = new URLSearchParams(window.location.search).has("desktop");
+
+  // Assistant core state
+  const [assistantState, setAssistantState] = useState<AssistantState>("idle");
+  const [isListening, setIsListening] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [visualMode, setVisualMode] = useState<"avatar" | "orb">("avatar");
+  const [experienceMode, setExperienceMode] = useState<"full" | "model">("full");
+  const [showVisualStage, setShowVisualStage] = useState(false);
+  const [modelConnected, setModelConnected] = useState(false);
+  const [aiConnected, setAiConnected] = useState(false);
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [isStartingOllama, setIsStartingOllama] = useState(false);
+  const [downloadingOllamaModel, setDownloadingOllamaModel] = useState<string | null>(null);
+  const [showActivityPanel, setShowActivityPanel] = useState(true);
+  const [activityText, setActivityText] = useState("");
+  const [guiBlurred, setGuiBlurred] = useState(true);
+  const [permissionLevel, setPermissionLevel] = useState<PermissionLevel>("none");
+  const [pendingPlan, setPendingPlan] = useState<MultiStepPlan | null>(null);
+  const [isPermissionOpen, setIsPermissionOpen] = useState(false);
+  const [isTakeControlOpen, setIsTakeControlOpen] = useState(false);
+  const [takeControlTask, setTakeControlTask] = useState("");
+  const [isTakeControlListening, setIsTakeControlListening] = useState(false);
+  const takeControlOpenRef = useRef(false);
+  const stopExecutionRef = useRef(false);
+
+  // Chat conversation
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // Memories
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+
+  // Vision State & Modal
+  const [activeVision, setActiveVision] = useState<VisionDetection | null>(null);
+  const [visionThumbnail, setVisionThumbnail] = useState<string | undefined>(undefined);
+  const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
+  const [isVisionModalOpen, setIsVisionModalOpen] = useState(false);
+  const [connectionProgress, setConnectionProgress] = useState<number | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const lastGreetingRef = useRef(-1);
+
+  useEffect(() => {
+    document.body.classList.toggle("desktop-shell", isDesktopShell);
+    return () => document.body.classList.remove("desktop-shell");
+  }, [isDesktopShell]);
+
+  useEffect(() => {
+    (window as any).magicWindow?.setOverlayMode(experienceMode === "model");
+  }, [experienceMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkAiConnection = async () => {
+      try {
+        const response = await fetch("/api/ai/config", { cache: "no-store" });
+        if (!response.ok) throw new Error(`AI status returned HTTP ${response.status}`);
+        const config = await response.json();
+        const providerReady = config.provider === "gemini"
+          ? Boolean(config.hasGeminiKey)
+          : Boolean(config.ollamaOnline || config.hasGeminiKey);
+        if (!cancelled) setAiConnected(providerReady);
+      } catch {
+        if (!cancelled) setAiConnected(false);
+      }
+    };
+
+    void checkAiConnection();
+    const timer = window.setInterval(checkAiConnection, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (assistantState !== "processing" && assistantState !== "executing") {
+      setConnectionProgress(null);
+      return;
+    }
+
+    setConnectionProgress(12);
+    const timer = window.setInterval(() => {
+      setConnectionProgress((current) => current === null ? 12 : Math.min(88, current + 7));
+    }, 450);
+    return () => window.clearInterval(timer);
+  }, [assistantState]);
+
+  // Voice Settings & Modal
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(VoiceEngine.getSettings());
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [assistantName, setAssistantName] = useState(() => localStorage.getItem("assistant_name") || "Nova");
+
+  const handleAssistantNameChange = useCallback((value: string) => {
+    const nextName = value.replace(/\s+/g, " ").trimStart().slice(0, 32);
+    setAssistantName(nextName);
+    localStorage.setItem("assistant_name", nextName);
+    VoiceEngine.setAssistantName(nextName);
+  }, []);
+
+  useEffect(() => {
+    VoiceEngine.setAssistantName(assistantName);
+  }, [assistantName]);
+
+  useEffect(() => {
+    takeControlOpenRef.current = isTakeControlOpen;
+  }, [isTakeControlOpen]);
+
+  const setDesktopPermission = useCallback((level: PermissionLevel) => {
+    setPermissionLevel(level);
+    (window as any).magicDesktop?.setPermission(level);
+  }, []);
+
+  const executeDesktopAction = useCallback(async (actionType: string, params: Record<string, any> = {}) => {
+    const coordinates = params.coordinates || {};
+    const normalizedType = actionType.toUpperCase();
+    const actions: Record<string, { action: string; params: Record<string, any> }> = {
+      MOVE_MOUSE: { action: "MOVE_MOUSE", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
+      CLICK_BUTTON: { action: "CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
+      DOUBLE_CLICK: { action: "DOUBLE_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
+      RIGHT_CLICK: { action: "RIGHT_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
+      DRAG: { action: "DRAG", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, endX: params.endX, endY: params.endY, coordinateSpace: params.coordinateSpace } },
+      SCROLL: { action: "SCROLL", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, key: params.key || "{PAGEDOWN}", coordinateSpace: params.coordinateSpace } },
+      TYPE_INPUT: { action: "TYPE_TEXT", params: { text: params.text || params.parameter || "" } },
+      KEY_PRESS: { action: "KEY_PRESS", params: { key: params.key || params.key_combination || params.parameter || "" } },
+      LAUNCH_APP: { action: "LAUNCH_APP", params: { app: params.app || params.parameter || "notepad.exe" } },
+      NAVIGATE_URL: { action: "NAVIGATE_URL", params: { url: params.url || params.parameter || "" } },
+      OPEN_FILE: { action: "OPEN_FILE", params: { path: params.path || params.parameter || "" } },
+      WAIT: { action: "WAIT", params: { ms: params.ms || params.estimatedDurationMs || 500 } },
+    };
+    const mapped = actions[normalizedType];
+    if (!mapped) throw new Error(`Unsupported desktop action: ${actionType}`);
+    if (!(window as any).magicDesktop?.execute) throw new Error("Desktop control is unavailable in this app window.");
+    if (["MOVE_MOUSE", "CLICK_BUTTON", "DOUBLE_CLICK", "RIGHT_CLICK", "DRAG", "SCROLL"].includes(normalizedType)) {
+      const x = mapped.params.x;
+      const y = mapped.params.y;
+      if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+        throw new Error(`This action needs screen coordinates. Ask ${assistantName} to inspect the screen first, then try again.`);
+      }
+      if (normalizedType === "DRAG" && (!Number.isFinite(Number(mapped.params.endX)) || !Number.isFinite(Number(mapped.params.endY)))) {
+        throw new Error("Drag actions need a destination point.");
+      }
+      if (normalizedType === "NAVIGATE_URL" && !String(mapped.params.url).trim()) {
+        throw new Error("No URL was provided for navigation.");
+      }
+    }
+    await (window as any).magicDesktop.execute(mapped.action, mapped.params);
+  }, []);
+
+  // Handle Assistant Speech Output
+  const handleSpeakText = useCallback((text: string) => {
+    setAssistantState("speaking");
+    VoiceEngine.speak(text, () => {
+      setAssistantState("idle");
+    });
+  }, []);
+
+  // Stop current speaking
+  const handleStopSpeaking = useCallback(() => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setAssistantState("idle");
+  }, []);
+
+  // Execute multi-step task sequence locally if suggested
+  const executePlanSequence = useCallback(
+    async (plan: MultiStepPlan) => {
+      stopExecutionRef.current = false;
+      setAssistantState("executing");
+      setShowActivityPanel(true);
+
+      for (let i = 0; i < plan.steps.length; i++) {
+        if (stopExecutionRef.current) {
+          setAssistantState("idle");
+          setActivityText("");
+          setShowActivityPanel(false);
+          return;
+        }
+        setActivityText(plan.steps[i].description || `Running step ${i + 1}`);
+        // Update plan progress
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.action?.multiStepPlan) {
+              return {
+                ...msg,
+                action: {
+                  ...msg.action,
+                  multiStepPlan: {
+                    ...msg.action.multiStepPlan,
+                    steps: msg.action.multiStepPlan.steps.map((s, idx) =>
+                      idx === i ? { ...s, status: "running" } : s
+                    ),
+                  },
+                },
+              };
+            }
+            return msg;
+          })
+        );
+
+        try {
+          await executeDesktopAction(plan.steps[i].actionType, {
+            ...plan.steps[i].params,
+            parameter: plan.steps[i].parameter,
+            coordinates: plan.steps[i].coordinates,
+            estimatedDurationMs: plan.steps[i].estimatedDurationMs,
+            coordinateSpace: plan.steps[i].params?.coordinateSpace,
+          });
+        } catch (error) {
+          const rawReason = describeError(error, "The desktop action did not complete.");
+          const reason = rawReason.length > 180 ? "Windows rejected the desktop action. Check the target app and permissions." : rawReason;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.action?.multiStepPlan
+                ? { ...msg, action: { ...msg.action, multiStepPlan: { ...msg.action.multiStepPlan, status: "aborted", steps: msg.action.multiStepPlan.steps.map((step, index) => index === i ? { ...step, status: "failed" } : step) } } }
+                : msg
+            )
+          );
+          setAssistantState("error");
+          setShowActivityPanel(false);
+          VoiceEngine.speak(`Desktop control stopped: ${reason}`, () => setAssistantState("idle"));
+          return;
+        }
+
+        // Mark step completed
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.action?.multiStepPlan) {
+              return {
+                ...msg,
+                action: {
+                  ...msg.action,
+                  multiStepPlan: {
+                    ...msg.action.multiStepPlan,
+                    steps: msg.action.multiStepPlan.steps.map((s, idx) =>
+                      idx === i ? { ...s, status: "completed" } : s
+                    ),
+                  },
+                },
+              };
+            }
+            return msg;
+          })
+        );
+      }
+
+      setAssistantState("speaking");
+      const completionText = plan.spokenCompletion || "I have completed all steps in the plan.";
+      VoiceEngine.speak(completionText, () => {
+        setAssistantState("idle");
+        setActivityText("");
+        setShowActivityPanel(false);
+      });
+    },
+    [executeDesktopAction]
+  );
+
+  // Screen Capture & Multimodal Vision Analysis (Gemini Flash OCR)
+  const handleCaptureScreen = useCallback(async (): Promise<VisionDetection | null> => {
+    setIsAnalyzingVision(true);
+    setAssistantState("processing");
+    VoiceEngine.speak("Examining your screen right now.");
+
+    try {
+      const base64Image = await VisionService.captureScreen();
+      setVisionThumbnail(base64Image);
+
+      const response = await fetch("/api/vision/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageData: base64Image,
+          instruction:
+            "Analyze the screen in detail for future mouse and keyboard control. Identify the active application and every visible search box, address bar, input, button, link, tab, menu, dialog, and important text. For each actionable element, return its exact screenshot-pixel boundingBox and center coordinates. Explain the page layout, focused control, readable labels, and what action each control would perform.",
+        }),
+      });
+
+      let visionResult: VisionDetection;
+      if (response.ok) {
+        visionResult = await response.json();
+      } else {
+        visionResult = {
+          summary: "I examined the screen snapshot and am ready for your next instruction.",
+          openWindows: ["Current Window"],
+          activeApplication: "Desktop Workspace",
+          detectedElements: [],
+          extractedText: "",
+          suggestedActions: ["Ask question", "Run command"],
+        };
+      }
+      setActiveVision(visionResult);
+
+      setAssistantState("speaking");
+      VoiceEngine.speak(visionResult.summary, () => {
+        setAssistantState("idle");
+      });
+
+      // Add to conversation feed with thumbnail
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `vision-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          role: "assistant",
+          content: visionResult.summary,
+          visionThumbnail: base64Image,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+      return visionResult;
+    } catch (err) {
+      console.error("Screen capture error:", err);
+      VoiceEngine.speak(`Screen inspection failed: ${describeError(err, "screen capture was cancelled or unavailable.")}`);
+      setAssistantState("idle");
+      return null;
+    } finally {
+      setIsAnalyzingVision(false);
+    }
+  }, []);
+
+  // Web Camera Snapshot & Analysis
+  const handleCaptureCamera = useCallback(async () => {
+    setIsAnalyzingVision(true);
+    setAssistantState("processing");
+    VoiceEngine.speak("Taking a camera snapshot.");
+
+    try {
+      const base64Image = await VisionService.captureWebcam();
+      setVisionThumbnail(base64Image);
+
+      const response = await fetch("/api/vision/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageData: base64Image,
+          instruction: "Describe what you see through the user's camera clearly and concisely.",
+        }),
+      });
+
+      let visionResult: VisionDetection;
+      if (response.ok) {
+        visionResult = await response.json();
+      } else {
+        visionResult = {
+          summary: "Camera snapshot captured and processed.",
+          openWindows: [],
+          activeApplication: "Camera Feed",
+          detectedElements: [],
+          extractedText: "",
+          suggestedActions: ["Capture another", "Ask question"],
+        };
+      }
+      setActiveVision(visionResult);
+
+      setAssistantState("speaking");
+      VoiceEngine.speak(visionResult.summary, () => {
+        setAssistantState("idle");
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `camera-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          role: "assistant",
+          content: visionResult.summary,
+          visionThumbnail: base64Image,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+    } catch (err) {
+      console.error("Webcam error:", err);
+      VoiceEngine.speak(`Camera inspection failed: ${describeError(err, "camera access was not granted.")}`);
+      setAssistantState("idle");
+    } finally {
+      setIsAnalyzingVision(false);
+    }
+  }, []);
+
+  // Trigger Magic's greeting when the user says "Magic" or clicks the orb
+  const triggerMagicGreeting = useCallback((startListeningAfter = true) => {
+    VoiceEngine.stopSpeaking();
+
+    const greetings = [
+      "Hi there. What can I help you with today?",
+      "Good to see you. I am ready when you are.",
+      "Hello. Your desktop assistant is online.",
+      "Welcome back. What would you like to do?",
+      "Hi. I am here and listening when you need me.",
+    ];
+    let greetingIndex = Math.floor(Math.random() * greetings.length);
+    if (greetings.length > 1 && greetingIndex === lastGreetingRef.current) {
+      greetingIndex = (greetingIndex + 1) % greetings.length;
+    }
+    lastGreetingRef.current = greetingIndex;
+    const greetingText = greetings[greetingIndex];
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-asst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        role: "assistant",
+        content: greetingText,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+
+    setAssistantState("speaking");
+    setIsListening(false);
+
+    VoiceEngine.speak(greetingText, () => {
+      if (!startListeningAfter) {
+        setAssistantState("idle");
+        return;
+      }
+
+      VoiceEngine.startListening()
+        .then(() => {
+          setVoiceNotice(null);
+          setIsListening(true);
+          setAssistantState("listening");
+        })
+        .catch((error) => {
+          setIsListening(false);
+          setAssistantState("idle");
+          setVoiceNotice(describeError(error, "Microphone access is unavailable."));
+        });
+    });
+  }, []);
+
+  // Send Message to Gemini Chat API
+  const handleSendMessage = useCallback(
+    async (text: string, visionOverride?: VisionDetection | null) => {
+      if (!text.trim()) return;
+
+      const escapedAssistantName = assistantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const isPureWakeWord = new RegExp(`^\\s*(hey\\s+|hi\\s+|ok\\s+|okay\\s+)?${escapedAssistantName}[!?.,]*\\s*$`, "i").test(text.trim());
+      if (isPureWakeWord) {
+        triggerMagicGreeting();
+        return;
+      }
+
+      const userMsg: ChatMessage = {
+        id: `msg-user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        role: "user",
+        content: text,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+
+      setMessages((prev) => [...prev, userMsg]);
+      setAssistantState("processing");
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            history: messages.slice(-6).map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            memories: MemoryService.getMemories(),
+            visionContext: visionOverride ?? activeVision,
+            assistantName,
+          }),
+        });
+
+        let data: any = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+
+        if (!response.ok && !data?.spokenResponse) {
+          throw new Error(data?.error || `Chat server returned HTTP ${response.status}.`);
+        }
+
+        const spokenText = data?.spokenResponse || data?.spokenReply || "The assistant returned no response. Check the Ollama connection and selected model.";
+
+        const assistantMsg: ChatMessage = {
+          id: `msg-asst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          role: "assistant",
+          content: spokenText,
+          action: data.action,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+
+        setMessages((prev) => [...prev, assistantMsg]);
+        setAssistantState("speaking");
+
+        VoiceEngine.speak(spokenText, () => {
+          setAssistantState("idle");
+        });
+
+          // Handle specific actions if present
+          if (data.action?.type === "LAUNCH_APP" || data.action?.type === "OPEN_FILE") {
+          const appName = data.action.app || data.action.parameter || data.action.params?.app;
+            const filePath = data.action.path || data.action.parameter || data.action.params?.path;
+            const actionType = data.action.type;
+            const plan: MultiStepPlan = {
+              id: `launch-${Date.now()}`,
+              planTitle: actionType === "OPEN_FILE" ? `Open ${filePath || "file"}` : `Open ${appName || "application"}`,
+              spokenIntro: spokenText,
+              steps: [{
+                stepNumber: 1,
+                description: actionType === "OPEN_FILE" ? `Open ${filePath || "file"}` : `Launch ${appName || "application"}`,
+                actionType,
+                params: actionType === "OPEN_FILE" ? { path: filePath } : { app: appName },
+              status: "pending",
+              estimatedDurationMs: 1000,
+            }],
+            spokenCompletion: actionType === "OPEN_FILE"
+              ? `${filePath || "The file"} is open.`
+              : `${appName || "The application"} is open.`,
+            currentStepIndex: 0,
+            status: "idle",
+          };
+          if (permissionLevel === "none" || permissionLevel === "deny") {
+            setPendingPlan(plan);
+            setIsPermissionOpen(true);
+          } else {
+            executePlanSequence(plan);
+          }
+        } else if (data.action?.type === "REMEMBER" && data.action.parameter) {
+          MemoryService.addMemory("Preference", data.action.parameter, "preference", "persistent");
+          setMemories(MemoryService.getMemories());
+        } else if (data.action?.type === "SCREEN_ANALYSIS") {
+          handleCaptureScreen();
+        } else if (data.action?.type === "MULTI_STEP_PLAN" && data.action.multiStepPlan) {
+          const plan = data.action.multiStepPlan as MultiStepPlan;
+          if (permissionLevel === "none" || permissionLevel === "deny") {
+            setPendingPlan(plan);
+            setIsPermissionOpen(true);
+          } else {
+            executePlanSequence(plan);
+          }
+        }
+      } catch (err) {
+        console.error("Chat error:", err);
+        setAssistantState("error");
+        VoiceEngine.speak(`Chat failed: ${describeError(err, "the assistant could not process that request.")}`);
+        setTimeout(() => setAssistantState("idle"), 3000);
+      }
+    },
+    [messages, activeVision, assistantName, executePlanSequence, handleCaptureScreen, permissionLevel, triggerMagicGreeting]
+  );
+
+  const handlePermissionGrant = useCallback((level: PermissionLevel) => {
+    setDesktopPermission(level);
+    setIsPermissionOpen(false);
+    if (pendingPlan) {
+      const plan = pendingPlan;
+      setPendingPlan(null);
+      executePlanSequence(plan);
+    }
+  }, [executePlanSequence, pendingPlan, setDesktopPermission]);
+
+  const handleTakeControl = useCallback(async (task: string) => {
+    setIsTakeControlOpen(false);
+    setIsTakeControlListening(false);
+    VoiceEngine.stopListening();
+    setTakeControlTask("");
+    const screenContext = await handleCaptureScreen();
+    await handleSendMessage(task, screenContext);
+  }, [handleCaptureScreen, handleSendMessage]);
+
+  const handlePermissionDeny = useCallback(() => {
+    setDesktopPermission("deny");
+    setPendingPlan(null);
+    setIsPermissionOpen(false);
+    VoiceEngine.speak("Desktop control was cancelled.");
+  }, [setDesktopPermission]);
+
+  // Toggle Voice Listening
+  const handleToggleListening = useCallback(() => {
+    if (isListening) {
+      VoiceEngine.stopListening();
+      setIsListening(false);
+      setAssistantState("idle");
+    } else {
+      setIsListening(true);
+      setAssistantState("listening");
+      setVoiceNotice(null);
+      VoiceEngine.startListening().catch((error) => {
+        setIsListening(false);
+        setAssistantState("error");
+        setVoiceNotice(describeError(error, "Microphone access is unavailable."));
+        setAssistantState("idle");
+      });
+    }
+  }, [isListening]);
+
+  const handleTakeControlVoice = useCallback(() => {
+    if (isTakeControlListening) {
+      VoiceEngine.stopListening();
+      setIsTakeControlListening(false);
+      return;
+    }
+    VoiceEngine.startListening()
+      .then(() => {
+        setIsTakeControlListening(true);
+        setVoiceNotice(null);
+      })
+      .catch((error) => {
+        setIsTakeControlListening(false);
+        setVoiceNotice(describeError(error, "Microphone access is unavailable."));
+      });
+  }, [isTakeControlListening]);
+
+  const handleStopDesktopControl = useCallback(() => {
+    stopExecutionRef.current = true;
+    (window as any).magicDesktop?.emergencyStop?.();
+    setDesktopPermission("deny");
+    setAssistantState("idle");
+    setActivityText("");
+    setShowActivityPanel(false);
+    VoiceEngine.speak("Desktop control stopped.");
+  }, [setDesktopPermission]);
+
+  const handleModelQuickAction = useCallback(
+    (action: "todo" | "important" | "inspect") => {
+      const prompts = {
+        todo: "Show me my important to-do items and help me decide what to do next.",
+        important: "Review our conversation and tell me the most important items I should remember or act on.",
+        inspect: "Inspect my screen and tell me what is active.",
+      };
+      handleSendMessage(prompts[action]);
+    },
+    [handleSendMessage]
+  );
+  // Click on the orb triggers "Hi, how can I help you?" or stops speaking
+  const handleOrbClick = useCallback(() => {
+    if (assistantState === "speaking") {
+      VoiceEngine.stopSpeaking();
+      setAssistantState("idle");
+    } else {
+      triggerMagicGreeting();
+    }
+  }, [assistantState, triggerMagicGreeting]);
+
+  // Memory additions and removals
+  const handleAddMemory = useCallback(
+    (key: string, value: string, category: "preference" | "routine" | "application" | "user_info" | "website") => {
+      MemoryService.addMemory(key, value, category, "persistent");
+      setMemories(MemoryService.getMemories());
+      VoiceEngine.speak(`I will remember that your ${key} is ${value}.`);
+    },
+    []
+  );
+
+  const handleRemoveMemory = useCallback((id: string) => {
+    MemoryService.removeMemory(id);
+    setMemories(MemoryService.getMemories());
+  }, []);
+
+  // Initial setup & event listeners
+  useEffect(() => {
+    // 1. Load memories
+    setMemories(MemoryService.getMemories());
+    let cleanupVoices = () => {};
+
+    // 2. Load SpeechSynthesis voices
+    if ("speechSynthesis" in window) {
+      const updateVoices = () => {
+        const engineVoices = VoiceEngine.getVoices();
+        const browserVoices = window.speechSynthesis.getVoices();
+        const voices = [...engineVoices, ...browserVoices].filter(
+          (voice, index, all) => all.findIndex((candidate) =>
+            candidate.name === voice.name &&
+            candidate.lang === voice.lang &&
+            candidate.voiceURI === voice.voiceURI
+          ) === index
+        );
+        if (voices.length > 0) setAvailableVoices(voices);
+      };
+      updateVoices();
+      window.speechSynthesis.addEventListener("voiceschanged", updateVoices);
+      const voiceLoadRetry = window.setInterval(updateVoices, 250);
+      window.setTimeout(() => window.clearInterval(voiceLoadRetry), 5000);
+      cleanupVoices = () => {
+        window.speechSynthesis.removeEventListener("voiceschanged", updateVoices);
+        window.clearInterval(voiceLoadRetry);
+      };
+    }
+
+    // 3. Connect speech recognition callback
+    const unsubSpeech = VoiceEngine.onSpeechRecognized((transcript: string) => {
+      if (takeControlOpenRef.current) {
+        setTakeControlTask((current) => `${current ? `${current} ` : ""}${transcript}`.trim());
+        setIsTakeControlListening(false);
+        VoiceEngine.stopListening();
+        return;
+      }
+      setAssistantState("processing");
+      handleSendMessage(transcript);
+    });
+
+    // 4. Connect wake-word callback ("Magic")
+    const unsubWake = VoiceEngine.onWakeWordDetected(() => {
+      triggerMagicGreeting();
+    });
+
+    // 5. Connect audio level meter
+    const unsubAudio = VoiceEngine.onAudioLevel((lvl: number) => {
+      setAudioLevel(lvl);
+    });
+    const unsubVoiceError = VoiceEngine.onError((message: string) => {
+      console.warn("Voice recognition stopped:", message);
+      setVoiceNotice(message);
+      const isPermanentVoiceError = /permission was denied|unavailable|audio-capture|could not be initialized|speech recognition stopped|speech process did not start/i.test(message);
+      if (isPermanentVoiceError) {
+        setIsListening(false);
+        setAssistantState("error");
+        setAssistantState("idle");
+      } else {
+        setAssistantState("listening");
+      }
+    });
+
+    return () => {
+      cleanupVoices();
+      unsubSpeech();
+      unsubWake();
+      unsubAudio();
+      unsubVoiceError();
+      VoiceEngine.stopListening();
+    };
+  }, [handleSendMessage, triggerMagicGreeting]);
+
+  useEffect(() => {
+    const greetingTimer = window.setTimeout(() => triggerMagicGreeting(false), 900);
+    return () => window.clearTimeout(greetingTimer);
+  }, [triggerMagicGreeting]);
+
+  return (
+    <div
+      className={`w-screen h-screen overflow-hidden ${isDesktopShell ? "desktop-shell" : "bg-slate-950"} text-slate-100 flex flex-col font-sans select-none relative`}
+      style={
+        isDesktopShell && guiBlurred && experienceMode === "full"
+          ? { backgroundColor: "rgba(2, 6, 23, 0.4)", backdropFilter: "blur(18px)" }
+          : undefined
+      }
+    >
+      {experienceMode === "model" ? (
+        <AvatarCanvas
+          isSpeaking={assistantState === "speaking"}
+          isListening={isListening}
+          audioLevel={audioLevel}
+          modelOnly
+          onSpeakGreeting={triggerMagicGreeting}
+          onToggleListening={handleToggleListening}
+          onCaptureScreen={handleCaptureScreen}
+          onSendMessage={handleSendMessage}
+          status={assistantState}
+          voiceNotice={voiceNotice}
+          connectionProgress={connectionProgress}
+          onQuickAction={handleModelQuickAction}
+          onToggleFullView={() => setExperienceMode("full")}
+          onModelConnectionChange={setModelConnected}
+          loadOnMount
+          className="h-screen w-screen"
+        />
+      ) : (
+        <>
+      {/* Background ambient lighting */}
+      <div className={`${isDesktopShell ? "hidden" : ""} absolute inset-0 pointer-events-none overflow-hidden`}>
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-indigo-600/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 -right-20 w-[400px] h-[400px] bg-cyan-600/5 rounded-full blur-3xl" />
+      </div>
+
+      {/* Top Header Bar */}
+      <header className={`relative z-10 shrink-0 h-12 px-2 sm:px-3 ${isDesktopShell ? "border-transparent bg-transparent" : "border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl"} flex items-center justify-center`}>
+        <div className="w-full max-w-lg flex items-center justify-between">
+        {/* Brand & Identity */}
+        <button
+          type="button"
+          onClick={() => setIsSettingsOpen(true)}
+          className="flex items-center gap-2 rounded-xl p-1 text-left transition hover:bg-white/5"
+          title="Open assistant settings"
+        >
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-[1px] shadow-lg shadow-indigo-500/20">
+            <div className="w-full h-full rounded-[7px] bg-slate-950 flex items-center justify-center text-cyan-400">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-sm font-semibold text-white tracking-tight">{assistantName || "Assistant"}</h1>
+              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-medium text-indigo-300">
+                Assistant
+              </span>
+            </div>
+            <p className="text-[9px] text-slate-400">Voice & Multimodal Intelligence</p>
+          </div>
+        </button>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-1.5 pr-12 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => setIsModelMenuOpen(true)}
+            className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[10px] font-medium cursor-pointer transition ${
+              aiConnected
+                ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                : "border-rose-400/30 bg-rose-500/10 text-rose-300"
+            }`}
+            title="Open AI model menu"
+            aria-label="Open AI model menu"
+          >
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-bold tracking-tight ${aiConnected ? "bg-emerald-400 text-emerald-950 shadow-[0_0_8px_#34d399]" : "bg-rose-500 text-rose-950 shadow-[0_0_8px_#f43f5e]"}`}>AI</span>
+            <span className="hidden sm:inline">{aiConnected ? "AI confirmed" : "AI not connected"}</span>
+          </button>
+
+          {/* Model-only overlay mode */}
+          <button
+            onClick={() => setExperienceMode("model")}
+            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            title="Show model only"
+          >
+            <User className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => setShowVisualStage((visible) => !visible)}
+            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            title={showVisualStage ? "Hide AI model" : "Show AI model"}
+          >
+            {showVisualStage ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => (window as any).magicWindow?.close()}
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-30 p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 hover:text-rose-100 transition-colors cursor-pointer"
+            title={`Close ${assistantName}`}
+            aria-label={`Close ${assistantName}`}
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {isDesktopShell && (
+            <button
+              onClick={() => setGuiBlurred((current) => !current)}
+              className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                guiBlurred
+                  ? "bg-sky-500/20 border-sky-400/50 text-sky-200"
+                  : "bg-slate-900 hover:bg-slate-800 border-slate-800 hover:border-slate-700 text-slate-300"
+              }`}
+              title={guiBlurred ? "Use fully transparent background" : "Use 60% transparent blurred background"}
+            >
+              <Sparkles className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Clear Chat Button */}
+          {messages.length > 0 && (
+            <button
+              onClick={() => setMessages([])}
+              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+              title="Clear Conversation"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        </div>
+      </header>
+
+      {/* Main Assistant Body */}
+      <main className="relative z-10 flex-1 min-h-0 flex flex-col max-w-lg w-full mx-auto overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+        {/* Dynamic Visual Stage: 3D Rigged Head or Luminous Orb */}
+        {showVisualStage && <div className="shrink-0 border-b border-slate-800/40 bg-gradient-to-b from-slate-950/40 to-transparent">
+          {visualMode === "avatar" ? (
+            <AvatarCanvas
+              isSpeaking={assistantState === "speaking"}
+              audioLevel={audioLevel}
+              onSpeakGreeting={triggerMagicGreeting}
+              visualMode={visualMode}
+              onVisualModeChange={setVisualMode}
+              onModelConnectionChange={setModelConnected}
+              loadOnMount
+              className="h-44 sm:h-52 w-full"
+            />
+          ) : (
+            <VoiceOrb
+              state={assistantState}
+              audioLevel={audioLevel}
+              isListening={isListening}
+              onToggleListening={handleToggleListening}
+              onClickOrb={handleOrbClick}
+              onStopSpeaking={handleStopSpeaking}
+              assistantName={assistantName}
+            />
+          )}
+        </div>}
+
+        {/* Conversation Feed */}
+        <ChatFeed
+          messages={messages}
+          assistantName={assistantName}
+          onSpeak={handleSpeakText}
+          onQuickPrompt={handleSendMessage}
+          onOpenVisionDetail={() => setIsVisionModalOpen(true)}
+        />
+
+        {/* Bottom Command Console */}
+        <InputBar
+          onSendMessage={handleSendMessage}
+          isListening={isListening}
+          onToggleListening={handleToggleListening}
+          onCaptureScreen={handleCaptureScreen}
+          onCaptureCamera={handleCaptureCamera}
+          onTakeControl={() => setIsTakeControlOpen(true)}
+          state={assistantState}
+          isAnalyzingVision={isAnalyzingVision}
+          assistantName={assistantName}
+        />
+      </main>
+
+      {assistantState === "executing" && showActivityPanel && (
+        <div className="desktop-modal-backdrop pointer-events-none fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="desktop-modal-panel pointer-events-auto w-full max-w-sm rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-4 text-slate-100 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+                <div>
+                  <p className="text-sm font-semibold">{assistantName} is working</p>
+                  <p className="mt-1 text-xs text-slate-400">{activityText || "Executing the requested desktop actions..."}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleStopDesktopControl}
+                className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-200 hover:bg-rose-500/25"
+                title="Stop desktop control"
+              >
+                Stop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice & Settings Modal */}
+      <VoiceSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={voiceSettings}
+        onSettingsChange={(newSettings) => {
+          VoiceEngine.updateSettings(newSettings);
+          setVoiceSettings(VoiceEngine.getSettings());
+        }}
+        availableVoices={availableVoices}
+        assistantName={assistantName}
+        onAssistantNameChange={handleAssistantNameChange}
+      />
+
+      {isModelMenuOpen && (
+        <div className="ai-model-menu-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="ai-model-menu w-full max-w-sm max-h-[calc(100vh-24px)] overflow-y-auto rounded-2xl border border-cyan-400/30 p-4 text-slate-100 shadow-2xl shadow-cyan-950/40">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-cyan-300" />
+                <div>
+                  <h2 className="text-sm font-semibold text-white">AI model menu</h2>
+                  <p className="text-[11px] text-slate-400">{aiConnected ? "AI connected and confirmed" : "AI provider not connected"}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModelMenuOpen(false)}
+                className="flex items-center gap-1 rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/25"
+                title="Close AI model menu"
+                aria-label="Close AI model menu"
+              >
+                <X className="h-4 w-4" />
+                <span>Close</span>
+              </button>
+            </div>
+            <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/70 p-3">
+              <div className="flex items-center gap-2">
+                <Download className="h-4 w-4 text-cyan-300" />
+                <div>
+                  <p className="text-xs font-semibold text-white">GPU-friendly Ollama models</p>
+                  <p className="mt-1 text-[10px] text-slate-400">Choose a smaller model for better video-card performance.</p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {[
+                  { name: "qwen2.5vl:3b", label: "Qwen 2.5 VL 3B", note: "Vision + text · 4-8 GB VRAM" },
+                  { name: "minicpm-v", label: "MiniCPM-V", note: "Vision + text · 4-8 GB VRAM" },
+                  { name: "llama3.2:3b", label: "Llama 3.2 3B", note: "Text assistant · 4-8 GB VRAM" },
+                ].map((model) => (
+                  <div key={model.name} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-2.5 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[11px] font-semibold text-slate-100">{model.label}</p>
+                      <p className="font-mono text-[9px] text-slate-500">{model.name} · {model.note}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={downloadingOllamaModel !== null}
+                      onClick={async () => {
+                        setDownloadingOllamaModel(model.name);
+                        try {
+                          await (window as any).magicWindow?.downloadOllama?.(model.name);
+                        } finally {
+                          window.setTimeout(() => setDownloadingOllamaModel(null), 1200);
+                        }
+                      }}
+                      className="shrink-0 rounded-lg bg-cyan-400 px-2 py-1.5 text-[10px] font-semibold text-cyan-950 hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {downloadingOllamaModel === model.name ? "Opening..." : "Download"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[9px] text-slate-500">Downloads run in a minimized Command Prompt from the same app directory used by Start Ollama. VRAM needs vary by quantization and context size.</p>
+            </div>
+            <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/70 p-3">
+              <div className="flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-emerald-300" />
+                <div>
+                  <p className="text-xs font-semibold text-white">Start Ollama MiniCPM-V</p>
+                  <p className="mt-1 font-mono text-[10px] text-slate-400">ollama run minicpm-v</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isStartingOllama}
+                onClick={async () => {
+                  setIsStartingOllama(true);
+                  try {
+                    await (window as any).magicWindow?.startOllama?.();
+                  } finally {
+                    window.setTimeout(() => setIsStartingOllama(false), 1200);
+                  }
+                }}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-wait disabled:opacity-60"
+              >
+                <Terminal className="h-4 w-4" />
+                {isStartingOllama ? "Opening Ollama..." : "Start Ollama"}
+              </button>
+              <p className="mt-2 text-[10px] text-slate-500">Opens a minimized Command Prompt window and runs the model command.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Memory Manager Modal */}
+      <MemoryModal
+        isOpen={isMemoryOpen}
+        onClose={() => setIsMemoryOpen(false)}
+        memories={memories}
+        onAddMemory={handleAddMemory}
+        onRemoveMemory={handleRemoveMemory}
+      />
+
+      {/* Multimodal Vision Analysis Details Modal */}
+      <VisionModal
+        isOpen={isVisionModalOpen}
+        onClose={() => setIsVisionModalOpen(false)}
+        vision={activeVision}
+        thumbnailUrl={visionThumbnail}
+        onActionClick={handleSendMessage}
+      />
+        </>
+      )}
+
+      <SuperAIPermissionDialog
+        isOpen={isPermissionOpen}
+        requestedActionDescription={pendingPlan?.planTitle || "A multi-step desktop control task"}
+        onGrant={handlePermissionGrant}
+        onDeny={handlePermissionDeny}
+        assistantName={assistantName}
+      />
+      <TakeControlModal
+        isOpen={isTakeControlOpen}
+        onClose={() => {
+          setIsTakeControlOpen(false);
+          setIsTakeControlListening(false);
+          VoiceEngine.stopListening();
+          setTakeControlTask("");
+        }}
+        onSubmit={handleTakeControl}
+        assistantName={assistantName}
+        task={takeControlTask}
+        onTaskChange={setTakeControlTask}
+        isListening={isTakeControlListening}
+        onToggleListening={handleTakeControlVoice}
+      />
+    </div>
+  );
+}
