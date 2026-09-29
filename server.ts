@@ -9,7 +9,14 @@ dotenv.config();
 import fs from "fs";
 
 const app = express();
-const APP_ROOT = process.env.MAGIC_APP_ROOT || process.cwd();
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+  next();
+});const APP_ROOT = process.env.MAGIC_APP_ROOT || process.cwd();
 const PORT = Number(process.env.PORT || 3000);
 const DRIVE_MODEL_URL =
   "https://drive.usercontent.google.com/download?id=1vcrb7KBpUkOlfpXYcE30FzVxpTaNvEp2&export=download&confirm=t";
@@ -257,8 +264,8 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   return parsed;
 }
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "8mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use("/models", express.static(path.join(APP_ROOT, "public", "models")));
 app.use(express.static(path.join(APP_ROOT, "public")));
 
@@ -505,8 +512,17 @@ app.get("/api/health", async (_req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
     const { message, history = [], memories = [], visionContext = null, assistantName = "Nova" } = req.body;
-    if (!message) {
+    if (typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "Message is required" });
+    }
+    if (message.length > 8000) {
+      return res.status(413).json({ error: "Message is too long." });
+    }
+    if (!Array.isArray(history) || history.length > 20) {
+      return res.status(400).json({ error: "Invalid conversation history." });
+    }
+    if (!Array.isArray(memories) || memories.length > 100) {
+      return res.status(400).json({ error: "Invalid memories payload." });
     }
 
     const configuredAssistantName = typeof assistantName === "string" && assistantName.trim() ? assistantName.trim().slice(0, 32) : "Nova";
@@ -808,11 +824,129 @@ Return structured JSON analysis in this exact format:
 });
 
 // Multi-Step Task Planner Endpoint
+const PLANNER_ACTION_TYPES = new Set([
+  "LAUNCH_APP",
+  "NAVIGATE_URL",
+  "MOVE_MOUSE",
+  "CLICK_BUTTON",
+  "DOUBLE_CLICK",
+  "RIGHT_CLICK",
+  "DRAG",
+  "SCROLL",
+  "TYPE_INPUT",
+  "KEY_PRESS",
+  "WAIT",
+]);
+const PLANNER_APPS = new Set([
+  "brave", "edge", "chrome", "firefox", "notepad", "calculator",
+  "paint", "explorer", "files", "terminal", "taskmgr",
+]);
+
+function validateAgentPlan(plan: any) {
+  if (!plan || typeof plan !== "object" || !Array.isArray(plan.steps)) {
+    throw new Error("Planner returned an invalid plan.");
+  }
+  if (plan.steps.length === 0 || plan.steps.length > 12) {
+    throw new Error("Planner returned an invalid number of steps.");
+  }
+
+  const steps = plan.steps.map((step: any, index: number) => {
+    if (!step || typeof step !== "object") {
+      throw new Error(`Planner step ${index + 1} is invalid.`);
+    }
+    const actionType = String(step.actionType || "");
+    if (!PLANNER_ACTION_TYPES.has(actionType)) {
+      throw new Error(`Planner action is not allowed: ${actionType || "unknown"}.`);
+    }
+    const rawParams = step.params && typeof step.params === "object" && !Array.isArray(step.params)
+      ? step.params
+      : {};
+    const normalized = {
+      stepNumber: index + 1,
+      description: String(step.description || `${actionType} step`).slice(0, 240),
+      actionType,
+      params: { ...rawParams },
+      estimatedDurationMs: Math.min(15000, Math.max(0, Number(step.estimatedDurationMs) || 0)),
+    };
+
+    if (actionType === "LAUNCH_APP") {
+      const app = String(normalized.params.app || "").trim().toLowerCase();
+      if (!PLANNER_APPS.has(app)) throw new Error(`Planner app is not allowed: ${app || "unknown"}.`);
+      normalized.params = { app };
+    }
+    if (actionType === "NAVIGATE_URL") {
+      const url = String(normalized.params.url || "").trim();
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new Error("Planner URL is invalid.");
+      }
+      if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2048) {
+        throw new Error("Planner URL is not allowed.");
+      }
+      normalized.params = { url };
+    }
+    if (["MOVE_MOUSE", "CLICK_BUTTON", "DOUBLE_CLICK", "RIGHT_CLICK"].includes(actionType)) {
+      for (const [key, max] of [["x", 1280], ["y", 800]] as const) {
+        const value = Number(normalized.params[key]);
+        if (!Number.isFinite(value) || value < 0 || value > max) {
+          throw new Error(`Planner coordinate ${key} is invalid.`);
+        }
+        normalized.params[key] = Math.round(value);
+      }
+    }
+    if (actionType === "DRAG") {
+      for (const [key, max] of [["x", 1280], ["endX", 1280], ["y", 800], ["endY", 800]] as const) {
+        const value = Number(normalized.params[key]);
+        if (!Number.isFinite(value) || value < 0 || value > max) {
+          throw new Error(`Planner coordinate ${key} is invalid.`);
+        }
+        normalized.params[key] = Math.round(value);
+      }
+    }
+    if (actionType === "SCROLL") {
+      const amount = Number(normalized.params.amount);
+      if (!Number.isFinite(amount) || amount < -10000 || amount > 10000) {
+        throw new Error("Planner scroll amount is invalid.");
+      }
+      normalized.params = { amount: Math.round(amount) };
+    }
+    if (actionType === "TYPE_INPUT") {
+      const text = String(normalized.params.text ?? "");
+      if (text.length > 4000) throw new Error("Planner input is too long.");
+      normalized.params = { text };
+    }
+    if (actionType === "KEY_PRESS") {
+      const key = String(normalized.params.key || "");
+      if (!key || key.length > 64) throw new Error("Planner key input is invalid.");
+      normalized.params = { key };
+    }
+    if (actionType === "WAIT") {
+      const ms = Number(normalized.params.ms);
+      if (!Number.isFinite(ms) || ms < 0 || ms > 10000) throw new Error("Planner wait duration is invalid.");
+      normalized.params = { ms: Math.round(ms) };
+    }
+
+    return normalized;
+  });
+
+  return {
+    planTitle: String(plan.planTitle || "Desktop task").slice(0, 120),
+    spokenIntro: String(plan.spokenIntro || "").slice(0, 500),
+    steps,
+    spokenCompletion: String(plan.spokenCompletion || "").slice(0, 500),
+  };
+}
+
 app.post("/api/agent/plan", async (req, res) => {
   try {
     const { goal, context = {} } = req.body;
-    if (!goal) {
+    if (!goal || typeof goal !== "string") {
       return res.status(400).json({ error: "Goal is required" });
+    }
+    if (goal.length > 4000) {
+      return res.status(413).json({ error: "Goal is too long" });
     }
 
     const plannerPrompt = `You are the Task Planning Engine for Magic inside the Magic Windows Assistant.
@@ -820,16 +954,21 @@ Deconstruct the user's high-level command into an ordered sequence of executable
 User Goal: "${goal}"
 Desktop Context: ${JSON.stringify(context)}
 
-Supported Step Action Types:
-- "LAUNCH_APP": { "app": "brave" | "edge" | "chrome" | "notepad" | "calculator" | "paint" | "files" | "terminal" | "taskmgr" }
+Only use these executable step action types:
+- "LAUNCH_APP": { "app": "brave" | "edge" | "chrome" | "firefox" | "notepad" | "calculator" | "paint" | "explorer" | "files" | "terminal" | "taskmgr" }
 - "NAVIGATE_URL": { "url": string }
-- "FOCUS_ELEMENT": { "selector": string, "description": string }
-- "TYPE_INPUT": { "text": string, "pressEnter": boolean }
-- "CLICK_BUTTON": { "buttonName": string }
-- "CREATE_DIRECTORY": { "path": string, "name": string }
-- "CALCULATE": { "expression": string }
-- "SYSTEM_COMMAND": { "cmd": string }
-- "VERIFY_STATE": { "condition": string }
+- "MOVE_MOUSE": { "x": number, "y": number }
+- "CLICK_BUTTON": { "x": number, "y": number }
+- "DOUBLE_CLICK": { "x": number, "y": number }
+- "RIGHT_CLICK": { "x": number, "y": number }
+- "DRAG": { "x": number, "y": number, "endX": number, "endY": number }
+- "SCROLL": { "amount": number }
+- "TYPE_INPUT": { "text": string }
+- "KEY_PRESS": { "key": string }
+- "WAIT": { "ms": number }
+
+Never output shell commands, PowerShell, command prompt instructions, executable paths, file deletion/install commands, or any action type outside this list.
+Return no more than 12 steps.
 
 Respond ONLY with valid JSON:
 {
@@ -867,7 +1006,7 @@ Respond ONLY with valid JSON:
         }
 
         if (parsed && parsed.steps) {
-          return res.json(parsed);
+          return res.json(validateAgentPlan(parsed));
         }
       } catch (ollamaPlanErr: any) {
         console.warn("[Ollama] Planner error:", ollamaPlanErr.message);
@@ -893,27 +1032,11 @@ Respond ONLY with valid JSON:
       parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
     }
 
-    if (!parsed || !parsed.steps) {
-      throw new Error("Could not parse valid plan structure");
-    }
-
-    res.json(parsed);
+    res.json(validateAgentPlan(parsed));
   } catch (error: any) {
     console.error("Error in /api/agent/plan:", error);
-    res.json({
-      planTitle: "Direct Task Assistance",
-      spokenIntro: "I'll guide you step by step.",
-      steps: [
-        {
-          stepNumber: 1,
-          description: req.body.goal || "Assist with task",
-          actionType: "SYSTEM_COMMAND",
-          params: {},
-          estimatedDurationMs: 1000,
-        },
-      ],
-      spokenCompletion: "Ready for your next request.",
-      warning: error.message,
+    res.status(502).json({
+      error: "The task planner could not produce a safe executable plan.",
     });
   }
 });
@@ -935,7 +1058,7 @@ async function start() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "127.0.0.1", () => {
     console.log(`Magic Windows Assistant running on http://0.0.0.0:${PORT}`);
     console.log(`[AI Engine] Provider: ${activeProvider} | Ollama Host: ${OLLAMA_HOST} | Default Chat Model: ${activeOllamaModel}`);
   });

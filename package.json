@@ -5,20 +5,19 @@
   "author": "ma9ic",
   "private": true,
   "type": "module",
-
   "scripts": {
     "dev": "tsx server.ts",
     "postinstall": "npm run build",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "desktop:dev": "npm run build && electron .",
-    "desktop:package": "npm run build && npx @electron/packager . \"Magic-AI-Assistant\" --platform=win32 --arch=x64 --out=dist-app --overwrite",
+    "desktop:package": "npm run build && npx electron-builder --win nsis portable",
     "desktop:build": "npm run desktop:package",
     "release:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\release-quick.ps1",
     "preview": "vite preview",
-
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -35,20 +34,20 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
-    ,"electron": "^38.2.2"
-    ,"electron-builder": "^26.0.12"
-  }
-  ,"main": "electron/main.cjs"
-  ,"build": {
+    "typescript": "^7.0.2"
+  },
+  "main": "electron/main.cjs",
+  "build": {
     "appId": "com.magicai.assistant",
     "productName": "Magic AI Assistant",
     "directories": {
@@ -64,11 +63,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },

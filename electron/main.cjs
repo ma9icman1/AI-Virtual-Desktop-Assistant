@@ -79,9 +79,14 @@ function startWhisperSpeech(window) {
   });
 }
 
+/* desktop execution policy hardening v1 */
 function runPowerShell(script, args = []) {
   return new Promise((resolve, reject) => {
-    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script, ...args], { windowsHide: true }, (error, stdout, stderr) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", script, ...args],
+      { windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 },
+      (error, stdout, stderr) => {
       if (error) reject(new Error(stderr.trim() || error.message));
       else resolve(stdout.trim());
     });
@@ -114,13 +119,16 @@ async function executeDesktopAction(action, params = {}) {
       paint: ["mspaint.exe"],
       explorer: ["explorer.exe"],
       files: ["explorer.exe"],
-      terminal: ["powershell.exe"],
-      powershell: ["powershell.exe"],
+      terminal: ["wt.exe"],
       taskmgr: ["taskmgr.exe"],
     };
     const requested = String(params.app || "").trim().toLowerCase();
-    const candidates = aliases[requested] || [String(params.app || "")];
-    const target = candidates.find((candidate) => candidate && fs.existsSync(candidate)) || candidates.find((candidate) => /\.exe$/i.test(candidate));
+    const candidates = aliases[requested];
+    if (!candidates) {
+      throw new Error(`Application is not allowed: ${requested || "requested app"}.`);
+    }
+    const target = candidates.find((candidate) => candidate && fs.existsSync(candidate))
+      || candidates.find((candidate) => /\.exe$/i.test(candidate));
     if (!target) throw new Error(`Could not find application: ${requested || "requested app"}.`);
     const child = spawn(target, [], { detached: true, stdio: "ignore", windowsHide: true });
     await new Promise((resolve, reject) => {
@@ -134,7 +142,23 @@ async function executeDesktopAction(action, params = {}) {
   if (action === "OPEN_FILE") {
     const filePath = String(params.path || "").trim();
     if (!filePath) throw new Error("No file path was provided.");
-    const errorMessage = await shell.openPath(path.resolve(filePath));
+    if (!path.isAbsolute(filePath)) {
+      throw new Error("Opening a file requires an absolute path.");
+    }
+
+    const resolvedPath = path.resolve(filePath);
+    const blockedExtensions = new Set([
+      ".exe", ".com", ".bat", ".cmd", ".ps1", ".psm1",
+      ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+      ".msi", ".msix", ".appx", ".scr", ".cpl", ".dll",
+      ".sys", ".lnk", ".url",
+    ]);
+    const extension = path.extname(resolvedPath).toLowerCase();
+    if (blockedExtensions.has(extension)) {
+      throw new Error(`Opening this file type is not allowed: ${extension}`);
+    }
+
+    const errorMessage = await shell.openPath(resolvedPath);
     if (errorMessage) throw new Error(`Could not open file: ${errorMessage}`);
     if (desktopPermission === "one_action") desktopPermission = "none";
     return;
@@ -142,11 +166,63 @@ async function executeDesktopAction(action, params = {}) {
   if (action === "NAVIGATE_URL") {
     const url = String(params.url || "").trim();
     if (!/^https?:\/\//i.test(url)) throw new Error("Navigation requires an http or https URL.");
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    } catch {
+      throw new Error("Navigation requires a valid http or https URL.");
+    }
     const errorMessage = await shell.openExternal(url);
     if (errorMessage) throw new Error(`Could not open URL: ${errorMessage}`);
     if (desktopPermission === "one_action") desktopPermission = "none";
     return;
   }
+  const supportedInputActions = new Set([
+    "MOVE_MOUSE",
+    "CLICK",
+    "RIGHT_CLICK",
+    "DOUBLE_CLICK",
+    "DRAG",
+    "SCROLL",
+    "TYPE_TEXT",
+    "KEY_PRESS",
+    "WAIT",
+  ]);
+  if (!supportedInputActions.has(action)) {
+    throw new Error(`Unsupported desktop action: ${String(action)}`);
+  }
+
+  const boundedInteger = (value, min, max, label) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < min || numeric > max) {
+      throw new Error(`${label} is outside the allowed range.`);
+    }
+    return numeric;
+  };
+
+  if (["MOVE_MOUSE", "CLICK", "RIGHT_CLICK", "DOUBLE_CLICK", "DRAG", "SCROLL"].includes(action)) {
+    boundedInteger(params.x, 0, AI_SCREEN_WIDTH - 1, "X coordinate");
+    boundedInteger(params.y, 0, AI_SCREEN_HEIGHT - 1, "Y coordinate");
+  }
+  if (action === "DRAG") {
+    boundedInteger(params.endX, 0, AI_SCREEN_WIDTH - 1, "End X coordinate");
+    boundedInteger(params.endY, 0, AI_SCREEN_HEIGHT - 1, "End Y coordinate");
+  }
+  if (action === "SCROLL") {
+    boundedInteger(params.amount, -10000, 10000, "Scroll amount");
+  }
+  if (action === "TYPE_TEXT") {
+    const text = String(params.text || "");
+    if (text.length > 4000) throw new Error("Text input is limited to 4000 characters.");
+  }
+  if (action === "KEY_PRESS") {
+    const key = String(params.key || "");
+    if (!key || key.length > 64) throw new Error("Key input is limited to 64 characters.");
+  }
+  if (action === "WAIT") {
+    boundedInteger(params.ms, 0, 10000, "Wait duration");
+  }
+
   const script = `
 Add-Type @'
 using System;
@@ -180,21 +256,27 @@ switch ($action) {
 }
 
 ipcMain.on("magic-window-move", (event, deltaX, deltaY) => {
+  assertTrustedRenderer(event);
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
   const [x, y] = window.getPosition();
   window.setPosition(Math.round(x + deltaX), Math.round(y + deltaY));
 });
 
-ipcMain.on("desktop-control-permission", (_event, level) => {
+ipcMain.on("desktop-control-permission", (event, level) => {
+  assertTrustedRenderer(event);
   if (["none", "one_action", "one_session", "always", "deny"].includes(level)) {
     desktopPermission = level;
     desktopKilled = level === "deny";
   }
 });
 
-ipcMain.handle("desktop-control-action", async (_event, action, params) => executeDesktopAction(action, params));
+ipcMain.handle("desktop-control-action", async (event, action, params) => {
+  assertTrustedRenderer(event);
+  return executeDesktopAction(action, params);
+});
 ipcMain.handle("desktop-capture-screen", async (event) => {
+  assertTrustedRenderer(event);
   const window = BrowserWindow.fromWebContents(event.sender);
   const wasVisible = window && !window.isDestroyed() && window.isVisible();
   if (wasVisible) {
@@ -220,20 +302,27 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
   }
 });
 ipcMain.handle("magic-voice-start", (event) => {
+  assertTrustedRenderer(event);
   startWhisperSpeech(BrowserWindow.fromWebContents(event.sender));
   return true;
 });
-ipcMain.on("magic-voice-stop", () => stopWhisperSpeech());
-ipcMain.on("desktop-control-kill", () => {
+ipcMain.on("magic-voice-stop", (event) => {
+  assertTrustedRenderer(event);
+  stopWhisperSpeech();
+});
+ipcMain.on("desktop-control-kill", (event) => {
+  assertTrustedRenderer(event);
   desktopKilled = true;
   desktopPermission = "none";
 });
 
 ipcMain.on("magic-window-close", (event) => {
+  assertTrustedRenderer(event);
   BrowserWindow.fromWebContents(event.sender)?.close();
 });
 
-ipcMain.handle("magic-ollama-start", () => {
+ipcMain.handle("magic-ollama-start", (event) => {
+  assertTrustedRenderer(event);
   const command = 'ollama run minicpm-v';
   const child = spawn("cmd.exe", ["/c", "start", "", "/min", "cmd.exe", "/k", `cd /d "${ollamaWorkingDirectory}" && ${command}`], {
     windowsHide: false,
@@ -245,7 +334,8 @@ ipcMain.handle("magic-ollama-start", () => {
   return true;
 });
 
-ipcMain.handle("magic-ollama-download", (_event, model) => {
+ipcMain.handle("magic-ollama-download", (event, model) => {
+  assertTrustedRenderer(event);
   if (typeof model !== "string" || !supportedOllamaModels.has(model)) {
     throw new Error("That Ollama model is not available in the download menu.");
   }
@@ -260,6 +350,7 @@ ipcMain.handle("magic-ollama-download", (_event, model) => {
 });
 
 ipcMain.on("magic-window-layout", (event, overlayMode) => {
+  assertTrustedRenderer(event);
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || typeof overlayMode !== "boolean") return;
 
@@ -284,6 +375,32 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
     });
   }
 });
+
+/* trusted renderer IPC hardening v1 */
+
+function assertTrustedRenderer(event) {
+
+  const sender = event?.sender;
+
+  const frameUrl = event?.senderFrame?.url || sender?.getURL?.() || "";
+
+  if (!sender || !/^http:\/\/127\.0\.0\.1:\d+\//i.test(frameUrl)) {
+
+    throw new Error("Untrusted renderer.");
+
+  }
+
+  const window = BrowserWindow.fromWebContents(sender);
+
+  if (!window || window.isDestroyed()) {
+
+    throw new Error("Renderer window is unavailable.");
+
+  }
+
+  return window;
+
+}
 
 function waitForServer(url, attempts = 80) {
   return new Promise((resolve, reject) => {
@@ -349,8 +466,27 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
       preload: path.join(app.getAppPath(), "electron", "preload.cjs"),
     },
+  });
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    const allowedPrefix = `http://127.0.0.1:${port}/`;
+    if (!url.startsWith(allowedPrefix)) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) {
+        void shell.openExternal(url);
+      }
+    }
   });
 
   await window.loadURL(`http://127.0.0.1:${port}/?desktop=1`);
