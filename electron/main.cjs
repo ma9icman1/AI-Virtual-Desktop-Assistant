@@ -1293,6 +1293,12 @@ async function createWindow() {
     log(`CACHE CLEAR FAILED: ${error?.message || error}`);
   }
   await window.loadURL(`http://127.0.0.1:${port}/?desktop=1`);
+
+  // Prewarm Whisper after the UI is loaded. The model stays resident but the
+  // microphone remains idle until the user presses the mic button.
+  void startWhisperProcess(window).catch((error) => {
+    console.warn("[ma9icAI voice] Whisper prewarm unavailable:", error?.message || error);
+  });
 }
 
 app.whenReady().then(createWindow).catch((error) => {
