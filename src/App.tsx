@@ -1000,15 +1000,6 @@ export default function App() {
             <main className="ma9ic-main">
               {activeSection === 'Home' ? (
                 <div className="ma9ic-home-scroll">
-                  <section className="ma9ic-hero-dashboard">
-                    <div className="ma9ic-hero-orb"><img src="/ui/ma9icai-logo.png" alt="ma9icAI" /></div>
-                    <div className="ma9ic-hero-copy">
-                      <h2>Hello, I’m <em>ma9icAI</em></h2>
-                      <p>Your Virtual Desktop Assistant</p>
-                      <span>Ask me anything, or use the tools in the sidebar.<br/>I’m ready when you are.</span>
-                    </div>
-                  </section>
-
                   <section className="ma9ic-home-chat">
                     <div className="ma9ic-home-chat-title"><MessageSquare /> <span>Chat</span></div>
                     <div className="ma9ic-home-chat-feed">
