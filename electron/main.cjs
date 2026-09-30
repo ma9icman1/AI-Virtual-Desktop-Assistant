@@ -490,12 +490,24 @@ Add-Node $root 0 -1
   try { return JSON.parse(raw || "{}"); } catch { return { count: 0, elements: [], error: "Could not parse UI tree." }; }
 }
 
-async function verifyProcessRunning(processName) {
+async function verifyProcessRunning(processName, attempts = 12, delayMs = 250) {
   const normalized = normalizeProcessName(processName);
   if (!normalized) return false;
-  const script = `Get-Process -Name '${normalized.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Id`;
-  const result = await runPowerShell(script).catch(() => "");
-  return /^\\d+$/.test(String(result).trim());
+
+  // Windows apps such as browsers may launch a short-lived bootstrapper and
+  // create the real UI process a moment later. Verify for a short window
+  // instead of declaring failure after a single immediate process lookup.
+  const escaped = normalized.replace(/'/g, "''");
+  const script = `Get-Process -Name '${escaped}' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Id`;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const result = await runPowerShell(script).catch(() => "");
+    if (/^\\d+$/.test(String(result).trim())) return true;
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return false;
 }
 
 async function executeDesktopAction(action, params = {}) {
