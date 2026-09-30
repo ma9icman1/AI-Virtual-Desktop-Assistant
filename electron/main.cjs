@@ -494,11 +494,30 @@ async function verifyProcessRunning(processName, attempts = 12, delayMs = 250) {
   const normalized = normalizeProcessName(processName);
   if (!normalized) return false;
 
-  // Windows apps such as browsers may launch a short-lived bootstrapper and
-  // create the real UI process a moment later. Verify for a short window
-  // instead of declaring failure after a single immediate process lookup.
-  const escaped = normalized.replace(/'/g, "''");
-  const script = `Get-Process -Name '${escaped}' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Id`;
+  // Some Windows launchers hand off to a different executable name.
+  // Keep verification strict, but recognize the process names used by the
+  // apps that this assistant explicitly allows.
+  const verificationNames = {
+    edge: ["msedge"],
+    msedge: ["msedge"],
+    calculator: ["calculatorapp", "calculator"],
+    calc: ["calculatorapp", "calculator"],
+    taskmgr: ["taskmgr"],
+    terminal: ["windowsterminal", "wt"],
+    wt: ["windowsterminal", "wt"],
+    explorer: ["explorer"],
+    files: ["explorer"],
+    notepad: ["notepad"],
+    paint: ["mspaint"],
+    chrome: ["chrome"],
+    brave: ["brave"],
+    firefox: ["firefox"],
+  };
+  const names = verificationNames[normalized] || [normalized];
+  const escapedNames = names.map((name) => `'${name.replace(/'/g, "''")}'`).join(",");
+
+  // Give Windows launchers time to hand off to the final application process.
+  const script = `$names = @(${escapedNames}); Get-Process -ErrorAction SilentlyContinue | Where-Object { $names -contains $_.ProcessName.ToLowerInvariant() } | Select-Object -First 1 -ExpandProperty Id`;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const result = await runPowerShell(script).catch(() => "");
