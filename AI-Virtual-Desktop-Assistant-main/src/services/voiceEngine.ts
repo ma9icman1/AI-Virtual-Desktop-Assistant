@@ -386,10 +386,19 @@ export class VoiceEngine {
     try {
       this.nativeSpeechCleanup = window.magicVoice.onTranscript(({ text, confidence }) => {
         if (this.isSpeaking || !this.isListening) return;
-        void this.requestCloudCorrection(text, confidence).then((corrected) => {
-          if (!corrected) this.processRecognizedText(text, true, confidence);
-          this.recordedAudioChunks = [];
-        });
+        const transcript = typeof text === "string" ? text.trim() : "";
+        if (!transcript) return;
+
+        // Whisper is already providing the usable transcript. Process it immediately so
+        // normal spoken commands reach the chat instead of being held behind correction.
+        this.processRecognizedText(transcript, true, confidence);
+
+        // Keep the correction request only as a background diagnostic/correction path.
+        // Never let it be responsible for delivering the original transcript to the chat.
+        if (confidence < 0.72) {
+          void this.requestCloudCorrection(transcript, confidence).catch(() => undefined);
+        }
+        this.recordedAudioChunks = [];
       });
       const nativeErrorCleanup = window.magicVoice.onError((message) => {
         if (this.isListening) VoiceEngine.errorListeners.forEach((listener) => listener(`Whisper speech service: ${message}`));
