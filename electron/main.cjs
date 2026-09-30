@@ -306,10 +306,10 @@ async function findUiElement(params = {}) {
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 $root = [System.Windows.Automation.AutomationElement]::RootElement
-$name = $args[0]
-$aid = $args[1]
-$type = $args[2]
-$proc = $args[3]
+$name = $scriptArgs[0]
+$aid = $scriptArgs[1]
+$type = $scriptArgs[2]
+$proc = $scriptArgs[3]
 $all = [System.Windows.Automation.TreeScope]::Descendants
 $elements = $root.FindAll($all, [System.Windows.Automation.Condition]::TrueCondition)
 $matches = @()
@@ -353,7 +353,7 @@ async function readUiElement(params = {}) {
   const script = `
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-$pid = [int]$args[0]; $aid = $args[1]; $name = $args[2]
+$pid = [int]$scriptArgs[0]; $aid = $scriptArgs[1]; $name = $scriptArgs[2]
 $elements = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
 $target = $null
 foreach ($el in $elements) { try { if ($el.Current.ProcessId -ne $pid) { continue }; if ($aid -and $el.Current.AutomationId -ne $aid) { continue }; if ($name -and $el.Current.Name -notlike $name) { continue }; $target=$el; break } catch {} }
@@ -377,7 +377,7 @@ async function setUiElementValue(params = {}) {
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
-$pid=[int]$args[0]; $aid=$args[1]; $name=$args[2]; $value=$args[3]
+$pid=[int]$scriptArgs[0]; $aid=$scriptArgs[1]; $name=$scriptArgs[2]; $value=$scriptArgs[3]
 $elements=[System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
 $target=$null
 foreach($el in $elements){try{if($el.Current.ProcessId -ne $pid){continue};if($aid -and $el.Current.AutomationId -ne $aid){continue};if($name -and $el.Current.Name -notlike $name){continue};$target=$el;break}catch{}}
@@ -421,11 +421,11 @@ public static class MagicTreeWindow {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 }
 '@
-$processFilter = $args[0]
-$maxDepth = [int]$args[1]
-$maxNodes = [int]$args[2]
-$includeUnnamed = [bool]::Parse($args[3])
-$activeOnly = [bool]::Parse($args[4])
+$processFilter = $scriptArgs[0]
+$maxDepth = [int]$scriptArgs[1]
+$maxNodes = [int]$scriptArgs[2]
+$includeUnnamed = [bool]::Parse($scriptArgs[3])
+$activeOnly = [bool]::Parse($scriptArgs[4])
 $root = $null
 if ($activeOnly) {
   $hwnd = [MagicTreeWindow]::GetForegroundWindow()
@@ -611,9 +611,9 @@ public static class MagicUiInput {
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
 }
 '@
-$targetName = $args[0]
-$targetId = $args[1]
-$targetPid = [int]$args[2]
+$targetName = $scriptArgs[0]
+$targetId = $scriptArgs[1]
+$targetPid = [int]$scriptArgs[2]
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
 $target = $null
@@ -740,17 +740,17 @@ public static class MagicInput {
   public const uint LEFTDOWN=0x02, LEFTUP=0x04, RIGHTDOWN=0x08, RIGHTUP=0x10, KEYUP=0x02;
 }
 '@
-$action = $args[0]
+$action = $scriptArgs[0]
 switch ($action) {
-  'MOVE_MOUSE' { [MagicInput]::SetCursorPos([int]$args[1], [int]$args[2]) }
-  'CLICK' { [MagicInput]::SetCursorPos([int]$args[1], [int]$args[2]); [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
-  'RIGHT_CLICK' { [MagicInput]::SetCursorPos([int]$args[1], [int]$args[2]); [MagicInput]::mouse_event(8,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(16,0,0,0,[UIntPtr]::Zero) }
-  'DOUBLE_CLICK' { [MagicInput]::SetCursorPos([int]$args[1], [int]$args[2]); 1..2 | ForEach-Object { [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80 } }
-  'DRAG' { [MagicInput]::SetCursorPos([int]$args[1], [int]$args[2]); [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 100; [MagicInput]::SetCursorPos([int]$args[4], [int]$args[5]); Start-Sleep -Milliseconds 100; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
-  'SCROLL' { [MagicInput]::SetCursorPos([int]$args[1], [int]$args[2]); Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($args[3]) }
-  'TYPE_TEXT' { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($args[1]) }
-  'KEY_PRESS' { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($args[1]) }
-  'WAIT' { Start-Sleep -Milliseconds ([int]$args[1]) }
+  'MOVE_MOUSE' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]) }
+  'CLICK' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
+  'RIGHT_CLICK' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); [MagicInput]::mouse_event(8,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(16,0,0,0,[UIntPtr]::Zero) }
+  'DOUBLE_CLICK' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); 1..2 | ForEach-Object { [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80 } }
+  'DRAG' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 100; [MagicInput]::SetCursorPos([int]$scriptArgs[4], [int]$scriptArgs[5]); Start-Sleep -Milliseconds 100; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
+  'SCROLL' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($scriptArgs[3]) }
+  'TYPE_TEXT' { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($scriptArgs[1]) }
+  'KEY_PRESS' { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($scriptArgs[1]) }
+  'WAIT' { Start-Sleep -Milliseconds ([int]$scriptArgs[1]) }
 }`;
 
   const endX = scalePoint(params.endX, display.size.width, AI_SCREEN_WIDTH);
