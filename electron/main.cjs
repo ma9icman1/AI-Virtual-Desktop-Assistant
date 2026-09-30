@@ -601,7 +601,7 @@ async function executeDesktopAction(action, params = {}) {
   const y = scalePoint(params.y, display.size.height, AI_SCREEN_HEIGHT);
   if (action === "LAUNCH_APP") {
     const requested = String(params.app || "").trim().toLowerCase();
-    const browserAliases = new Set(["browser", "web browser", "internet", "internet browser", "edge", "microsoft edge", "chrome", "google chrome", "firefox", "mozilla firefox", "brave", "brave browser", "opera", "opera browser"]);
+    const browserAliases = new Set(["browser", "web browser", "internet", "internet browser", "edge", "microsoft edge", "chrome", "google chrome", "firefox", "mozilla firefox", "brave", "brave browser", "opera", "opera browser", "vivaldi", "vivaldi browser"]);
 
     // Browser requests delegate to Windows so the configured default browser is always used.
     if (browserAliases.has(requested)) {
