@@ -332,7 +332,9 @@ async function callOllamaChat(params: {
     messages: chatMessages,
     stream: false,
     options: {
-      temperature: 0.3,
+      temperature: 0.1,
+      num_ctx: 2048,
+      num_predict: 220,
     },
   };
 
@@ -795,7 +797,7 @@ Use exactly:
   "extractedText": "Only important readable text",
   "suggestedActions": ["up to 3 useful actions"]
 }
-Rules: at most 20 detectedElements; keep labels/text short; omit uncertain elements; coordinates are pixels in 1280x800 screenshot space.`;
+Rules: at most 12 detectedElements; keep labels/text very short; omit uncertain elements; coordinates are pixels in 1280x800 screenshot space; prioritize actionable controls over decorative text.`;
 
     const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
 
@@ -812,7 +814,7 @@ Rules: at most 20 detectedElements; keep labels/text short; omit uncertain eleme
             },
           ],
           formatJson: true,
-          timeoutMs: 180000,
+          timeoutMs: 45000,
         });
 
         const parsed = parseLooseJson(rawContent);
