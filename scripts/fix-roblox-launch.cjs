@@ -33,7 +33,7 @@ if (fs.existsSync(serverFile)) {
   // Teach the deterministic voice parser that "Roblox" is an allowed app.
   const aliasMarker = '    [/\\b(power ?shell|terminal)\\b/, "terminal"],';
   const aliasReplacement = '    [/\\b(power ?shell|terminal)\\b/, "terminal"],\n    [/\\broblox(?: player)?\\b/, "roblox"],';
-  if (text.includes(aliasMarker) && !text.includes('[/\\b(?:roblox|roblox player)')) {
+  if (text.includes(aliasMarker) && !text.includes('[/\\broblox')) {
     text = text.replace(aliasMarker, aliasReplacement);
   }
 
