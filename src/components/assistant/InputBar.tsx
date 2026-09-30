@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { Mic, MicOff, Send, Monitor, Loader2 } from "lucide-react";
 import { AssistantState } from "../../types";
+
+const WAKE_WORD = "Magic";
 
 interface InputBarProps {
   onSendMessage: (text: string) => void;
@@ -44,13 +46,18 @@ export const InputBar: React.FC<InputBarProps> = ({
     }
   };
 
+  const displayVoiceNotice = voiceNotice?.toLowerCase().startsWith("wake word active")
+    ? `Wake word active — say ${WAKE_WORD}.`
+    : voiceNotice;
+
   return (
     <div className="p-2 bg-slate-950/80 border-t border-slate-800/80 backdrop-blur-xl">
-      {voiceNotice && (
-        <div className="px-2 pb-1 text-[11px] text-cyan-300/90 truncate" role="status">{voiceNotice}</div>
+      {displayVoiceNotice && (
+        <div className="px-2 pb-1 text-[11px] text-cyan-300/90 truncate" role="status">
+          {displayVoiceNotice}
+        </div>
       )}
-      {/* Main Command Input Box */}
-      <form onSubmit={handleSubmit}       className="flex items-center gap-1 mt-1">
+      <form onSubmit={handleSubmit} className="flex items-center gap-1 mt-1">
         <div className="relative flex-1 flex items-center bg-slate-900 border border-slate-800 focus-within:border-indigo-500 rounded-2xl transition-colors shadow-inner">
           <input
             ref={inputRef}
@@ -65,8 +72,6 @@ export const InputBar: React.FC<InputBarProps> = ({
             }
             className="w-full bg-transparent px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none"
           />
-
-          {/* Inline Action Buttons inside input */}
           <div className="flex items-center gap-1.5 pr-2">
             <button
               type="button"
@@ -79,8 +84,6 @@ export const InputBar: React.FC<InputBarProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Microphone Toggle Button */}
         <button
           type="button"
           onClick={onToggleListening}
@@ -89,7 +92,7 @@ export const InputBar: React.FC<InputBarProps> = ({
               ? "bg-cyan-500 text-slate-950 ring-4 ring-cyan-500/30 scale-105"
               : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
           }`}
-          title={isListening ? "Stop listening" : `Start voice listening (or say 'Hey ${assistantName}')`}
+          title={isListening ? "Stop listening" : `Start voice listening (or say '${WAKE_WORD}')`}
         >
           {isListening ? (
             <Mic className="w-5 h-5 animate-pulse" />
@@ -97,8 +100,6 @@ export const InputBar: React.FC<InputBarProps> = ({
             <MicOff className="w-5 h-5 text-slate-400" />
           )}
         </button>
-
-        {/* Send Button */}
         <button
           type="submit"
           disabled={!inputText.trim() || state === "processing"}
