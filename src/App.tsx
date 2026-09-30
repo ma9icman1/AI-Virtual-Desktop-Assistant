@@ -666,7 +666,7 @@ export default function App() {
           setVoiceNotice(describeError(error, "Microphone access is unavailable."));
         });
     });
-  }, []);
+  }, [armWakeWord]);
 
   // Send Message to Gemini Chat API
   const handleSendMessage = useCallback(
