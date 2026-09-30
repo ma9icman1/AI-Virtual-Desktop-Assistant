@@ -755,7 +755,7 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
             },
           ],
           formatJson: true,
-          timeoutMs: 18000,
+          timeoutMs: 12000,
           options: {
             temperature: 0,
             num_ctx: 2048,
@@ -766,8 +766,16 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
         const parsed = parseLooseJson(rawContent);
 
         if (parsed && typeof parsed === "object") {
+          const detectedElements = Array.isArray(parsed.detectedElements)
+            ? parsed.detectedElements.slice(0, 8).filter((item: any) => item && typeof item === "object")
+            : [];
           return res.json({
-            ...parsed,
+            summary: String(parsed.summary || "Screen examined successfully."),
+            openWindows: Array.isArray(parsed.openWindows) ? parsed.openWindows.slice(0, 6) : [],
+            activeApplication: String(parsed.activeApplication || "Desktop Workspace"),
+            detectedElements,
+            extractedText: String(parsed.extractedText || ""),
+            suggestedActions: Array.isArray(parsed.suggestedActions) ? parsed.suggestedActions.slice(0, 3) : [],
             provider: "ollama",
             model: activeOllamaVisionModel,
           });
