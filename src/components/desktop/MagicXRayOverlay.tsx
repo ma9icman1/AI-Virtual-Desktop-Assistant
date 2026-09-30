@@ -7,6 +7,7 @@ interface MagicXRayOverlayProps {
   imageUrl?: string;
   visible: boolean;
   onClose: () => void;
+  onTargetClick?: (element: VisionDetection["detectedElements"][number]) => void;
 }
 
 export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
@@ -34,7 +35,7 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
     [vision]
   );
 
-  if (!visible || !vision || elements.length === 0) return null;
+  if (!visible || !vision) return null;
 
   const scaleX = window.innerWidth / imageSize.width;
   const scaleY = window.innerHeight / imageSize.height;
@@ -74,8 +75,10 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
         return (
           <div
             key={`xray-${index}-${element.type}-${element.label}`}
-            className="absolute"
+            className="absolute pointer-events-auto cursor-crosshair"
             style={{ left, top, width, height }}
+            onClick={() => onTargetClick?.(element)}
+            title={onTargetClick ? `Target: ${element.label || element.type}` : undefined}
           >
             <div className="absolute inset-0 rounded-md border border-cyan-300/80 bg-cyan-300/[0.07] shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_18px_rgba(34,211,238,0.18)] animate-pulse" />
 
