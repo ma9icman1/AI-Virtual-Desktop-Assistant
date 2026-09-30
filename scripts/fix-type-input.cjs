@@ -12,7 +12,7 @@ if (!fs.existsSync(electronFile)) {
 let text = fs.readFileSync(electronFile, "utf8");
 
 // Replace the TYPE_TEXT PowerShell action with literal clipboard paste.
-const typeRegex = /  'TYPE_TEXT' \\{[^\\n]*\\}/;
+const typeRegex = /  'TYPE_TEXT' \{[^\n]*\}/;
 const typeHandler = "  'TYPE_TEXT' { Add-Type -AssemblyName System.Windows.Forms; $text = [string]$scriptArgs[1]; if ([string]::IsNullOrEmpty($text)) { break }; [System.Windows.Forms.Clipboard]::SetText($text); Start-Sleep -Milliseconds 150; [System.Windows.Forms.SendKeys]::SendWait('^v'); Start-Sleep -Milliseconds 150 }";
 if (typeRegex.test(text)) {
   text = text.replace(typeRegex, typeHandler);
