@@ -356,77 +356,69 @@ async function callOllamaChat(params: {
 }
 
 function parseLooseJson(raw: string): any | null {
-  const text = String(raw || "").trim();
-  const candidates = [
-    text,
-    text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim(),
-  ];
+  let text = String(raw || "").trim();
+  if (!text) return null;
 
-  const firstObject = text.indexOf("{");
-  const lastObject = text.lastIndexOf("}");
-  if (firstObject >= 0 && lastObject > firstObject) {
-    candidates.push(text.slice(firstObject, lastObject + 1));
+  text = text
+    .replace(/^\\s*\\`\\`\\`(?:json)?/i, "")
+    .replace(/\\`\\`\\`\\s*$/i, "")
+    .trim();
+
+  const candidates = [text];
+  const first = text.indexOf("{");
+  if (first >= 0) {
+    const last = text.lastIndexOf("}");
+    if (last > first) candidates.push(text.slice(first, last + 1));
   }
 
   for (const candidate of candidates) {
     try {
-      return JSON.parse(candidate);
-    } catch {
-      // Try a conservative repair for vision models that emit an unescaped
-      // quote inside a JSON string or a trailing comma.
-      let repaired = "";
-      let inString = false;
-      let escaped = false;
+      const value = JSON.parse(candidate);
+      if (value && typeof value === "object") return value;
+    } catch {}
+  }
 
-      for (let i = 0; i < candidate.length; i++) {
-        const ch = candidate[i];
-        if (escaped) {
-          repaired += ch;
-          escaped = false;
-          continue;
-        }
-        if (ch === "\\") {
-          repaired += ch;
-          escaped = true;
-          continue;
-        }
-        if (ch === '"') {
-          if (!inString) {
-            inString = true;
-            repaired += ch;
-            continue;
-          }
+  // Repair common local-VLM JSON mistakes while preserving quoted text.
+  const candidate = candidates[candidates.length - 1];
+  let repaired = "";
+  let inString = false;
+  let escaped = false;
 
-          let next = i + 1;
-          while (next < candidate.length && /\s/.test(candidate[next])) next++;
-          const nextChar = candidate[next];
-          if (next >= candidate.length || nextChar === "," || nextChar === "}" || nextChar === "]" || nextChar === ":") {
-            inString = false;
-            repaired += ch;
-          } else {
-            repaired += "\\\"";
-          }
-          continue;
-        }
-        if (inString && ch === "\n") {
-          repaired += "\\n";
-        } else if (inString && ch === "\r") {
-          repaired += "\\r";
-        } else if (inString && ch === "\t") {
-          repaired += "\\t";
-        } else {
-          repaired += ch;
-        }
-      }
-
-      repaired = repaired.replace(/,\s*([}\]])/g, "$1");
-      try {
-        return JSON.parse(repaired);
-      } catch {
-        // Continue with the next candidate.
+  for (let i = 0; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (escaped) {
+      repaired += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\\\") {
+      repaired += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      let next = i + 1;
+      while (next < candidate.length && /\\s/.test(candidate[next])) next++;
+      if (!inString) {
+        inString = true;
+      } else if (next >= candidate.length || /[,}\\]:]/.test(candidate[next])) {
+        inString = false;
+      } else {
+        repaired += "\\\\\"";
+        continue;
       }
     }
+    if (inString && ch === "\\n") repaired += "\\\\n";
+    else if (inString && ch === "\\r") repaired += "\\\\r";
+    else if (inString && ch === "\\t") repaired += "\\\\t";
+    else repaired += ch;
   }
+
+  repaired = repaired.replace(/,\\s*([}\\]])/g, "$1");
+  try {
+    const value = JSON.parse(repaired);
+    return value && typeof value === "object" ? value : null;
+  } catch {}
 
   return null;
 }
@@ -815,7 +807,7 @@ Rules: at most 12 detectedElements; keep labels/text very short; omit uncertain 
           options: {
             temperature: 0.1,
             num_ctx: 2048,
-            num_predict: 220,
+            num_predict: 480,
           },
         });
 
