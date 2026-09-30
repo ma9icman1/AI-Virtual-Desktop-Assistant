@@ -556,7 +556,7 @@ foreach ($el in $elements) {
     try {
       $vp = $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
       $value = [string]$vp.Current.Value
-      if ($value -match '^(?i)(https?|file)://') { $url = $value; break }
+      if ($value -match '(?i)^(https?|file)://') { $url = $value; break }
     } catch {}
   } catch {}
 }
