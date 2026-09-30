@@ -38,15 +38,10 @@
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.4.0",
     "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.3.0",
-    "typescript": "^5.0.0",
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.14.0",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.4.21",
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.0.0"
   },
@@ -54,12 +49,29 @@
   "build": {
     "appId": "com.magicai.assistant",
     "productName": "ma9icAI",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "public/**/*", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/**/*",
+      "package.json"
+    ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
