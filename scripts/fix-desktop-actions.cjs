@@ -156,4 +156,22 @@ if (fs.existsSync(electronFile)) {
     fs.writeFileSync(electronFile, text, 'utf8');
     console.log('[desktop-actions] Added native minimize/maximize/restore actions.');
   }
+
+  // A launched process can exist without becoming the foreground window. Voice
+  // commands such as "Open Notepad" followed by "Type ..." must leave the
+  // launched app focused so the next input action reaches it instead of ma9icAI.
+  if (!text.includes('[desktop-actions] launch focus repair')) {
+    const verifyLine = '    if (!verified) throw new Error(`Windows started ${requested}, but the process could not be verified.`);';
+    if (!text.includes(verifyLine)) throw new Error('[desktop-actions] Launch verification marker not found');
+    const focusBlock = [
+      verifyLine,
+      '    // [desktop-actions] launch focus repair',
+      '    const focusScript = "Add-Type @\'\\nusing System;\\nusing System.Runtime.InteropServices;\\npublic static class MagicLaunchFocus { [DllImport(\\\"user32.dll\\\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\\n\'@\\n$proc = Get-Process -Name \'" + verifyTarget.replace(/\'/g, "\'\'") + "\' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1\\nif ($proc) { [MagicLaunchFocus]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null }\\n";',
+      '    await runPowerShell(focusScript);',
+      '    await new Promise((resolve) => setTimeout(resolve, 180));'
+    ].join('\n');
+    text = text.replace(verifyLine, focusBlock);
+    fs.writeFileSync(electronFile, text, 'utf8');
+    console.log('[desktop-actions] launch focus repair installed.');
+  }
 }
