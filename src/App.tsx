@@ -995,7 +995,16 @@ export default function App() {
                   </button>
                 ))}
               </nav>
-            </aside>
+
+              {activeVision?.activeApplication && (
+                <div className="ma9ic-sidebar-active-app">
+                  <div className="ma9ic-sidebar-active-app-label">ACTIVE APPLICATION</div>
+                  <div className="ma9ic-sidebar-active-app-name" title={activeVision.activeApplication}>
+                    {activeVision.activeApplication}
+                  </div>
+                </div>
+              )}
+            </aside>    </aside>
 
             <main className="ma9ic-main">
               <div className="ma9ic-main-title">AI Virtual Desktop Assistant</div>
