@@ -58,6 +58,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     [/\b(task manager|taskmgr)\b/, "taskmgr"],
     [/\b(power ?shell|terminal)\b/, "terminal"],
     [/\b(firefox|mozilla firefox)\b/, "firefox"],
+    [/\b(opera|vivaldi)\b/, "browser"],
   ];
   const requestedApp = appAliases.find(([pattern]) => pattern.test(request))?.[1];
   const asksToOpen = /\b(open|launch|start|load|run)\b/.test(request);
@@ -928,7 +929,7 @@ const PLANNER_ACTION_TYPES = new Set([
   "WAIT",
 ]);
 const PLANNER_APPS = new Set([
-  "browser", "brave", "edge", "chrome", "firefox", "notepad", "calculator",
+  "browser", "brave", "edge", "chrome", "firefox", "opera", "vivaldi", "notepad", "calculator",
   "paint", "explorer", "files", "terminal", "taskmgr",
 ]);
 
