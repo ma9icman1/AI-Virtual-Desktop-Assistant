@@ -21,6 +21,7 @@ interface ChatFeedProps {
   onSpeak: (text: string) => void;
   onQuickPrompt: (text: string) => void;
   onOpenVisionDetail?: (vision: VisionDetection) => void;
+  onVisionTargetClick?: (element: VisionDetection["detectedElements"][number]) => void;
   assistantName?: string;
 }
 
@@ -29,6 +30,7 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
   onSpeak,
   onQuickPrompt,
   onOpenVisionDetail,
+  onVisionTargetClick,
   assistantName = "Nova",
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -228,15 +230,38 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                     <span className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300">
                       <Eye className="w-3.5 h-3.5" /> Visual Screen Capture
                     </span>
-                    <span className="text-[10px] text-cyan-400 font-mono">Gemini 3.8 Flash OCR</span>
+                    <span className="text-[10px] text-cyan-400 font-mono">Gemini Flash (Latest) OCR</span>
                   </div>
-                  <div className="relative rounded-lg overflow-hidden border border-slate-800 group">
+                  <div className="relative aspect-[8/5] rounded-lg overflow-hidden border border-slate-800 bg-slate-950 group">
                     <img
                       src={msg.visionThumbnail}
                       alt="Screen capture"
-                      className="w-full max-h-48 object-cover object-top"
+                      className="absolute inset-0 h-full w-full object-contain object-center"
                       referrerPolicy="no-referrer"
                     />
+                    {msg.vision?.detectedElements?.filter((element) => element.boundingBox).map((element, elementIndex) => {
+                      const box = element.boundingBox!;
+                      return (
+                        <button
+                          key={`chat-target-${msg.id}-${elementIndex}`}
+                          type="button"
+                          className="absolute z-10 cursor-crosshair rounded-sm border border-cyan-300/90 bg-cyan-300/[0.08] shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_12px_rgba(34,211,238,0.2)] hover:bg-cyan-300/[0.16]"
+                          style={{
+                            left: `${(box.x / 1280) * 100}%`,
+                            top: `${(box.y / 800) * 100}%`,
+                            width: `${(box.width / 1280) * 100}%`,
+                            height: `${(box.height / 800) * 100}%`,
+                          }}
+                          onClick={() => onVisionTargetClick?.(element)}
+                          title={`Click ${element.label || element.type}`}
+                          aria-label={`Click ${element.label || element.type}`}
+                        >
+                          <span className="absolute -top-4 left-0 max-w-[150px] truncate rounded-t border border-cyan-300/50 bg-slate-950/95 px-1 py-0.5 text-[7px] font-semibold text-cyan-100">
+                            {element.label || "Target"}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
