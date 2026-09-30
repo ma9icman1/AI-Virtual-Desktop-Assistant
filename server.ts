@@ -66,17 +66,17 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s+(https?:\/\/)?((?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
   );
   const browserUrlMatch = message.match(
-    /\b(?:open|go\s+to|navigate\s+to)\s+(?:https?:\/\/)?(www\.)?([a-z0-9.-]+\.[a-z]{2,})(?:\/[^\s]*)?\s+(?:in|using|with)\s+(edge|chrome|brave|firefox)\b/i
+    /\b(?:open|go\s+to|navigate\s+to)\s+(?:https?:\/\/)?(www\.)?([a-z0-9.-]+\.[a-z]{2,})(?:\/[^\s]*)?\s+(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b/i
   );
   const fileMatch = message.match(/\b(?:open|load)\s+(?:the\s+)?file\s+["']?(.+?)["']?\s*$/i);
   const webSearchMatch = message.match(
     /\b(?:search(?:\s+the\s+web)?|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
   );
   const browserSearchMatch = message.match(
-    /\b(?:in|using|with)\s+(edge|chrome|brave|firefox)\b[\s\S]*?\b(?:search|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+    /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:search|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
   );
   const browserTypeMatch = message.match(
-    /\b(?:in|using|with)\s+(edge|chrome|brave|firefox)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
+    /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
   );
   const coordinateClickMatch = message.match(/\bclick\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
   const visibleElements = Array.isArray(visionContext?.detectedElements) ? visionContext.detectedElements : [];
@@ -118,7 +118,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   }
 
   if (webSearchMatch) {
-    const query = webSearchMatch[1].replace(/\s+(?:in|using|with)\s+(?:edge|chrome|brave|firefox)\s*$/i, "").trim();
+    const query = webSearchMatch[1].replace(/\s+(?:in|using|with)\s+(?:edge|chrome|brave|firefox|opera|vivaldi)\s*$/i, "").trim();
     return {
       ...parsed,
       action: {
