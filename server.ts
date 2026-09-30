@@ -28,7 +28,7 @@ const DEFAULT_OLLAMA_MODEL = "minicpm-magic-assistant:latest";
 const DEFAULT_OLLAMA_VISION_MODEL = "minicpm-v:latest";
 let activeOllamaModel = process.env.OLLAMA_CHAT_MODEL || DEFAULT_OLLAMA_MODEL;
 let activeOllamaVisionModel = process.env.OLLAMA_VISION_MODEL || DEFAULT_OLLAMA_VISION_MODEL;
-let activeGeminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+let activeGeminiModel = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
 function describeOllamaError(error: any): string {
   const message = String(error?.message || error || "Unknown Ollama error");
@@ -408,7 +408,7 @@ function getAI(): GoogleGenAI {
 
 // Helper: Gemini fallback generator
 async function generateContentWithFallback(ai: GoogleGenAI, baseConfig: any, timeoutMs = 8000) {
-  const fallbackModels = [activeGeminiModel, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  const fallbackModels = [activeGeminiModel, "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"];
   let lastErr: any = null;
 
   for (let i = 0; i < fallbackModels.length; i++) {
