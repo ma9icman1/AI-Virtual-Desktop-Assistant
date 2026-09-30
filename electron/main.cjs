@@ -298,7 +298,7 @@ $sb = New-Object System.Text.StringBuilder 512
 [void][MagicWindowInfo]::GetWindowThreadProcessId($hwnd, [ref]$pid)
 $name = ""
 if ($pid -gt 0) { try { $name = (Get-Process -Id $pid -ErrorAction Stop).ProcessName } catch {} }
-[pscustomobject]@{ title=$sb.ToString(); process=$name; pid=$pid } | ConvertTo-Json -Compress
+[pscustomobject]@{ hwnd=[int64]$hwnd; title=$sb.ToString(); process=$name; pid=$pid } | ConvertTo-Json -Compress
 `;
   const raw = await runPowerShell(script);
   try { return JSON.parse(raw || "{}"); } catch { return { title: "", process: "", pid: 0 }; }
@@ -529,6 +529,27 @@ async function verifyProcessRunning(processName, attempts = 12, delayMs = 250) {
   return false;
 }
 
+async function maximizeWindow(hwnd) {
+  const handle = Number(hwnd);
+  if (!Number.isFinite(handle) || handle <= 0) return false;
+  const script = `
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicMaximize {
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+}
+'@
+[void][MagicMaximize]::ShowWindowAsync([IntPtr]${handle}, 3)
+`;
+  try {
+    await runPowerShell(script);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function detectWebpage(params = {}) {
   const timeoutMs = Math.min(10000, Math.max(500, Number(params.timeoutMs) || 5000));
   const intervalMs = Math.min(1000, Math.max(150, Number(params.intervalMs) || 300));
@@ -539,6 +560,7 @@ async function detectWebpage(params = {}) {
     const info = await getActiveWindowInfo();
     const process = normalizeProcessName(info.process);
     if (browserProcesses.has(process)) {
+      await maximizeWindow(info.hwnd);
       const script = `
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
