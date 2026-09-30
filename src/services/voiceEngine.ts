@@ -10,6 +10,7 @@ declare global {
       onTranscript: (callback: (payload: { text: string; confidence: number }) => void) => () => void;
       onError: (callback: (message: string) => void) => () => void;
       onLevel?: (callback: (level: number) => void) => () => void;
+      onDevice?: (callback: (device: string) => void) => () => void;
     };
   }
 }
@@ -217,6 +218,34 @@ export class VoiceEngine {
     return { ...this.settings };
   }
 
+  private getWakeWordAliases(): string[] {
+    const name = this.assistantName.trim().toLowerCase();
+    const normalized = name.replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+    const aliases = new Set<string>([name, normalized]);
+    if (/ma9ic\s*ai|magic\s*ai|magic\s*i|ma9icai/i.test(name)) {
+      aliases.add("magic ai");
+      aliases.add("magic a i");
+      aliases.add("magic eye");
+      aliases.add("ma9ic ai");
+      aliases.add("ma9ic a i");
+    }
+    return Array.from(aliases).filter(Boolean);
+  }
+
+  private parseWakeWord(text: string): { pure: boolean; command: string | null } {
+    const activeText = text.trim().replace(/\s+/g, " ");
+    if (!activeText) return { pure: false, command: null };
+    const aliases = this.getWakeWordAliases()
+      .sort((a, b) => b.length - a.length)
+      .map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const aliasPattern = aliases.join("|");
+    const pure = new RegExp(`^\\s*(?:hey\\s+|hi\\s+|ok\\s+|okay\\s+)?(?:${aliasPattern})[!?.,]*\\s*$`, "i").test(activeText);
+    if (pure) return { pure: true, command: null };
+    const prefix = new RegExp(`^\\s*(?:hey\\s+|hi\\s+|ok\\s+|okay\\s+)?(?:${aliasPattern})[,:\\s]+(.+)$`, "i");
+    const match = activeText.match(prefix);
+    return { pure: false, command: match?.[1]?.trim() || null };
+  }
+
   private initSpeechRecognition() {
     if (typeof window === "undefined") return;
 
@@ -259,20 +288,17 @@ export class VoiceEngine {
         if (!activeText) return;
 
         // Check if phrase is solely the wake word (e.g. "Magic", "Hey Magic", "Magic!")
-        const escapedName = this.assistantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const isPureWakeWord = new RegExp(`^\\s*(hey\\s+|hi\\s+|ok\\s+|okay\\s+)?${escapedName}[!?.,]*\\s*$`, "i").test(activeText);
-        if (isPureWakeWord) {
-          if (finalTranscript || activeText.length >= 5) {
+        const wake = this.parseWakeWord(activeText);
+        if (wake.pure) {
+          if (finalTranscript || activeText.length >= 4) {
             this.callbacks.onWakeWordDetected(activeText);
           }
           return;
         }
 
-        // If phrase starts with wake word followed by a command: "Magic what is on my screen"
-        const wakeWordPrefixRegex = new RegExp(`^\\s*(hey\\s+|hi\\s+|ok\\s+|okay\\s+)?${escapedName}[,:\\s]+(.+)$`, "i");
-        const match = activeText.match(wakeWordPrefixRegex);
-        if (match) {
-          const commandText = match[2].trim();
+        // If phrase starts with the wake word followed by a command.
+        if (wake.command) {
+          const commandText = wake.command;
           if (finalTranscript) {
             this.callbacks.onTranscript(commandText, true, confidence);
           } else if (interimTranscript) {
@@ -439,14 +465,18 @@ export class VoiceEngine {
     this.isListening = true;
     this.nativeFallbackAttempted = false;
 
-    // Electron's Chromium speech service is often unavailable in packaged
-    // builds. Prefer the native Windows recognizer when the IPC bridge exists.
+    // In the Electron desktop build Whisper owns the microphone. Do not open
+    // the same Windows input device a second time from Chromium; that can
+    // make sounddevice/Whisper receive silence or a busy-device error.
+    // Whisper also sends LEVEL events back to the renderer for the meter.
     if (window.magicVoice) {
       await this.startNativeSpeechFallback();
       return;
     }
 
+    // Browser/dev fallback: Chromium owns the microphone and speech service.
     await this.startMicrophoneCapture();
+
     if (!this.recognition) {
       await this.startNativeSpeechFallback();
       return;
@@ -511,27 +541,35 @@ export class VoiceEngine {
     }
 
     try {
-      this.nativeSpeechCleanup = window.magicVoice.onTranscript(({ text, confidence }) => {
-        if (this.isSpeaking || !this.isListening) return;
-        void this.requestCloudCorrection(text, confidence).then((corrected) => {
-          if (!corrected) this.processRecognizedText(text, true, confidence);
-          this.recordedAudioChunks = [];
+      // Keep the Electron listeners alive across start/stop cycles. Whisper
+      // needs a moment to flush its final phrase after STOP is sent; removing
+      // the transcript listener immediately would discard that final result.
+      if (!this.nativeSpeechCleanup) {
+        const nativeTranscriptCleanup = window.magicVoice.onTranscript(({ text, confidence }) => {
+          if (this.isSpeaking) return;
+          console.debug("[ma9icAI voice] Whisper transcript:", text, confidence);
+          this.processRecognizedText(text, true, confidence);
         });
-      });
-      const nativeErrorCleanup = window.magicVoice.onError((message) => {
-        if (this.isListening) {
-          VoiceEngine.errorListeners.forEach((listener) => listener(`Whisper speech service: ${message}`));
-        }
-      });
-      const nativeLevelCleanup = window.magicVoice.onLevel?.((level) => {
-        if (this.isListening) this.callbacks.onAudioLevel(Math.max(0, Math.min(1, level)));
-      });
-      const existingCleanup = this.nativeSpeechCleanup;
-      this.nativeSpeechCleanup = () => {
-        existingCleanup?.();
-        nativeErrorCleanup();
-        nativeLevelCleanup?.();
-      };
+        const nativeErrorCleanup = window.magicVoice.onError((message) => {
+          console.error("[ma9icAI voice] Whisper error:", message);
+          if (this.isListening || this.nativeSpeechActive) {
+            VoiceEngine.errorListeners.forEach((listener) => listener(`Whisper speech service: ${message}`));
+          }
+        });
+        const nativeLevelCleanup = window.magicVoice.onLevel?.((level) => {
+          if (this.isListening) this.callbacks.onAudioLevel(Math.max(0, Math.min(1, level)));
+        });
+        const nativeDeviceCleanup = window.magicVoice.onDevice?.((device) => {
+          console.info("[ma9icAI voice] Windows microphone:", device);
+        });
+        this.nativeSpeechCleanup = () => {
+          nativeTranscriptCleanup();
+          nativeErrorCleanup();
+          nativeLevelCleanup?.();
+          nativeDeviceCleanup?.();
+          this.nativeSpeechCleanup = null;
+        };
+      }
       const started = await window.magicVoice.start();
       if (started === false) {
         throw new Error("The Whisper speech process did not start.");
@@ -545,11 +583,12 @@ export class VoiceEngine {
   }
 
   private stopNativeSpeechFallback() {
-    if (this.nativeSpeechActive || this.nativeSpeechCleanup) {
+    if (this.nativeSpeechActive) {
+      console.debug("[ma9icAI voice] Sending STOP to Whisper; waiting for final transcript flush.");
       window.magicVoice?.stop();
     }
-    this.nativeSpeechCleanup?.();
-    this.nativeSpeechCleanup = null;
+    // Do not remove the IPC listeners here. The worker sends the final
+    // TRANSCRIPT after receiving STOP, and that event must still reach us.
     this.nativeSpeechActive = false;
   }
 
@@ -557,17 +596,14 @@ export class VoiceEngine {
     const activeText = text.trim();
     if (!activeText) return;
 
-    const escapedName = this.assistantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const isPureWakeWord = new RegExp(`^\\s*(hey\\s+|hi\\s+|ok\\s+|okay\\s+)?${escapedName}[!?.,]*\\s*$`, "i").test(activeText);
-    if (isPureWakeWord) {
+    const wake = this.parseWakeWord(activeText);
+    if (wake.pure) {
       this.callbacks.onWakeWordDetected(activeText);
       return;
     }
 
-    const wakeWordPrefixRegex = new RegExp(`^\\s*(hey\\s+|hi\\s+|ok\\s+|okay\\s+)?${escapedName}[,:\\s]+(.+)$`, "i");
-    const match = activeText.match(wakeWordPrefixRegex);
-    if (match) {
-      this.callbacks.onTranscript(match[2].trim(), isFinal, confidence);
+    if (wake.command) {
+      this.callbacks.onTranscript(wake.command, isFinal, confidence);
       return;
     }
 

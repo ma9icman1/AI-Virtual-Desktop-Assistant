@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Monitor, Camera, MousePointer, Loader2 } from "lucide-react";
+import { Mic, MicOff, Send, Monitor, Loader2 } from "lucide-react";
 import { AssistantState } from "../../types";
 
 interface InputBarProps {
@@ -12,6 +12,7 @@ interface InputBarProps {
   state: AssistantState;
   isAnalyzingVision?: boolean;
   assistantName?: string;
+  voiceNotice?: string | null;
 }
 
 export const InputBar: React.FC<InputBarProps> = ({
@@ -24,6 +25,7 @@ export const InputBar: React.FC<InputBarProps> = ({
   state,
   isAnalyzingVision = false,
   assistantName = "Nova",
+  voiceNotice = null,
 }) => {
   const [inputText, setInputText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,48 +46,9 @@ export const InputBar: React.FC<InputBarProps> = ({
 
   return (
     <div className="p-2 bg-slate-950/80 border-t border-slate-800/80 backdrop-blur-xl">
-      {/* Quick Suggestion Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10px]">
-        <button
-          onClick={onCaptureCamera}
-          className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-700/60 text-purple-300 transition-colors cursor-pointer"
-        >
-          <Camera className="w-3.5 h-3.5" />
-          <span>Camera Vision</span>
-        </button>
-
-        <button
-          onClick={onCaptureScreen}
-          disabled={isAnalyzingVision}
-          className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-700/60 text-cyan-300 transition-colors cursor-pointer disabled:opacity-50"
-        >
-          {isAnalyzingVision ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Monitor className="w-3.5 h-3.5" />
-          )}
-          <span>Inspect Screen</span>
-        </button>
-
-        {[
-          "Take Control",
-          "What can you do?",
-        ].map((chip, idx) => (
-            <button
-              key={idx}
-              onClick={() => chip === "Take Control" ? onTakeControl() : onSendMessage(chip)}
-              className="shrink-0 px-2.5 py-1.5 rounded-full bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
-            >
-              {chip === "Take Control" ? (
-                <span className="inline-flex items-center gap-1.5 text-amber-200">
-                  <MousePointer className="h-3.5 w-3.5" />
-                  Take Control
-                </span>
-              ) : chip}
-            </button>
-          ))}
-      </div>
-
+      {voiceNotice && (
+        <div className="px-2 pb-1 text-[11px] text-cyan-300/90 truncate" role="status">{voiceNotice}</div>
+      )}
       {/* Main Command Input Box */}
       <form onSubmit={handleSubmit}       className="flex items-center gap-1 mt-1">
         <div className="relative flex-1 flex items-center bg-slate-900 border border-slate-800 focus-within:border-indigo-500 rounded-2xl transition-colors shadow-inner">

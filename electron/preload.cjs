@@ -4,8 +4,15 @@ contextBridge.exposeInMainWorld("magicWindow", {
   moveBy: (deltaX, deltaY) => ipcRenderer.send("magic-window-move", deltaX, deltaY),
   setOverlayMode: (overlayMode) => ipcRenderer.send("magic-window-layout", overlayMode),
   close: () => ipcRenderer.send("magic-window-close"),
+  minimize: () => ipcRenderer.send("magic-window-minimize"),
+  toggleMaximize: () => ipcRenderer.send("magic-window-toggle-maximize"),
   startOllama: () => ipcRenderer.invoke("magic-ollama-start"),
   downloadOllama: (model) => ipcRenderer.invoke("magic-ollama-download", model),
+  onOllamaProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("magic-ollama-progress", listener);
+    return () => ipcRenderer.removeListener("magic-ollama-progress", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("magicDesktop", {
@@ -37,5 +44,10 @@ contextBridge.exposeInMainWorld("magicVoice", {
     const listener = (_event, level) => callback(level);
     ipcRenderer.on("magic-voice-level", listener);
     return () => ipcRenderer.removeListener("magic-voice-level", listener);
+  },
+  onDevice: (callback) => {
+    const listener = (_event, device) => callback(device);
+    ipcRenderer.on("magic-voice-device", listener);
+    return () => ipcRenderer.removeListener("magic-voice-device", listener);
   },
 });

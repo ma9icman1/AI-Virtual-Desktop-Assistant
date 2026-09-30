@@ -828,6 +828,16 @@ Return structured JSON analysis in this exact format:
 // Multi-Step Task Planner Endpoint
 const PLANNER_ACTION_TYPES = new Set([
   "LAUNCH_APP",
+  "FOCUS_APP",
+  "CLOSE_APP",
+  "OPEN_FOLDER",
+  "GET_ACTIVE_WINDOW",
+  "INSPECT_UI_TREE",
+  "FIND_UI_ELEMENT",
+  "CLICK_UI_ELEMENT",
+  "READ_UI_ELEMENT",
+  "SET_UI_VALUE",
+  "WAIT_FOR_UI_ELEMENT",
   "NAVIGATE_URL",
   "MOVE_MOUSE",
   "CLICK_BUTTON",
@@ -875,6 +885,49 @@ function validateAgentPlan(plan: any) {
       const app = String(normalized.params.app || "").trim().toLowerCase();
       if (!PLANNER_APPS.has(app)) throw new Error(`Planner app is not allowed: ${app || "unknown"}.`);
       normalized.params = { app };
+    }
+    if (["FOCUS_APP", "CLOSE_APP"].includes(actionType)) {
+      const app = String(normalized.params.app || "").trim().toLowerCase();
+      if (!PLANNER_APPS.has(app)) throw new Error(`Planner app is not allowed: ${app || "unknown"}.`);
+      normalized.params = { app };
+    }
+    if (actionType === "OPEN_FOLDER") {
+      const folderPath = String(normalized.params.path || "").trim();
+      if (!folderPath || !/^[A-Za-z]:\\/.test(folderPath) || folderPath.length > 500) throw new Error("Planner folder path is invalid.");
+      normalized.params = { path: folderPath };
+    }
+    if (actionType === "GET_ACTIVE_WINDOW") {
+      normalized.params = {};
+    }
+    if (actionType === "INSPECT_UI_TREE") {
+      const process = String(normalized.params.process || "").trim().toLowerCase().replace(/\.exe$/i, "");
+      const maxDepth = Number(normalized.params.maxDepth ?? 4);
+      const maxNodes = Number(normalized.params.maxNodes ?? 150);
+      if (process.length > 80) throw new Error("Planner UI process filter is invalid.");
+      if (!Number.isFinite(maxDepth) || maxDepth < 1 || maxDepth > 6) throw new Error("Planner UI tree depth is invalid.");
+      if (!Number.isFinite(maxNodes) || maxNodes < 20 || maxNodes > 300) throw new Error("Planner UI tree size is invalid.");
+      normalized.params = { process, maxDepth: Math.round(maxDepth), maxNodes: Math.round(maxNodes), activeOnly: normalized.params.activeOnly !== false, includeUnnamed: normalized.params.includeUnnamed === true };
+    }
+    if (["FIND_UI_ELEMENT", "CLICK_UI_ELEMENT", "READ_UI_ELEMENT", "SET_UI_VALUE", "WAIT_FOR_UI_ELEMENT"].includes(actionType)) {
+      const name = String(normalized.params.name || "").slice(0, 200);
+      const automationId = String(normalized.params.automationId || "").slice(0, 200);
+      const controlType = String(normalized.params.controlType || "").slice(0, 80).toLowerCase();
+      const process = String(normalized.params.process || "").trim().toLowerCase().replace(/\.exe$/i, "");
+      if (!name && !automationId && !controlType) throw new Error("UI element action needs a name, automationId, or controlType.");
+      normalized.params = { name, automationId, controlType, process };
+      if (actionType === "SET_UI_VALUE") {
+        const value = String(rawParams.value ?? rawParams.text ?? "");
+        if (value.length > 4000) throw new Error("Planner UI value is too long.");
+        normalized.params.value = value;
+      }
+      if (actionType === "WAIT_FOR_UI_ELEMENT") {
+        const timeoutMs = Number(rawParams.timeoutMs ?? 5000);
+        const intervalMs = Number(rawParams.intervalMs ?? 250);
+        if (!Number.isFinite(timeoutMs) || timeoutMs < 250 || timeoutMs > 15000) throw new Error("Planner UI wait timeout is invalid.");
+        if (!Number.isFinite(intervalMs) || intervalMs < 100 || intervalMs > 1000) throw new Error("Planner UI wait interval is invalid.");
+        normalized.params.timeoutMs = Math.round(timeoutMs);
+        normalized.params.intervalMs = Math.round(intervalMs);
+      }
     }
     if (actionType === "NAVIGATE_URL") {
       const url = String(normalized.params.url || "").trim();
@@ -958,6 +1011,16 @@ Desktop Context: ${JSON.stringify(context)}
 
 Only use these executable step action types:
 - "LAUNCH_APP": { "app": "brave" | "edge" | "chrome" | "firefox" | "notepad" | "calculator" | "paint" | "explorer" | "files" | "terminal" | "taskmgr" }
+- "FOCUS_APP": { "app": same app list }
+- "CLOSE_APP": { "app": same app list }
+- "OPEN_FOLDER": { "path": "absolute Windows folder path" }
+- "GET_ACTIVE_WINDOW": {}
+- "INSPECT_UI_TREE": { "process": "optional process name", "maxDepth": 1-6, "maxNodes": 20-300, "activeOnly": true | false }
+- "FIND_UI_ELEMENT": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional" }
+- "CLICK_UI_ELEMENT": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional" }
+- "READ_UI_ELEMENT": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional" }
+- "SET_UI_VALUE": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional", "value": string }
+- "WAIT_FOR_UI_ELEMENT": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional", "timeoutMs": number }
 - "NAVIGATE_URL": { "url": string }
 - "MOVE_MOUSE": { "x": number, "y": number }
 - "CLICK_BUTTON": { "x": number, "y": number }

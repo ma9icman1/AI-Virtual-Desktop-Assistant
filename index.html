@@ -11,7 +11,20 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-status" style="min-height:100vh;box-sizing:border-box;display:grid;place-items:center;background:#020611;color:#a9bbd7;font:14px 'Segoe UI',sans-serif">Starting ma9icAI…</div>
+    </div>
+    <script>
+      window.addEventListener('error', function (event) {
+        var root = document.getElementById('root');
+        if (!root) return;
+        var message = event && event.error && event.error.stack ? event.error.stack : (event && event.message) || 'Unknown renderer error';
+        root.innerHTML = '<div style="min-height:100vh;box-sizing:border-box;padding:48px;background:#020611;color:#eef7ff;font:14px Segoe UI,sans-serif"><div style="max-width:900px;margin:0 auto;border:1px solid #7c2cff;border-radius:16px;padding:28px;background:#061225"><h1>ma9icAI failed to load</h1><p style="color:#a9bbd7">The renderer could not start. Exact error:</p><pre style="white-space:pre-wrap;word-break:break-word;background:#020914;padding:16px;border-radius:10px;color:#ffb4c2">'+String(message).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre></div></div>';
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        console.error('ma9icAI unhandled rejection:', event.reason);
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

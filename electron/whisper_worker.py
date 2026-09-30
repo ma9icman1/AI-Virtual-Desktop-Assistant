@@ -2,6 +2,7 @@ import os
 import queue
 import sys
 import time
+import threading
 
 import numpy as np
 import sounddevice as sd
@@ -32,8 +33,8 @@ def transcribe(model, samples):
         vad_filter=True,
         condition_on_previous_text=False,
         initial_prompt=(
-            "Nova, ma9ic AI, Edge, Firefox, Chrome, browser, "
-            "click, type, open, close, search, screen."
+            "ma9icAI, magic AI, magic eye, ma9ic AI, Edge, Firefox, Chrome, "
+            "browser, click, type, open, close, search, screen."
         ),
     )
     text = " ".join(segment.text.strip() for segment in segments).strip()
@@ -43,15 +44,28 @@ def transcribe(model, samples):
 
 
 def main():
+    stop_event = threading.Event()
     try:
         emit("LOADING", MODEL_NAME, "0")
         model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8")
-        emit("READY", MODEL_NAME, "1")
     except Exception as error:
         emit("SPEECH_ERROR", f"Whisper could not load: {error}", "0")
         return 1
 
     audio_queue = queue.Queue(maxsize=100)
+
+    def read_commands():
+        # Electron sends STOP before terminating the worker so a manually
+        # stopped recording can still flush the speech currently buffered.
+        try:
+            for line in sys.stdin:
+                if line.strip().upper() == "STOP":
+                    stop_event.set()
+                    break
+        except Exception:
+            stop_event.set()
+
+    threading.Thread(target=read_commands, daemon=True).start()
 
     def callback(indata, frames, time_info, status):
         if status:
@@ -62,6 +76,17 @@ def main():
             pass
 
     try:
+        # Open the Windows default input device before reporting READY.
+        # This makes the Electron start call fail visibly when the microphone
+        # cannot actually be opened instead of showing a false "listening" state.
+        try:
+            device = sd.query_devices(kind="input")
+            device_name = str(device.get("name", "Default microphone"))
+            emit("DEVICE", device_name.replace("|", " "), "0")
+        except Exception as error:
+            emit("SPEECH_ERROR", f"No Windows input microphone is available: {error}", "0")
+            return 1
+
         with sd.InputStream(
             samplerate=SAMPLE_RATE,
             blocksize=FRAME_SAMPLES,
@@ -69,13 +94,18 @@ def main():
             dtype="float32",
             callback=callback,
         ):
+            emit("READY", MODEL_NAME, "1")
             noise_floor = 0.003
             speech = []
             speaking = False
             silence_frames = 0
+            # A little hysteresis prevents a quiet microphone from never
+            # entering speech mode while still rejecting idle-room noise.
+            start_threshold_floor = 0.0045
+            stop_threshold_floor = 0.0035
             last_level_emit = 0.0
 
-            while True:
+            while not stop_event.is_set():
                 try:
                     frame = audio_queue.get(timeout=0.25)
                 except queue.Empty:
@@ -84,13 +114,14 @@ def main():
                 rms = float(np.sqrt(np.mean(np.square(frame)) + 1e-12))
                 if not speaking:
                     noise_floor = min(0.03, noise_floor * 0.98 + rms * 0.02)
-                threshold = max(0.008, noise_floor * 3.2)
+                start_threshold = max(start_threshold_floor, noise_floor * 2.4)
+                stop_threshold = max(stop_threshold_floor, noise_floor * 1.55)
                 now = time.monotonic()
                 if now - last_level_emit >= 0.1:
                     emit("LEVEL", f"{min(1.0, rms / 0.12):.3f}", "0")
                     last_level_emit = now
 
-                if rms >= threshold:
+                if rms >= start_threshold:
                     if not speaking:
                         speaking = True
                         speech = []
@@ -100,11 +131,17 @@ def main():
                     speech.append(frame)
                     silence_frames += 1
                     duration = len(speech) * FRAME_MS / 1000
-                    if silence_frames >= 27 or duration >= 15:
+                    # End a phrase after about 0.7 s of silence, or hard-stop
+                    # long recordings so text is delivered promptly.
+                    if silence_frames >= 23 or duration >= 15:
                         transcribe(model, np.concatenate(speech))
                         speech = []
                         speaking = False
                         silence_frames = 0
+
+            # Manual stop: transcribe whatever was captured before exiting.
+            if speaking and speech:
+                transcribe(model, np.concatenate(speech))
     except Exception as error:
         emit("SPEECH_ERROR", f"Whisper microphone error: {error}", "0")
         return 1

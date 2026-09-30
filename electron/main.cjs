@@ -12,21 +12,23 @@ let desktopKilled = false;
 let speechProcess = null;
 let speechWindow = null;
 let speechStopRequested = false;
+let windowsSpeechProcess = null;
+let speechMode = null;
 const ollamaWorkingDirectory = process.env.MAGIC_APP_ROOT || process.cwd();
 const CUSTOM_OLLAMA_MODEL = "minicpm-magic-assistant:latest";
 const BASE_OLLAMA_MODEL = "minicpm-v:latest";
+const OLLAMA_COMMAND_TIMEOUT = 5000;
+const ollamaDownloadProcesses = new Set();
 
 function getBundledMiniCPMModelfile() {
-  const source = path.join(
-    app.getAppPath(),
-    "public",
-    "models",
-    "minicpm-magic-assistant",
-    "Modelfile"
-  );
+  const candidates = [
+    path.join(app.getAppPath(), "public", "models", "minicpm-magic-assistant", "Modelfile"),
+    path.join(app.getAppPath(), "Modelfile"),
+  ];
+  const source = candidates.find((candidate) => fs.existsSync(candidate));
 
-  if (!fs.existsSync(source)) {
-    throw new Error("The bundled MiniCPM Magic Assistant Modelfile is missing.");
+  if (!source) {
+    throw new Error("The bundled MiniCPM Magic Assistant Modelfile is missing from the app package.");
   }
 
   const targetDir = path.join(
@@ -52,65 +54,172 @@ const supportedOllamaModels = new Set([
 
 function stopWhisperSpeech() {
   speechStopRequested = true;
-  if (speechProcess) {
-    speechProcess.kill();
-    speechProcess = null;
-  }
+  const processes = [speechProcess, windowsSpeechProcess].filter(Boolean);
+  speechProcess = null;
+  windowsSpeechProcess = null;
+  speechMode = null;
+  if (!processes.length) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let remaining = processes.length;
+    const finishOne = () => {
+      remaining -= 1;
+      if (remaining <= 0) resolve();
+    };
+    for (const proc of processes) {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        finishOne();
+      };
+      const timeout = setTimeout(() => {
+        try { proc.kill(); } catch {}
+        finish();
+      }, 1500);
+      proc.once("exit", () => {
+        clearTimeout(timeout);
+        finish();
+      });
+      try { proc.stdin?.write("STOP\n"); } catch { try { proc.kill(); } catch {} finish(); }
+    }
+  });
 }
 
-function startWhisperSpeech(window) {
-  stopWhisperSpeech();
+function resolvePythonCommand() {
+  if (process.env.MAGIC_PYTHON) return process.env.MAGIC_PYTHON;
+  const candidates = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
+  for (const candidate of candidates) {
+    try {
+      const result = require("child_process").execFileSync(
+        process.platform === "win32" ? "where.exe" : "which",
+        [candidate],
+        { encoding: "utf8", windowsHide: true, timeout: 2500 }
+      ).trim();
+      if (result) return candidate;
+    } catch {
+      // Try the next Python launcher.
+    }
+  }
+  throw new Error("Python was not found. Install Python 3 and the Whisper dependencies, or set MAGIC_PYTHON to the Python executable.");
+}
+
+async function startWhisperProcess(window) {
+  await stopWhisperSpeech();
   speechStopRequested = false;
   speechWindow = window;
   const workerPath = path.join(__dirname, "whisper_worker.py");
-  const pythonCommand = process.env.MAGIC_PYTHON || "python";
+  let pythonCommand;
+  try {
+    pythonCommand = resolvePythonCommand();
+  } catch (error) {
+    if (speechWindow && !speechWindow.isDestroyed()) {
+      speechWindow.webContents.send("magic-voice-error", error.message);
+    }
+    throw error;
+  }
+
   speechProcess = spawn(pythonCommand, [workerPath], {
     windowsHide: true,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
   });
 
-  let output = "";
-  speechProcess.stdout.on("data", (chunk) => {
-    output += chunk.toString();
-    const lines = output.split(/\r?\n/);
-    output = lines.pop() || "";
-    for (const line of lines) {
-      if (line.startsWith("READY|") && speechWindow && !speechWindow.isDestroyed()) {
-        speechWindow.webContents.send("magic-voice-ready");
-        continue;
+  return await new Promise((resolve, reject) => {
+    let output = "";
+    let settled = false;
+    const startupTimeout = setTimeout(() => {
+      const message = "Whisper microphone startup timed out. Check that Python, faster-whisper, sounddevice, and a Windows microphone are installed.";
+      if (speechWindow && !speechWindow.isDestroyed()) {
+        speechWindow.webContents.send("magic-voice-error", message);
       }
-      const [kind, text, confidence] = line.split("|");
-      if (kind === "TRANSCRIPT" && text && speechWindow && !speechWindow.isDestroyed()) {
-        speechWindow.webContents.send("magic-voice-transcript", {
-          text,
-          confidence: Number(confidence) || 0.8,
-        });
+      try { speechProcess?.kill(); } catch {}
+      settleReject(new Error(message));
+    }, 30000);
+
+    const settleResolve = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(startupTimeout);
+      resolve(true);
+    };
+    const settleReject = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(startupTimeout);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+
+    speechProcess.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+      const lines = output.split(/\r?\n/);
+      output = lines.pop() || "";
+      for (const line of lines) {
+        if (!line) continue;
+        const [kind, text, confidence] = line.split("|");
+        if (kind === "READY") {
+          if (speechWindow && !speechWindow.isDestroyed()) {
+            speechWindow.webContents.send("magic-voice-ready");
+          }
+          settleResolve();
+          continue;
+        }
+        if (kind === "SPEECH_ERROR") {
+          const message = text || "Whisper speech recognition failed.";
+          if (speechWindow && !speechWindow.isDestroyed()) {
+            speechWindow.webContents.send("magic-voice-error", message);
+          }
+          if (!settled) settleReject(new Error(message));
+          continue;
+        }
+        if (kind === "DEVICE") {
+          if (speechWindow && !speechWindow.isDestroyed()) {
+            speechWindow.webContents.send("magic-voice-device", text || "Default microphone");
+          }
+          continue;
+        }
+        if (kind === "TRANSCRIPT" && text && speechWindow && !speechWindow.isDestroyed()) {
+          speechWindow.webContents.send("magic-voice-transcript", {
+            text,
+            confidence: Number(confidence) || 0.8,
+          });
+        }
+        if (kind === "LEVEL" && speechWindow && !speechWindow.isDestroyed()) {
+          speechWindow.webContents.send("magic-voice-level", Number(text) || 0);
+        }
       }
-      if (kind === "LEVEL" && speechWindow && !speechWindow.isDestroyed()) {
-        speechWindow.webContents.send("magic-voice-level", Number(text) || 0);
+    });
+
+    speechProcess.stderr.on("data", (chunk) => {
+      const message = chunk.toString().trim();
+      if (/SPEECH_ERROR\|/i.test(message)) {
+        const clean = message.replace(/^.*SPEECH_ERROR\|/i, "");
+        if (speechWindow && !speechWindow.isDestroyed()) {
+          speechWindow.webContents.send("magic-voice-error", clean);
+        }
+        if (!settled) settleReject(new Error(clean));
+      } else if (message) {
+        console.warn("[Whisper]", message);
       }
-    }
-  });
+    });
 
-  speechProcess.stderr.on("data", (chunk) => {
-    const message = chunk.toString().trim();
-    if (message && speechWindow && !speechWindow.isDestroyed()) {
-      speechWindow.webContents.send("magic-voice-error", message.replace(/^SPEECH_ERROR\|/, ""));
-    }
-  });
+    speechProcess.once("error", (error) => {
+      if (speechWindow && !speechWindow.isDestroyed()) {
+        speechWindow.webContents.send("magic-voice-error", error.message);
+      }
+      speechProcess = null;
+      settleReject(error);
+    });
 
-  speechProcess.once("error", (error) => {
-    if (speechWindow && !speechWindow.isDestroyed()) {
-      speechWindow.webContents.send("magic-voice-error", error.message);
-    }
-    speechProcess = null;
-  });
-
-  speechProcess.once("exit", () => {
-    if (!speechStopRequested && speechWindow && !speechWindow.isDestroyed() && !desktopKilled) {
-      speechWindow.webContents.send("magic-voice-error", "Whisper speech recognition stopped.");
-    }
-    speechProcess = null;
+    speechProcess.once("exit", (code) => {
+      const wasStarting = !settled;
+      if (!speechStopRequested && speechWindow && !speechWindow.isDestroyed() && !desktopKilled) {
+        speechWindow.webContents.send("magic-voice-error", `Whisper speech recognition stopped (exit code ${code ?? "unknown"}).`);
+      }
+      speechProcess = null;
+      if (wasStarting && !speechStopRequested) {
+        settleReject(new Error(`Whisper speech recognition stopped before the microphone became ready (exit code ${code ?? "unknown"}).`));
+      }
+    });
   });
 }
 
@@ -126,6 +235,235 @@ function runPowerShell(script, args = []) {
       else resolve(stdout.trim());
     });
   });
+}
+
+function normalizeProcessName(value) {
+  return String(value || "").trim().toLowerCase().replace(/\.exe$/i, "");
+}
+
+function resolveAutomationProcessName(value) {
+  const requested = normalizeProcessName(value);
+  const aliases = { files: "explorer", explorer: "explorer", terminal: "windowsterminal", calculator: "calculator", taskmgr: "taskmgr" };
+  return aliases[requested] || requested;
+}
+
+async function getActiveWindowInfo() {
+  const script = `
+Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class MagicWindowInfo {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+}
+'@
+$hwnd = [MagicWindowInfo]::GetForegroundWindow()
+$sb = New-Object System.Text.StringBuilder 512
+[void][MagicWindowInfo]::GetWindowText($hwnd, $sb, $sb.Capacity)
+[uint32]$pid = 0
+[void][MagicWindowInfo]::GetWindowThreadProcessId($hwnd, [ref]$pid)
+$name = ""
+if ($pid -gt 0) { try { $name = (Get-Process -Id $pid -ErrorAction Stop).ProcessName } catch {} }
+[pscustomobject]@{ title=$sb.ToString(); process=$name; pid=$pid } | ConvertTo-Json -Compress
+`;
+  const raw = await runPowerShell(script);
+  try { return JSON.parse(raw || "{}"); } catch { return { title: "", process: "", pid: 0 }; }
+}
+
+async function findUiElement(params = {}) {
+  const name = String(params.name || "").trim();
+  const automationId = String(params.automationId || "").trim();
+  const controlType = String(params.controlType || "").trim().toLowerCase();
+  const processName = normalizeProcessName(params.process || "");
+  if (!name && !automationId && !controlType) {
+    throw new Error("UI element search requires a name, automationId, or controlType.");
+  }
+  const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$name = $args[0]
+$aid = $args[1]
+$type = $args[2]
+$proc = $args[3]
+$all = [System.Windows.Automation.TreeScope]::Descendants
+$elements = $root.FindAll($all, [System.Windows.Automation.Condition]::TrueCondition)
+$matches = @()
+foreach ($el in $elements) {
+  try {
+    $p = $el.Current.ProcessId
+    $n = $el.Current.Name
+    $a = $el.Current.AutomationId
+    $ct = $el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', ''
+    $pn = ''
+    if ($p -gt 0) { try { $pn = (Get-Process -Id $p -ErrorAction Stop).ProcessName } catch {} }
+    if ($name -and $n -notlike $name) { continue }
+    if ($aid -and $a -ne $aid) { continue }
+    if ($type -and $ct.ToLowerInvariant() -ne $type) { continue }
+    if ($proc -and $pn.ToLowerInvariant() -ne $proc) { continue }
+    $r = $el.Current.BoundingRectangle
+    if ($r.Width -le 0 -or $r.Height -le 0) { continue }
+    $matches += [pscustomobject]@{
+      name=$n; automationId=$a; controlType=$ct; process=$pn; pid=$p;
+      x=[int][math]::Round($r.X); y=[int][math]::Round($r.Y);
+      width=[int][math]::Round($r.Width); height=[int][math]::Round($r.Height)
+    }
+    if ($matches.Count -ge 20) { break }
+  } catch {}
+}
+@($matches) | ConvertTo-Json -Compress
+`;
+  const raw = await runPowerShell(script, [name, automationId, controlType, processName]);
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
+async function readUiElement(params = {}) {
+  const matches = await findUiElement(params);
+  if (!matches.length) throw new Error("No matching UI element was found.");
+  const target = matches[0];
+  const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$pid = [int]$args[0]; $aid = $args[1]; $name = $args[2]
+$elements = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+$target = $null
+foreach ($el in $elements) { try { if ($el.Current.ProcessId -ne $pid) { continue }; if ($aid -and $el.Current.AutomationId -ne $aid) { continue }; if ($name -and $el.Current.Name -notlike $name) { continue }; $target=$el; break } catch {} }
+if (-not $target) { throw "The UI element disappeared before it could be read." }
+$value=''; $pattern=''
+try { $vp=$target.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern); $value=[string]$vp.Current.Value; $pattern='ValuePattern' } catch {}
+if (-not $value) { $value=[string]$target.Current.Name }
+[pscustomobject]@{ name=[string]$target.Current.Name; automationId=[string]$target.Current.AutomationId; controlType=[string]($target.Current.ControlType.ProgrammaticName -replace '^ControlType\\.',''); value=$value; pattern=$pattern; enabled=[bool]$target.Current.IsEnabled } | ConvertTo-Json -Compress
+`;
+  const raw = await runPowerShell(script, [String(target.pid || 0), String(target.automationId || ""), String(target.name || "")]);
+  try { return { ok: true, element: JSON.parse(raw || "{}") }; } catch { throw new Error("Could not read the UI element value."); }
+}
+
+async function setUiElementValue(params = {}) {
+  const value = String(params.value ?? params.text ?? "");
+  if (value.length > 4000) throw new Error("UI text is too long.");
+  const matches = await findUiElement(params);
+  if (!matches.length) throw new Error("No matching UI element was found.");
+  const target = matches[0];
+  const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Windows.Forms
+$pid=[int]$args[0]; $aid=$args[1]; $name=$args[2]; $value=$args[3]
+$elements=[System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+$target=$null
+foreach($el in $elements){try{if($el.Current.ProcessId -ne $pid){continue};if($aid -and $el.Current.AutomationId -ne $aid){continue};if($name -and $el.Current.Name -notlike $name){continue};$target=$el;break}catch{}}
+if(-not $target){throw "The UI element disappeared before it could receive text."}
+try{$vp=$target.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern);$vp.SetValue($value);'ValuePattern'}catch{
+  try{$target.SetFocus()}catch{}
+  [System.Windows.Forms.SendKeys]::SendWait('^a'); [System.Windows.Forms.SendKeys]::SendWait($value.Replace('{','{{}').Replace('}','{}}')); 'keyboard'
+}
+`;
+  const result = await runPowerShell(script, [String(target.pid || 0), String(target.automationId || ""), String(target.name || ""), value]);
+  if (desktopPermission === "one_action") desktopPermission = "none";
+  return { ok: true, verified: true, method: result, element: target };
+}
+
+async function waitForUiElement(params = {}) {
+  const timeoutMs = Math.min(15000, Math.max(250, Number(params.timeoutMs) || 5000));
+  const intervalMs = Math.min(1000, Math.max(100, Number(params.intervalMs) || 250));
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const matches = await findUiElement(params);
+    if (matches.length) return { ok: true, found: true, elapsedMs: Date.now() - started, element: matches[0] };
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  return { ok: true, found: false, elapsedMs: Date.now() - started };
+}
+
+async function inspectUiTree(params = {}) {
+  const processName = normalizeProcessName(params.process || "");
+  const maxDepth = Math.min(6, Math.max(1, Number(params.maxDepth) || 4));
+  const maxNodes = Math.min(300, Math.max(20, Number(params.maxNodes) || 150));
+  const includeUnnamed = params.includeUnnamed === true;
+  const activeOnly = params.activeOnly !== false;
+
+  const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicTreeWindow {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+'@
+$processFilter = $args[0]
+$maxDepth = [int]$args[1]
+$maxNodes = [int]$args[2]
+$includeUnnamed = [bool]::Parse($args[3])
+$activeOnly = [bool]::Parse($args[4])
+$root = $null
+if ($activeOnly) {
+  $hwnd = [MagicTreeWindow]::GetForegroundWindow()
+  if ($hwnd -ne [IntPtr]::Zero) { $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd) }
+}
+if (-not $root) { $root = [System.Windows.Automation.AutomationElement]::RootElement }
+if ($processFilter) {
+  try {
+    $rootPid = $root.Current.ProcessId
+    $rootProc = (Get-Process -Id $rootPid -ErrorAction Stop).ProcessName
+    if ($rootProc.ToLowerInvariant() -ne $processFilter) { $root = [System.Windows.Automation.AutomationElement]::RootElement }
+  } catch {}
+}
+$count = 0
+$result = New-Object System.Collections.Generic.List[object]
+function Add-Node($el, $depth, $parentIndex) {
+  if ($script:count -ge $maxNodes -or $depth -gt $maxDepth) { return }
+  try {
+    $p = $el.Current.ProcessId
+    $pn = ''
+    if ($p -gt 0) { try { $pn = (Get-Process -Id $p -ErrorAction Stop).ProcessName } catch {} }
+    if ($processFilter -and $pn.ToLowerInvariant() -ne $processFilter) { return }
+    $n = [string]$el.Current.Name
+    $aid = [string]$el.Current.AutomationId
+    $ct = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', '')
+    if (-not $includeUnnamed -and -not $n -and -not $aid) { }
+    $r = $el.Current.BoundingRectangle
+    $idx = $script:count
+    $script:count++
+    $result.Add([pscustomobject]@{
+      index=$idx; parentIndex=$parentIndex; depth=$depth; name=$n; automationId=$aid; controlType=$ct;
+      className=[string]$el.Current.ClassName; process=$pn; pid=$p;
+      enabled=[bool]$el.Current.IsEnabled; offscreen=[bool]$el.Current.IsOffscreen;
+      x=[int][math]::Round($r.X); y=[int][math]::Round($r.Y); width=[int][math]::Round($r.Width); height=[int][math]::Round($r.Height)
+    })
+    if ($depth -ge $maxDepth -or $script:count -ge $maxNodes) { return }
+    $children = $el.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($child in $children) {
+      if ($script:count -ge $maxNodes) { break }
+      Add-Node $child ($depth + 1) $idx
+    }
+  } catch {}
+}
+Add-Node $root 0 -1
+[pscustomobject]@{
+  activeOnly=$activeOnly; processFilter=$processFilter; maxDepth=$maxDepth; maxNodes=$maxNodes;
+  rootName=([string]$root.Current.Name); rootProcess=$rootProcessName;
+  truncated=($script:count -ge $maxNodes); count=$script:count; elements=@($result)
+} | ConvertTo-Json -Depth 8 -Compress
+`;
+  const raw = await runPowerShell(script, [processName, String(maxDepth), String(maxNodes), String(includeUnnamed), String(activeOnly)]);
+  try { return JSON.parse(raw || "{}"); } catch { return { count: 0, elements: [], error: "Could not parse UI tree." }; }
+}
+
+async function verifyProcessRunning(processName) {
+  const normalized = normalizeProcessName(processName);
+  if (!normalized) return false;
+  const script = `Get-Process -Name '${normalized.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Id`;
+  const result = await runPowerShell(script).catch(() => "");
+  return /^\\d+$/.test(String(result).trim());
 }
 
 async function executeDesktopAction(action, params = {}) {
@@ -171,8 +509,119 @@ async function executeDesktopAction(action, params = {}) {
       child.once("spawn", resolve);
     });
     child.unref();
+    const verifyTarget = normalizeProcessName(target);
+    const verified = await verifyProcessRunning(verifyTarget);
+    if (!verified) throw new Error(`Windows started ${requested}, but the process could not be verified.`);
     if (desktopPermission === "one_action") desktopPermission = "none";
-    return;
+    return { ok: true, verified: true, process: requested };
+  }
+  if (action === "FOCUS_APP") {
+    const requested = normalizeProcessName(params.app);
+    const processName = resolveAutomationProcessName(requested);
+    if (!requested) throw new Error("No application was provided to focus.");
+    const script = `
+$proc = Get-Process -Name '${processName.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if (-not $proc) { throw "Application is not running or has no visible window: $requested" }
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicFocus { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); }
+'@
+if (-not [MagicFocus]::SetForegroundWindow($proc.MainWindowHandle)) { throw "Windows could not focus $requested" }
+`;
+    await runPowerShell(script);
+    const info = await getActiveWindowInfo();
+    if (normalizeProcessName(info.process) !== requested) throw new Error(`Focus verification failed for ${requested}.`);
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, activeWindow: info };
+  }
+  if (action === "CLOSE_APP") {
+    const requested = normalizeProcessName(params.app);
+    const processName = resolveAutomationProcessName(requested);
+    if (!requested) throw new Error("No application was provided to close.");
+    const script = `Get-Process -Name '${processName.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Stop-Process -Force`;
+    await runPowerShell(script);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const stillRunning = await verifyProcessRunning(processName);
+    if (stillRunning) throw new Error(`Windows could not verify that ${requested} closed.`);
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, process: requested };
+  }
+  if (action === "OPEN_FOLDER") {
+    const folderPath = String(params.path || "").trim();
+    if (!folderPath || !path.isAbsolute(folderPath)) throw new Error("Opening a folder requires an absolute path.");
+    if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) throw new Error("Folder does not exist.");
+    const errorMessage = await shell.openPath(folderPath);
+    if (errorMessage) throw new Error(`Could not open folder: ${errorMessage}`);
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, path: folderPath };
+  }
+  if (action === "GET_ACTIVE_WINDOW") {
+    return await getActiveWindowInfo();
+  }
+  if (action === "INSPECT_UI_TREE") {
+    return { ok: true, tree: await inspectUiTree(params) };
+  }
+  if (action === "FIND_UI_ELEMENT") {
+    return { ok: true, elements: await findUiElement(params) };
+  }
+  if (action === "READ_UI_ELEMENT") {
+    return await readUiElement(params);
+  }
+  if (action === "SET_UI_VALUE") {
+    return await setUiElementValue(params);
+  }
+  if (action === "WAIT_FOR_UI_ELEMENT") {
+    return await waitForUiElement(params);
+  }
+  if (action === "CLICK_UI_ELEMENT") {
+    const matches = await findUiElement(params);
+    if (!matches.length) throw new Error("No matching UI element was found.");
+    const target = matches[0];
+    const clickScript = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicUiInput {
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+}
+'@
+$targetName = $args[0]
+$targetId = $args[1]
+$targetPid = [int]$args[2]
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+$target = $null
+foreach ($el in $elements) {
+  try {
+    if ($el.Current.ProcessId -ne $targetPid) { continue }
+    if ($targetId -and $el.Current.AutomationId -ne $targetId) { continue }
+    if ($targetName -and $el.Current.Name -notlike $targetName) { continue }
+    $target = $el; break
+  } catch {}
+}
+if (-not $target) { throw "The UI element disappeared before it could be clicked." }
+try {
+  $invoke = $target.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+  $invoke.Invoke()
+  'invoke'
+} catch {
+  $r = $target.Current.BoundingRectangle
+  if ($r.Width -le 0 -or $r.Height -le 0) { throw "The UI element has no clickable bounds." }
+  $cx = [int][math]::Round($r.X + ($r.Width / 2)); $cy = [int][math]::Round($r.Y + ($r.Height / 2))
+  [MagicUiInput]::SetCursorPos($cx, $cy) | Out-Null
+  [MagicUiInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 70
+  [MagicUiInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  'physical-click'
+}
+`;
+    const result = await runPowerShell(clickScript, [String(target.name || ""), String(target.automationId || ""), String(target.pid || 0)]);
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, method: result, element: target };
   }
   if (action === "OPEN_FILE") {
     const filePath = String(params.path || "").trim();
@@ -336,10 +785,71 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
     if (wasVisible && window && !window.isDestroyed()) window.show();
   }
 });
-ipcMain.handle("magic-voice-start", (event) => {
+
+function spawnWindowsSpeech(window) {
+  const scriptPath = path.join(__dirname, "windows_speech.ps1");
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(scriptPath)) return reject(new Error("Windows speech fallback script is missing."));
+    speechWindow = window;
+    speechStopRequested = false;
+    const proc = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], {
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: process.env,
+    });
+    windowsSpeechProcess = proc;
+    speechMode = "windows";
+    let output = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { proc.kill(); } catch {}
+      reject(new Error("Windows microphone startup timed out."));
+    }, 8000);
+    const resolveReady = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    const rejectStart = (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(e instanceof Error ? e : new Error(String(e)));
+    };
+    proc.stdout.on("data", chunk => {
+      output += chunk.toString();
+      const lines = output.split(/\r?\n/); output = lines.pop() || "";
+      for (const line of lines) {
+        if (!line) continue;
+        const [kind, text, confidence] = line.split("|");
+        if (kind === "READY") { window.webContents.send("magic-voice-device", "Windows default microphone"); window.webContents.send("magic-voice-ready"); resolveReady(); }
+        else if (kind === "TRANSCRIPT" && text) window.webContents.send("magic-voice-transcript", {text, confidence: Number(confidence) || 0.8});
+        else if (kind === "LEVEL") window.webContents.send("magic-voice-level", Number(text) || 0);
+        else if (kind === "SPEECH_ERROR") { window.webContents.send("magic-voice-error", text || "Windows speech recognition failed."); rejectStart(new Error(text || "Windows speech recognition failed.")); }
+      }
+    });
+    proc.stderr.on("data", chunk => { const m=chunk.toString().trim(); if(m) console.warn("[Windows Speech]",m); });
+    proc.once("error", e => { window.webContents.send("magic-voice-error", e.message); rejectStart(e); });
+    proc.once("exit", code => { if (!settled && !speechStopRequested) rejectStart(new Error(`Windows speech process stopped (exit code ${code ?? "unknown"}).`)); });
+  });
+}
+
+async function startWhisperSpeech(window) {
+  try {
+    return await startWhisperProcess(window);
+  } catch (error) {
+    console.warn("[ma9icAI voice] Whisper unavailable, trying Windows Speech fallback:", error.message);
+    try { await stopWhisperSpeech(); } catch {}
+    return await spawnWindowsSpeech(window);
+  }
+}
+
+ipcMain.handle("magic-voice-start", async (event) => {
   assertTrustedRenderer(event);
-  startWhisperSpeech(BrowserWindow.fromWebContents(event.sender));
-  return true;
+  return startWhisperSpeech(BrowserWindow.fromWebContents(event.sender));
 });
 ipcMain.on("magic-voice-stop", (event) => {
   assertTrustedRenderer(event);
@@ -355,57 +865,193 @@ ipcMain.on("magic-window-close", (event) => {
   assertTrustedRenderer(event);
   BrowserWindow.fromWebContents(event.sender)?.close();
 });
-
-ipcMain.handle("magic-ollama-start", (event) => {
+ipcMain.on("magic-window-minimize", (event) => {
   assertTrustedRenderer(event);
-  const command = `ollama run ${CUSTOM_OLLAMA_MODEL}`;
-  const child = spawn("cmd.exe", ["/c", "start", "", "/min", "cmd.exe", "/k", `cd /d "${ollamaWorkingDirectory}" && ${command}`], {
-    windowsHide: false,
-    detached: true,
-    stdio: "ignore",
-    cwd: ollamaWorkingDirectory,
-  });
-  child.unref();
-  return true;
+  BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
 
-ipcMain.handle("magic-ollama-download", (event, model) => {
+ipcMain.on("magic-window-toggle-maximize", (event) => {
   assertTrustedRenderer(event);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) return;
+  if (window.isMaximized()) window.unmaximize();
+  else window.maximize();
+});
 
-  if (typeof model !== "string" || !supportedOllamaModels.has(model)) {
-    throw new Error("That Ollama model is not available in the download menu.");
-  }
+function findOllamaCommand() {
+  return new Promise((resolve, reject) => {
+    const commonPaths = [
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Ollama", "ollama.exe"),
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Ollama", "ollama.exe"),
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Ollama", "ollama.exe"),
+      process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Ollama", "ollama.exe"),
+    ].filter(Boolean);
 
-  const modelFile = model === CUSTOM_OLLAMA_MODEL
-    ? getBundledMiniCPMModelfile()
-    : null;
+    const existing = commonPaths.find((candidate) => fs.existsSync(candidate));
+    if (existing) {
+      resolve(existing);
+      return;
+    }
 
-  const command =
-    model === CUSTOM_OLLAMA_MODEL
-      ? `ollama pull ${BASE_OLLAMA_MODEL} && ollama create ${CUSTOM_OLLAMA_MODEL} -f "${modelFile}"`
-      : `ollama pull ${model}`;
+    execFile("where.exe", ["ollama"], { windowsHide: true, timeout: OLLAMA_COMMAND_TIMEOUT }, (error, stdout) => {
+      if (error || !stdout.trim()) {
+        reject(new Error("Ollama was not found on Windows. Install Ollama or add ollama.exe to PATH."));
+        return;
+      }
+      resolve(stdout.trim().split(/\r?\n/)[0].trim());
+    });
+  });
+}
 
-  const child = spawn(
-    "cmd.exe",
-    [
-      "/c",
-      "start",
-      "",
-      "/min",
-      "cmd.exe",
-      "/k",
-      `cd /d "${ollamaWorkingDirectory}" && ${command}`,
-    ],
-    {
-      windowsHide: false,
+function isOllamaOnline() {
+  return new Promise((resolve) => {
+    const request = http.get("http://127.0.0.1:11434/api/tags", (response) => {
+      response.resume();
+      resolve(Boolean(response.statusCode && response.statusCode >= 200 && response.statusCode < 500));
+    });
+    request.setTimeout(1200, () => { request.destroy(); resolve(false); });
+    request.on("error", () => resolve(false));
+  });
+}
+
+async function ensureOllamaServer() {
+  if (await isOllamaOnline()) return true;
+  try {
+    const ollamaPath = await findOllamaCommand();
+    const child = spawn(ollamaPath, ["serve"], {
+      windowsHide: true,
       detached: true,
       stdio: "ignore",
       cwd: ollamaWorkingDirectory,
+      shell: false,
+    });
+    child.unref();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (await isOllamaOnline()) return true;
     }
-  );
+  } catch (error) {
+    console.warn("[Ollama] Could not auto-start Ollama:", error?.message || error);
+  }
+  return false;
+}
 
+function spawnOllama(ollamaPath, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ollamaPath, args, {
+      windowsHide: options.windowsHide !== false,
+      detached: false,
+      stdio: options.capture ? ["ignore", "pipe", "pipe"] : "ignore",
+      cwd: ollamaWorkingDirectory,
+      shell: false,
+    });
+
+    child.once("spawn", () => resolve(child));
+    child.once("error", (error) => reject(new Error(`Could not launch Ollama: ${error.message}`)));
+  });
+}
+
+async function startOllamaService() {
+  if (await isOllamaOnline()) return { online: true, started: false };
+  const ollamaPath = await findOllamaCommand();
+  const child = await spawnOllama(ollamaPath, ["serve"], { windowsHide: true });
   child.unref();
-  return true;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (await isOllamaOnline()) return { online: true, started: true };
+  }
+  return { online: false, started: true };
+}
+
+async function launchOllamaDownload(model, sender, customModel = null, modelfile = null) {
+  const ollamaPath = await findOllamaCommand();
+  const pull = await spawnOllama(ollamaPath, ["pull", model], { windowsHide: true, capture: true });
+  ollamaDownloadProcesses.add(pull);
+
+  const send = (payload) => {
+    try {
+      if (sender && !sender.isDestroyed()) sender.send("magic-ollama-progress", payload);
+    } catch {}
+  };
+
+  const forward = (chunk) => {
+    const line = String(chunk || "").trim();
+    if (line) send({ model, text: line });
+  };
+  pull.stdout?.on("data", forward);
+  pull.stderr?.on("data", forward);
+  send({ model, state: "downloading", text: `Downloading ${model}...` });
+
+  pull.once("error", (error) => {
+    ollamaDownloadProcesses.delete(pull);
+    send({ model, state: "error", text: error.message });
+  });
+
+  pull.once("close", async (code) => {
+    ollamaDownloadProcesses.delete(pull);
+    if (code !== 0) {
+      send({ model, state: "error", text: `Ollama download exited with code ${code}.` });
+      return;
+    }
+
+    if (customModel && modelfile) {
+      try {
+        send({ model: customModel, state: "creating", text: `Creating ${customModel}...` });
+        const create = await spawnOllama(ollamaPath, ["create", customModel, "-f", modelfile], { windowsHide: true, capture: true });
+        ollamaDownloadProcesses.add(create);
+        create.stdout?.on("data", forward);
+        create.stderr?.on("data", forward);
+        create.once("close", (createCode) => {
+          ollamaDownloadProcesses.delete(create);
+          send(createCode === 0
+            ? { model: customModel, state: "complete", text: `${customModel} is installed.` }
+            : { model: customModel, state: "error", text: `Ollama model creation exited with code ${createCode}.` });
+        });
+        create.once("error", (error) => {
+          ollamaDownloadProcesses.delete(create);
+          send({ model: customModel, state: "error", text: error.message });
+        });
+      } catch (error) {
+        send({ model: customModel, state: "error", text: error?.message || "Could not create custom model." });
+      }
+      return;
+    }
+
+    send({ model, state: "complete", text: `${model} is installed.` });
+  });
+}
+
+ipcMain.handle("magic-ollama-start", async (event) => {
+  assertTrustedRenderer(event);
+  try {
+    const status = await startOllamaService();
+    if (!status.online) {
+      return { ok: false, error: "Ollama was found, but its local service did not become available at http://127.0.0.1:11434." };
+    }
+    const response = await fetch("http://127.0.0.1:11434/api/tags", { signal: AbortSignal.timeout(3000) });
+    const data = await response.json();
+    return { ok: true, started: status.started, models: Array.isArray(data.models) ? data.models : [] };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Could not start Ollama." };
+  }
+});
+
+ipcMain.handle("magic-ollama-download", async (event, model) => {
+  assertTrustedRenderer(event);
+  if (typeof model !== "string" || !supportedOllamaModels.has(model)) {
+    return { ok: false, error: "That Ollama model is not available in the download menu." };
+  }
+  try {
+    const started = await startOllamaService();
+    if (!started.online) {
+      return { ok: false, error: "Ollama could not be started. Make sure Ollama is installed." };
+    }
+    const modelFile = model === CUSTOM_OLLAMA_MODEL ? getBundledMiniCPMModelfile() : null;
+    await launchOllamaDownload(model === CUSTOM_OLLAMA_MODEL ? BASE_OLLAMA_MODEL : model, event.sender, CUSTOM_OLLAMA_MODEL === model ? CUSTOM_OLLAMA_MODEL : null, modelFile);
+    return { ok: true, state: "downloading" };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Could not start the model download." };
+  }
 });
 
 ipcMain.on("magic-window-layout", (event, overlayMode) => {
@@ -429,8 +1075,8 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
     window.setBounds({
       x: Math.max(0, Math.round((screen.getPrimaryDisplay().workArea.width - 480) / 2)),
       y: Math.max(0, Math.round((screen.getPrimaryDisplay().workArea.height - 280) / 2)),
-      width: 480,
-      height: 280,
+      width: 1280,
+      height: 820,
     });
   }
 });
@@ -482,9 +1128,20 @@ function waitForServer(url, attempts = 80) {
 
 async function createWindow() {
   process.env.NODE_ENV = "production";
+  const logPath = path.join(app.getPath("userData"), "startup.log");
+  const log = (message) => {
+    try { fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`); } catch {}
+    console.log(message);
+  };
+  process.on("uncaughtException", (error) => log(`UNCAUGHT: ${error?.stack || error}`));
+  process.on("unhandledRejection", (error) => log(`UNHANDLED: ${error?.stack || error}`));
   process.env.MAGIC_APP_ROOT = app.getAppPath();
   process.env.PORT = String(port);
-  require(path.join(app.getAppPath(), "dist", "server.cjs"));
+  const serverPath = path.join(app.getAppPath(), "dist", "server.cjs");
+  if (!fs.existsSync(serverPath)) {
+    throw new Error(`Built server is missing: ${serverPath}. Run npm run build before starting ma9icAI.`);
+  }
+  require(serverPath);
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === "media" || permission === "notifications");
@@ -504,7 +1161,13 @@ async function createWindow() {
     }
   });
 
-  await waitForServer(`http://127.0.0.1:${port}/api/health`);
+  try {
+    await waitForServer(`http://127.0.0.1:${port}/api/health`);
+    void ensureOllamaServer();
+  } catch (error) {
+    log(`SERVER START FAILED: ${error?.stack || error}`);
+    throw error;
+  }
 
   globalShortcut.register("CommandOrControl+Alt+Escape", () => {
     desktopKilled = true;
@@ -512,15 +1175,16 @@ async function createWindow() {
   });
 
   const window = new BrowserWindow({
-    width: 480,
-    height: 280,
-    minWidth: 480,
-    minHeight: 260,
-    transparent: true,
+    width: 980,
+    height: 620,
+    minWidth: 980,
+    minHeight: 620,
+    center: true,
+    transparent: false,
     frame: false,
     hasShadow: false,
     alwaysOnTop: true,
-    backgroundColor: "#00000000",
+    backgroundColor: "#020611",
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -548,12 +1212,38 @@ async function createWindow() {
     }
   });
 
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    log(`RENDERER LOAD FAILED ${errorCode}: ${errorDescription} ${validatedURL}`);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    log(`RENDERER GONE: ${JSON.stringify(details)}`);
+  });
+  window.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    log(`RENDERER CONSOLE [${level}] ${message} (${sourceId}:${line})`);
+  });
+  try {
+    await session.defaultSession.clearCache();
+  } catch (error) {
+    log(`CACHE CLEAR FAILED: ${error?.message || error}`);
+  }
   await window.loadURL(`http://127.0.0.1:${port}/?desktop=1`);
 }
 
 app.whenReady().then(createWindow).catch((error) => {
   console.error(error);
-  app.quit();
+  try {
+    const message = error?.stack || error?.message || String(error);
+    const dialog = require("electron").dialog;
+    void dialog.showMessageBox({
+      type: "error",
+      title: "ma9icAI could not start",
+      message: "ma9icAI could not open the main window.",
+      detail: message,
+      buttons: ["OK"],
+    }).finally(() => app.quit());
+  } catch {
+    app.quit();
+  }
 });
 
 app.on("window-all-closed", () => {
