@@ -87,15 +87,29 @@ export const InputBar: React.FC<InputBarProps> = ({
         <button
           type="button"
           onClick={onToggleListening}
-          className={`relative p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer shadow-lg ${
+          aria-pressed={isListening}
+          aria-label={isListening ? "Stop live microphone" : `Start live microphone or say ${WAKE_WORD}`}
+          className={`relative w-11 h-11 shrink-0 rounded-full transition-all duration-200 flex items-center justify-center cursor-pointer ${
             isListening
-              ? "bg-cyan-500 text-slate-950 ring-4 ring-cyan-500/30 scale-105"
-              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              ? "bg-cyan-500 text-slate-950 ring-4 ring-cyan-400/40 shadow-[0_0_12px_rgba(34,211,238,0.95),0_0_30px_rgba(34,211,238,0.65)] scale-105"
+              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-lg"
           }`}
-          title={isListening ? "Stop listening" : `Start voice listening (or say '${WAKE_WORD}')`}
+          title={isListening ? "Stop live microphone" : `Start voice listening (or say '${WAKE_WORD}')`}
         >
+          {isListening && (
+            <span
+              aria-hidden="true"
+              className="absolute inset-[-5px] rounded-full border-2 border-cyan-300/70 animate-ping pointer-events-none"
+            />
+          )}
+          {isListening && (
+            <span
+              aria-hidden="true"
+              className="absolute inset-[-2px] rounded-full border border-cyan-200/80 pointer-events-none"
+            />
+          )}
           {isListening ? (
-            <Mic className="w-5 h-5 animate-pulse" />
+            <Mic className="relative z-10 w-5 h-5 animate-pulse" />
           ) : (
             <MicOff className="w-5 h-5 text-slate-400" />
           )}
