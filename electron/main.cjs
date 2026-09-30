@@ -4,6 +4,20 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const existingWindow = BrowserWindow.getAllWindows()[0];
+    if (existingWindow && !existingWindow.isDestroyed()) {
+      if (existingWindow.isMinimized()) existingWindow.restore();
+      existingWindow.show();
+      existingWindow.focus();
+    }
+  });
+}
+
 const port = Number(process.env.MAGIC_PORT || 3210);
 const AI_SCREEN_WIDTH = 1280;
 const AI_SCREEN_HEIGHT = 800;
