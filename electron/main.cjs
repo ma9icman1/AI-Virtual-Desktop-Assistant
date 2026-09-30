@@ -240,14 +240,22 @@ async function startWhisperProcess(window) {
 /* desktop execution policy hardening v1 */
 function runPowerShell(script, args = []) {
   return new Promise((resolve, reject) => {
+    const scriptArgs = JSON.stringify(args.map((value) => String(value ?? "")));
+    const safeScript = "$scriptArgs = ConvertFrom-Json $env:MAGIC_RUN_ARGS;\n" + script;
     execFile(
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", script, ...args],
-      { windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 },
+      ["-NoProfile", "-NonInteractive", "-Command", safeScript],
+      {
+        windowsHide: true,
+        timeout: 15000,
+        maxBuffer: 1024 * 1024,
+        env: { ...process.env, MAGIC_RUN_ARGS: scriptArgs },
+      },
       (error, stdout, stderr) => {
-      if (error) reject(new Error(stderr.trim() || error.message));
-      else resolve(stdout.trim());
-    });
+        if (error) reject(new Error(stderr.trim() || error.message));
+        else resolve(stdout.trim());
+      }
+    );
   });
 }
 
