@@ -542,13 +542,13 @@ async function detectWebpage(params = {}) {
       const script = `
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-$pid = [int]$scriptArgs[0]
+$targetPid = [int]$scriptArgs[0]
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
 $url = ""
 foreach ($el in $elements) {
   try {
-    if ($el.Current.ProcessId -ne $pid) { continue }
+    if ($el.Current.ProcessId -ne $targetPid) { continue }
     $name = [string]$el.Current.Name
     $type = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', '')
     if ($type -ne 'Edit') { continue }
