@@ -23,21 +23,21 @@ if (fs.existsSync(serverFile)) {
   const marker = '  if (requestedApp && asksToOpen && parsed?.action?.type !== "LAUNCH_APP" && parsed?.action?.type !== "MULTI_STEP_PLAN") {';
   if (!text.includes('const desktopVoiceWindowMatch')) {
     if (!text.includes(marker)) throw new Error('[desktop-actions] Server intent marker not found');
-    const block = `  // Deterministic voice desktop commands. These run before the general AI intent so
+    const block = String.raw`  // Deterministic voice desktop commands. These run before the general AI intent so
   // common commands do not depend on model formatting.
-  const desktopVoiceWindowMatch = request.match(/\\b(?:switch|focus|bring)\\s+(?:to\\s+)?(?:the\\s+)?(.+?)\\s*$/i);
-  const desktopVoiceOpenMatch = request.match(/\\b(?:open|launch|start|run)\\s+(?:the\\s+)?(.+?)\\s*$/i);
-  const desktopVoiceCloseMatch = request.match(/\\b(?:close|quit|exit|kill)\\s+(?:the\\s+)?(.+?)\\s*$/i);
-  const desktopVoiceMinMatch = request.match(/\\bminimi[sz]e\\s+(?:the\\s+)?(.+?)\\s*$/i);
-  const desktopVoiceMaxMatch = request.match(/\\bmaximi[sz]e\\s+(?:the\\s+)?(.+?)\\s*$/i);
-  const desktopVoiceRestoreMatch = request.match(/\\brestore\\s+(?:the\\s+)?(.+?)\\s*$/i);
-  const desktopVoiceTypeMatch = message.match(/\\b(?:type|write|enter)\\s+["']?(.+?)["']?\\s*$/i);
-  const desktopVoiceKeyMatch = message.match(/\\b(?:press|hit)\\s+(.+?)\\s*$/i);
-  const desktopVoiceClickMatch = request.match(/\\b(double[- ]?click|right[- ]?click|click)\\s+(?:at\\s+)?(?:x\\s*)?(\\d{2,5})\\s*(?:,|and)\\s*(?:y\\s*)?(\\d{2,5})\\b/i);
-  const desktopVoiceMoveMatch = request.match(/\\b(?:move|put)\\s+(?:the\\s+)?mouse\\s+(?:to\\s+)?(?:x\\s*)?(\\d{2,5})\\s*(?:,|and)\\s*(?:y\\s*)?(\\d{2,5})\\b/i);
-  const desktopVoiceScrollMatch = request.match(/\\bscroll\\s+(up|down)(?:\\s+(\\d+))?/i);
-  const desktopVoiceFolderMatch = message.match(/\\b(?:open|go\\s+to)\\s+(?:the\\s+)?folder\\s+["']?(.+?)["']?\\s*$/i);
-  const desktopVoiceFileMatch = message.match(/\\b(?:open|load)\\s+(?:the\\s+)?file\\s+["']?(.+?)["']?\\s*$/i);
+  const desktopVoiceWindowMatch = request.match(/\b(?:switch|focus|bring)\s+(?:to\s+)?(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceOpenMatch = request.match(/\b(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceCloseMatch = request.match(/\b(?:close|quit|exit|kill)\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceMinMatch = request.match(/\bminimi[sz]e\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceMaxMatch = request.match(/\bmaximi[sz]e\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceRestoreMatch = request.match(/\brestore\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceTypeMatch = message.match(/\b(?:type|write|enter)\s+["']?(.+?)["']?\s*$/i);
+  const desktopVoiceKeyMatch = message.match(/\b(?:press|hit)\s+(.+?)\s*$/i);
+  const desktopVoiceClickMatch = request.match(/\b(double[- ]?click|right[- ]?click|click)\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
+  const desktopVoiceMoveMatch = request.match(/\b(?:move|put)\s+(?:the\s+)?mouse\s+(?:to\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
+  const desktopVoiceScrollMatch = request.match(/\bscroll\s+(up|down)(?:\s+(\d+))?/i);
+  const desktopVoiceFolderMatch = message.match(/\b(?:open|go\s+to)\s+(?:the\s+)?folder\s+["']?(.+?)["']?\s*$/i);
+  const desktopVoiceFileMatch = message.match(/\b(?:open|load)\s+(?:the\s+)?file\s+["']?(.+?)["']?\s*$/i);
 
   const makePlan = (title, description, steps, completion) => ({
     ...parsed,
@@ -86,7 +86,7 @@ if (fs.existsSync(serverFile)) {
     ], app + " closed.");
   }
 
-  if (desktopVoiceWindowMatch && !/\\b(?:what|where|which)\\b/.test(request)) {
+  if (desktopVoiceWindowMatch && !/\b(?:what|where|which)\b/.test(request)) {
     const app = desktopVoiceWindowMatch[1].trim();
     return makePlan("Switch to " + app, "I will switch to " + app + ".", [
       { stepNumber: 1, description: "Focus " + app, actionType: "FOCUS_APP", params: { app, parameter: app }, status: "pending", estimatedDurationMs: 500 }
@@ -107,15 +107,15 @@ if (fs.existsSync(serverFile)) {
     ], "File opened.");
   }
 
-  if (desktopVoiceTypeMatch && !/\\b(?:what|who|where|when|why|how)\\b/.test(request)) {
+  if (desktopVoiceTypeMatch && !/\b(?:what|who|where|when|why|how)\b/.test(request)) {
     const textToType = desktopVoiceTypeMatch[1].trim();
     return makePlan("Type text", "I will type " + textToType + ".", [
       { stepNumber: 1, description: "Type " + textToType, actionType: "TYPE_INPUT", params: { text: textToType }, status: "pending", estimatedDurationMs: 400 }
     ], "Text entered.");
   }
 
-  if (desktopVoiceKeyMatch && /\\b(?:enter|return|tab|escape|esc|backspace|delete|space|up|down|left|right|home|end|page up|page down|ctrl|control|alt|shift|win|windows)\\b/i.test(desktopVoiceKeyMatch[1])) {
-    const key = desktopVoiceKeyMatch[1].trim().toLowerCase().replace(/\\bcontrol\\b/g, "ctrl").replace(/\\bescape\\b/g, "esc").replace(/\\bwindows\\b/g, "win");
+  if (desktopVoiceKeyMatch && /\b(?:enter|return|tab|escape|esc|backspace|delete|space|up|down|left|right|home|end|page up|page down|ctrl|control|alt|shift|win|windows)\b/i.test(desktopVoiceKeyMatch[1])) {
+    const key = desktopVoiceKeyMatch[1].trim().toLowerCase().replace(/\bcontrol\b/g, "ctrl").replace(/\bescape\b/g, "esc").replace(/\bwindows\b/g, "win");
     return makePlan("Press " + key, "I will press " + key + ".", [
       { stepNumber: 1, description: "Press " + key, actionType: "KEY_PRESS", params: { key }, status: "pending", estimatedDurationMs: 250 }
     ], "Done.");
@@ -141,7 +141,7 @@ if (fs.existsSync(electronFile)) {
   const marker = '  const supportedInputActions = new Set([';
   if (!text.includes('if (["MINIMIZE_APP", "MAXIMIZE_APP", "RESTORE_APP"].includes(action))')) {
     if (!text.includes(marker)) throw new Error('[desktop-actions] Electron action marker not found');
-    const block = `  if (["MINIMIZE_APP", "MAXIMIZE_APP", "RESTORE_APP"].includes(action)) {
+    const block = String.raw`  if (["MINIMIZE_APP", "MAXIMIZE_APP", "RESTORE_APP"].includes(action)) {
     const requested = normalizeProcessName(params.app);
     const processName = resolveAutomationProcessName(requested);
     if (!requested) throw new Error("No application was provided for window control.");
