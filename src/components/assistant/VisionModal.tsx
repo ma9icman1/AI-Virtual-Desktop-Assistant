@@ -40,7 +40,7 @@ export const VisionModal: React.FC<VisionModalProps> = ({
             </div>
             <div>
               <h3 className="font-semibold text-base">Multimodal Vision Analysis</h3>
-              <p className="text-xs text-slate-400">Powered by Gemini 3.8 Flash Multimodal OCR</p>
+              <p className="text-xs text-slate-400">Powered by Gemini Flash (Latest) Multimodal OCR</p>
             </div>
           </div>
           <button
