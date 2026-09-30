@@ -315,19 +315,37 @@ export default function App() {
 
     if (!point) return;
 
+    const clickPlan: MultiStepPlan = {
+      id: "xray-click-" + Date.now(),
+      planTitle: "Click " + (element.label || "selected target"),
+      spokenIntro: "I found " + (element.label || "the selected target") + " on your screen.",
+      steps: [{
+        stepNumber: 1,
+        description: "Click " + (element.label || "selected target"),
+        actionType: "CLICK_BUTTON",
+        params: { x: point.x, y: point.y, coordinateSpace: "vision" },
+        status: "pending",
+        estimatedDurationMs: 500,
+      }],
+      spokenCompletion: "Clicked " + (element.label || "the selected target") + ".",
+      currentStepIndex: 0,
+      status: "idle",
+    };
+
+    if (permissionLevel === "none" || permissionLevel === "deny") {
+      setPendingPlan(clickPlan);
+      setIsPermissionOpen(true);
+      return;
+    }
+
     try {
-      await executeDesktopAction("CLICK_BUTTON", {
-        x: point.x,
-        y: point.y,
-        coordinateSpace: "vision",
-      });
-      VoiceEngine.speak(`Clicked ${element.label || "the selected target"}.`);
+      await executePlanSequence(clickPlan);
       setIsXRayVisible(false);
     } catch (error) {
       console.warn("Magic X-Ray target click failed:", error);
       VoiceEngine.speak(describeError(error, "Desktop control is not enabled for that target."));
     }
-  }, [executeDesktopAction]);
+  }, [executeDesktopAction, executePlanSequence, permissionLevel]);
 
   // Handle Assistant Speech Output
   const handleSpeakText = useCallback((text: string) => {
