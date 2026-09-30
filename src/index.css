@@ -192,3 +192,19 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 .ma9ic-header-actions { margin-left:auto; flex-shrink:0; gap:10px; }
 .ma9ic-window-btn { width:32px; height:32px; }
 .ma9ic-window-btn.close { margin-left:0; }
+
+/* Center the assistant title over the main chat workspace. */
+.ma9ic-main-title {
+  flex:none;
+  height:34px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#a9c3e5;
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:.35px;
+  text-align:center;
+  border-bottom:1px solid #102f51;
+  background:#030b18;
+}
