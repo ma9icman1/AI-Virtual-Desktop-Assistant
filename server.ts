@@ -49,8 +49,8 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   // Normalize those common voice transcription collisions before intent parsing.
   const request = message
     .toLowerCase()
-    .replace(/\\b(open|visit|load|browse\\s+to)(?=(?:www\\.)?[a-z0-9-]+\\.[a-z]{2,})/gi, "$1 ")
-    .replace(/\\b(goto|go\\s+to|navigate\\s+to)(?=(?:www\\.)?[a-z0-9-]+\\.[a-z]{2,})/gi, (match) => match.replace(/goto/i, "go to") + " ");
+    .replace(/\b(open|visit|load|browse\s+to)(?=(?:www\.)?[a-z0-9-]+\.[a-z]{2,})/gi, "$1 ")
+    .replace(/\b(goto|go\s+to|navigate\s+to)(?=(?:www\.)?[a-z0-9-]+\.[a-z]{2,})/gi, (match) => match.replace(/goto/i, "go to") + " ");
   const appAliases: Array<[RegExp, string]> = [
     [/\b(browser|web browser|internet browser)\b/, "browser"],
     [/\b(brave|brave browser)\b/, "brave"],
