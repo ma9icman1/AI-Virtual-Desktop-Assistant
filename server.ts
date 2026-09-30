@@ -100,6 +100,8 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     const url = `${protocol}${websiteUrlMatch[2]}`;
     return {
       ...parsed,
+      spokenResponse: `Opening ${websiteUrlMatch[2]} in your default browser.`,
+      spokenReply: `Opening ${websiteUrlMatch[2]} in your default browser.`,
       action: {
         type: "MULTI_STEP_PLAN",
         description: `Open ${url} in the Windows default browser`,
