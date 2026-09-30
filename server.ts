@@ -312,8 +312,9 @@ async function callOllamaChat(params: {
   messages: Array<{ role: string; content: string; images?: string[] }>;
   formatJson?: boolean;
   timeoutMs?: number;
+  options?: Record<string, any>;
 }): Promise<string> {
-  const { model = activeOllamaModel, systemPrompt, messages, formatJson = true, timeoutMs = 60000 } = params;
+  const { model = activeOllamaModel, systemPrompt, messages, formatJson = true, timeoutMs = 60000, options = { temperature: 0.3 } } = params;
 
   const chatMessages: any[] = [];
   if (systemPrompt) {
@@ -331,11 +332,7 @@ async function callOllamaChat(params: {
     model,
     messages: chatMessages,
     stream: false,
-    options: {
-      temperature: 0.1,
-      num_ctx: 2048,
-      num_predict: 220,
-    },
+    options,
   };
 
   if (formatJson) {
@@ -815,6 +812,11 @@ Rules: at most 12 detectedElements; keep labels/text very short; omit uncertain 
           ],
           formatJson: true,
           timeoutMs: 45000,
+          options: {
+            temperature: 0.1,
+            num_ctx: 2048,
+            num_predict: 220,
+          },
         });
 
         const parsed = parseLooseJson(rawContent);
