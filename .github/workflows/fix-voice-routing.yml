@@ -1,0 +1,64 @@
+name: Patch Magic voice routing
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'Apply Magic voice routing patch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch voice routing
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          # voiceEngine: Magic is the spoken wake word, independent of ma9icAI.
+          p = Path('src/services/voiceEngine.ts')
+          s = p.read_text(encoding='utf-8')
+          pattern = re.compile(r'  private getWakeWordAliases\(\): string\[\] \{.*?\n  \}\n\n  private parseWakeWord', re.S)
+          replacement = '''  private getWakeWordAliases(): string[] {
+    // Spoken wake word is always Magic. ma9icAI is only the display name.
+    return ["magic"];
+  }
+
+  private parseWakeWord'''
+          s, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('getWakeWordAliases not found')
+          p.write_text(s, encoding='utf-8')
+
+          # App: bottom status must say Magic, and pure Magic must trigger wake.
+          p = Path('src/App.tsx')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('setVoiceNotice("Wake word active — say ma9icAI.");', 'setVoiceNotice("Wake word active — say Magic.");')
+          s = re.sub(r'      const escapedAssistantName = assistantName\.replace\(/\[\.\*\+\?\^\$\{\}\(\)\|\[\\\\\]\\\\\\\\\]/g, "\\\\\\\\\$&"\);\n      const isPureWakeWord = new RegExp\(`\\\\\\\\s\*\(hey\\\\\\\\s\+\|hi\\\\\\\\s\+\|ok\\\\\\\\s\+\|okay\\\\\\\\s\+\)\?\\\$\{escapedAssistantName\}\[!\?\.,\]\*\\\\\\\\s\*\\`\, "i"\)\.test\(text\.trim\(\)\);', '', s)
+          # Replace the exact common block if the regex above does not match.
+          s = s.replace('      const escapedAssistantName = assistantName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");\n      const isPureWakeWord = new RegExp(`^\\\\s*(hey\\\\s+|hi\\\\s+|ok\\\\s+|okay\\\\s+)?${escapedAssistantName}[!?.,]*\\\\s*$`, "i").test(text.trim());', '      const isPureWakeWord = /^\\\\s*(hey\\\\s+|hi\\\\s+|ok\\\\s+|okay\\\\s+)?magic[!?.,]*\\\\s*$/i.test(text.trim());')
+          p.write_text(s, encoding='utf-8')
+
+          # Electron main: print every Whisper transcript and recording state in PowerShell.
+          p = Path('electron/main.cjs')
+          s = p.read_text(encoding='utf-8')
+          old = '        if (kind === "TRANSCRIPT" && text && speechWindow && !speechWindow.isDestroyed()) {\n          speechWindow.webContents.send("magic-voice-transcript", {\n            text,\n            confidence: Number(confidence) || 0.8,\n          });\n        }'
+          new = '        if (kind === "RECORDING") {\n          console.log(`[ma9icAI voice] Microphone recording ${text === "1" ? "ON" : "OFF"}`);\n          if (speechWindow && !speechWindow.isDestroyed()) speechWindow.webContents.send("magic-voice-recording", text === "1");\n          continue;\n        }\n        if (kind === "SPEECH_START") {\n          console.log("[ma9icAI voice] Speech detected");\n          continue;\n        }\n        if (kind === "SPEECH_END") {\n          console.log("[ma9icAI voice] Speech phrase ended; transcribing...");\n          continue;\n        }\n        if (kind === "TRANSCRIPT" && text && speechWindow && !speechWindow.isDestroyed()) {\n          console.log(`[ma9icAI voice] Whisper transcript: ${text}`);\n          speechWindow.webContents.send("magic-voice-transcript", {\n            text,\n            confidence: Number(confidence) || 0.8,\n          });\n        }'
+          if old not in s:
+              raise SystemExit('main transcript block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+      - name: Commit and remove workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-voice-routing.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/services/voiceEngine.ts src/App.tsx electron/main.cjs .github/workflows/fix-voice-routing.yml
+          git commit -m 'Apply Magic voice routing patch'
+          git push
