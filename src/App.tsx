@@ -339,13 +339,14 @@ export default function App() {
     }
 
     try {
-      await executePlanSequence(clickPlan);
+      await executeDesktopAction("CLICK_BUTTON", clickPlan.steps[0].params);
+      VoiceEngine.speak(clickPlan.spokenCompletion);
       setIsXRayVisible(false);
     } catch (error) {
       console.warn("Magic X-Ray target click failed:", error);
       VoiceEngine.speak(describeError(error, "Desktop control is not enabled for that target."));
     }
-  }, [executeDesktopAction, executePlanSequence, permissionLevel]);
+  }, [executeDesktopAction, permissionLevel]);
 
   // Handle Assistant Speech Output
   const handleSpeakText = useCallback((text: string) => {
