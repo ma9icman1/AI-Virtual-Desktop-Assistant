@@ -14,7 +14,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 .ma9ic-brand-title { font-size:24px; font-weight:800; letter-spacing:.2px; color:#f6fbff; white-space:nowrap; }
 .ma9ic-brand-title span { margin-left:14px; padding-left:14px; border-left:1px solid #214b86; font-size:14px; font-weight:500; color:#a6b8d7; letter-spacing:.2px; }
 .ma9ic-header-tagline { margin-left:auto; color:#718bb1; font-size:12px; letter-spacing:.2px; }
-.ma9ic-header-actions { display:flex; align-items:center; gap:18px; min-width:0; }
+.ma9ic-header-actions { display:flex; align-items:center; gap:18px; min-width:0; margin-left:auto; }
 .ma9ic-header-mic { width:34px; height:34px; border:0; background:none; color:#b8d6ff; display:grid; place-items:center; cursor:pointer; }
 .ma9ic-header-mic svg { width:20px; }
 .ma9ic-online { display:flex; align-items:center; justify-content:center; gap:8px; min-width:78px; padding:0 16px; margin-left:2px; border-left:1px solid #183355; border-right:1px solid #183355; font-size:13px; color:#c8d5e9; white-space:nowrap; }
@@ -107,7 +107,6 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 @media (max-width:1200px){ .ma9ic-right-rail{width:300px}.ma9ic-sidebar{width:225px}.ma9ic-brand{min-width:300px}.ma9ic-header-tagline{display:none}.ma9ic-hero-copy h2{font-size:31px} }
 @media (max-width:900px){ .ma9ic-right-rail{display:none}.ma9ic-sidebar{width:210px}.ma9ic-prompt-grid{grid-template-columns:1fr}.ma9ic-hero-dashboard{padding-left:20px}.ma9ic-home-scroll{padding-left:14px;padding-right:14px} }
 
-
 /* Ollama model access */
 .ma9ic-model-btn { display:flex; align-items:center; gap:8px; padding:0 12px; min-width:76px; justify-content:center; white-space:nowrap; }
 .ma9ic-model-btn svg { width:15px; height:15px; }
@@ -188,3 +187,8 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 .ma9ic-rail-card { padding: 12px; margin-bottom: 8px; }
 .ma9ic-rail-row { min-height: 46px; margin-top: 5px; }
 .ma9ic-quick-grid button { min-height: 74px; }
+
+/* Header window controls: keep the app controls grouped at the far-right edge. */
+.ma9ic-header-actions { margin-left:auto; flex-shrink:0; gap:10px; }
+.ma9ic-window-btn { width:32px; height:32px; }
+.ma9ic-window-btn.close { margin-left:0; }
