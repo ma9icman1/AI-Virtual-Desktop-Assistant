@@ -964,7 +964,7 @@ export default function App() {
             <button type="button" onClick={() => setIsSettingsOpen(true)} className="ma9ic-brand" title="Open assistant settings">
               <img src="/ui/ma9icai-logo.png" alt="ma9icAI" className="ma9ic-brand-logo" />
               <div>
-                <div className="ma9ic-brand-title">ma9icAI <span>AI Virtual Desktop Assistant</span></div>
+                <div className="ma9ic-brand-title">ma9icAI</div>
               </div>
             </button>
             <div className="ma9ic-header-tagline">✦ Your AI. Your Desktop. Your Control.</div>
@@ -998,6 +998,7 @@ export default function App() {
             </aside>
 
             <main className="ma9ic-main">
+              <div className="ma9ic-main-title">AI Virtual Desktop Assistant</div>
               {activeSection === 'Home' ? (
                 <div className="ma9ic-home-scroll">
                   <section className="ma9ic-home-chat">
