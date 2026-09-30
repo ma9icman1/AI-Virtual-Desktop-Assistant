@@ -67,37 +67,36 @@ const supportedOllamaModels = new Set([
 ]);
 
 function stopWhisperSpeech() {
+  // Whisper is resident for fast access. STOP ends only the current recording
+  // and lets the worker flush the final phrase while keeping the model loaded.
+  if (speechProcess && speechMode === "whisper") {
+    speechStopRequested = false;
+    try { speechProcess.stdin?.write("STOP\n"); } catch {}
+  }
+
+  // The legacy Windows Speech fallback is still a disposable process.
+  if (windowsSpeechProcess) {
+    speechStopRequested = true;
+    const proc = windowsSpeechProcess;
+    windowsSpeechProcess = null;
+    speechMode = speechProcess ? "whisper" : null;
+    try { proc.stdin?.write("STOP\n"); } catch {}
+    setTimeout(() => { try { proc.kill(); } catch {} }, 1200);
+  }
+
+  return Promise.resolve();
+}
+
+function terminateSpeechProcesses() {
   speechStopRequested = true;
   const processes = [speechProcess, windowsSpeechProcess].filter(Boolean);
   speechProcess = null;
   windowsSpeechProcess = null;
   speechMode = null;
-  if (!processes.length) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    let remaining = processes.length;
-    const finishOne = () => {
-      remaining -= 1;
-      if (remaining <= 0) resolve();
-    };
-    for (const proc of processes) {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        finishOne();
-      };
-      const timeout = setTimeout(() => {
-        try { proc.kill(); } catch {}
-        finish();
-      }, 1500);
-      proc.once("exit", () => {
-        clearTimeout(timeout);
-        finish();
-      });
-      try { proc.stdin?.write("STOP\n"); } catch { try { proc.kill(); } catch {} finish(); }
-    }
-  });
+  for (const proc of processes) {
+    try { proc.stdin?.write("QUIT\n"); } catch {}
+    setTimeout(() => { try { proc.kill(); } catch {} }, 1000);
+  }
 }
 
 function resolvePythonCommand() {
@@ -119,6 +118,10 @@ function resolvePythonCommand() {
 }
 
 async function startWhisperProcess(window) {
+  if (speechProcess && speechMode === "whisper") {
+    speechWindow = window;
+    return true;
+  }
   await stopWhisperSpeech();
   speechStopRequested = false;
   speechWindow = window;
@@ -175,6 +178,12 @@ async function startWhisperProcess(window) {
             speechWindow.webContents.send("magic-voice-ready");
           }
           settleResolve();
+          continue;
+        }
+        if (kind === "RECORDING") {
+          if (speechWindow && !speechWindow.isDestroyed()) {
+            speechWindow.webContents.send("magic-voice-recording", text === "1");
+          }
           continue;
         }
         if (kind === "SPEECH_ERROR") {
@@ -877,8 +886,22 @@ async function startWhisperSpeech(window) {
 }
 
 ipcMain.handle("magic-voice-start", async (event) => {
-  assertTrustedRenderer(event);
-  return startWhisperSpeech(BrowserWindow.fromWebContents(event.sender));
+  const window = assertTrustedRenderer(event);
+  if (speechProcess && speechMode === "whisper") {
+    try {
+      speechProcess.stdin?.write("START\n");
+      return true;
+    } catch {
+      speechProcess = null;
+      speechMode = null;
+    }
+  }
+  const started = await startWhisperSpeech(window);
+  if (speechProcess && speechMode === "whisper") {
+    try { speechProcess.stdin?.write("START\n"); } catch {}
+    return started !== false;
+  }
+  return started;
 });
 ipcMain.on("magic-voice-stop", (event) => {
   assertTrustedRenderer(event);
