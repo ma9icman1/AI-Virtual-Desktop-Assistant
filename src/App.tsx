@@ -305,6 +305,30 @@ export default function App() {
     return await (window as any).magicDesktop.execute(mapped.action, mapped.params);
   }, []);
 
+  const handleXRayTargetClick = useCallback(async (element: VisionDetection["detectedElements"][number]) => {
+    const point = element.center || (element.boundingBox
+      ? {
+          x: element.boundingBox.x + element.boundingBox.width / 2,
+          y: element.boundingBox.y + element.boundingBox.height / 2,
+        }
+      : undefined);
+
+    if (!point) return;
+
+    try {
+      await executeDesktopAction("CLICK_BUTTON", {
+        x: point.x,
+        y: point.y,
+        coordinateSpace: "vision",
+      });
+      VoiceEngine.speak(`Clicked ${element.label || "the selected target"}.`);
+      setIsXRayVisible(false);
+    } catch (error) {
+      console.warn("Magic X-Ray target click failed:", error);
+      VoiceEngine.speak(describeError(error, "Desktop control is not enabled for that target."));
+    }
+  }, [executeDesktopAction]);
+
   // Handle Assistant Speech Output
   const handleSpeakText = useCallback((text: string) => {
     setAssistantState("speaking");
@@ -1058,6 +1082,7 @@ export default function App() {
         imageUrl={visionThumbnail}
         visible={isXRayVisible}
         onClose={() => setIsXRayVisible(false)}
+        onTargetClick={handleXRayTargetClick}
       />
 
       {/* Voice & Settings Modal */}
