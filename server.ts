@@ -47,6 +47,7 @@ function describeOllamaError(error: any): string {
 function normalizeDesktopIntent(message: string, parsed: any, visionContext: any = null) {
   const request = message.toLowerCase();
   const appAliases: Array<[RegExp, string]> = [
+    [/\b(browser|web browser|internet browser)\b/, "browser"],
     [/\b(brave|brave browser)\b/, "brave"],
     [/\b(edge|microsoft edge)\b/, "edge"],
     [/\b(chrome|google chrome)\b/, "chrome"],
@@ -116,7 +117,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   }
 
   if (webSearchMatch) {
-    const query = webSearchMatch[1].trim();
+    const query = webSearchMatch[1].replace(/\s+(?:in|using|with)\s+(?:edge|chrome|brave|firefox)\s*$/i, "").trim();
     return {
       ...parsed,
       action: {
