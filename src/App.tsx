@@ -1004,7 +1004,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </aside>    </aside>
+            </aside>
 
             <main className="ma9ic-main">
               <div className="ma9ic-main-title">AI Virtual Desktop Assistant</div>
