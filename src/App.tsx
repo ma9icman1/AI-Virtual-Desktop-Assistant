@@ -996,18 +996,18 @@ export default function App() {
                 ))}
               </nav>
 
-              {activeVision?.activeApplication && (
-                <div className="ma9ic-sidebar-active-app">
-                  <div className="ma9ic-sidebar-active-app-label">ACTIVE APPLICATION</div>
-                  <div className="ma9ic-sidebar-active-app-name" title={activeVision.activeApplication}>
-                    {activeVision.activeApplication}
-                  </div>
-                </div>
-              )}
             </aside>
 
             <main className="ma9ic-main">
-              <div className="ma9ic-main-title">AI Virtual Desktop Assistant</div>
+              <div className="ma9ic-main-title">
+                <span>AI Virtual Desktop Assistant</span>
+                {activeVision?.activeApplication && (
+                  <span className="ma9ic-main-active-app" title={activeVision.activeApplication}>
+                    <span className="ma9ic-main-active-app-label">ACTIVE APPLICATION</span>
+                    <span className="ma9ic-main-active-app-name">{activeVision.activeApplication}</span>
+                  </span>
+                )}
+              </div>
               {activeSection === 'Home' ? (
                 <div className="ma9ic-home-scroll">
                   <section className="ma9ic-home-chat">
