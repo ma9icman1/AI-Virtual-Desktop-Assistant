@@ -294,3 +294,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 /* The old overlapping absolute active-app treatment is no longer used. */
 .ma9ic-main-active-app { display:none !important; }
+
+
+/* Magic X-Ray: centered at the bottom of the Chat column, below the visual capture. */
+.ma9ic-xray-hud { left:calc(225px + (100% - 225px - 300px) / 2) !important; top:auto !important; bottom:92px !important; right:auto !important; transform:translateX(-50%) !important; }
