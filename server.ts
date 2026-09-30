@@ -70,10 +70,10 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   );
   const fileMatch = message.match(/\b(?:open|load)\s+(?:the\s+)?file\s+["']?(.+?)["']?\s*$/i);
   const webSearchMatch = message.match(
-    /\b(?:search(?:\s+the\s+web)?|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+    /\b(?:search(?:\s+the\s+web)?|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
   );
   const browserSearchMatch = message.match(
-    /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:search|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+    /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:search|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
   );
   const browserTypeMatch = message.match(
     /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
@@ -83,7 +83,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   const targetElement = visibleElements.find((element: any) => {
     const label = String(element.label || "").toLowerCase();
     return element.center || element.boundingBox && (
-      /\b(search|address|query|input|text field|find)\b/.test(request) && /\b(search|address|query|input|text field|find)\b/.test(label)
+      /\b(search|address|query|input|text field)\b/.test(request) && /\b(search|address|query|input|text field)\b/.test(label)
       || /\b(button|link|tab|menu)\b/.test(request) && label.includes(request.match(/\b(?:button|link|tab|menu)\s+["']?([^"']+)["']?/i)?.[1]?.toLowerCase() || "")
     );
   });
