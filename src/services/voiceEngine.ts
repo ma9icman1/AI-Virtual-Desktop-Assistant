@@ -70,6 +70,14 @@ export class VoiceEngine {
     return this.getInstance().startListening();
   }
 
+  public static setWakeWordMode(enabled: boolean): void {
+    this.getInstance().wakeWordMode = enabled;
+  }
+
+  public static isWakeWordMode(): boolean {
+    return this.getInstance().wakeWordMode;
+  }
+
   public static stopListening(): void {
     this.getInstance().stopListening();
   }
@@ -139,6 +147,7 @@ export class VoiceEngine {
   private availableVoices: SpeechSynthesisVoice[] = [];
   private selectedVoice: SpeechSynthesisVoice | null = null;
   private assistantName = "Nova";
+  private wakeWordMode = false;
 
   constructor(settings: VoiceSettings, callbacks: VoiceEngineCallbacks) {
     this.settings = settings;
@@ -598,14 +607,20 @@ export class VoiceEngine {
 
     const wake = this.parseWakeWord(activeText);
     if (wake.pure) {
+      this.wakeWordMode = false;
       this.callbacks.onWakeWordDetected(activeText);
       return;
     }
 
     if (wake.command) {
+      this.wakeWordMode = false;
       this.callbacks.onTranscript(wake.command, isFinal, confidence);
       return;
     }
+
+    // Standby mode keeps the local microphone alive only to recognize the
+    // wake phrase. Ordinary conversation is ignored until the wake word fires.
+    if (this.wakeWordMode) return;
 
     this.callbacks.onTranscript(activeText, isFinal, confidence);
   }
