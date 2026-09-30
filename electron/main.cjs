@@ -1302,6 +1302,10 @@ async function createWindow() {
   });
 }
 
+app.on("before-quit", () => {
+  terminateSpeechProcesses();
+});
+
 app.whenReady().then(createWindow).catch((error) => {
   console.error(error);
   try {
