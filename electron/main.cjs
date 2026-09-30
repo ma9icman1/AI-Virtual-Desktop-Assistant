@@ -549,11 +549,23 @@ async function executeDesktopAction(action, params = {}) {
   const x = scalePoint(params.x, display.size.width, AI_SCREEN_WIDTH);
   const y = scalePoint(params.y, display.size.height, AI_SCREEN_HEIGHT);
   if (action === "LAUNCH_APP") {
+    const requested = String(params.app || "").trim().toLowerCase();
+    const browserAliases = new Set(["browser", "web browser", "internet", "internet browser", "edge", "microsoft edge", "chrome", "google chrome", "firefox", "mozilla firefox", "brave", "brave browser", "opera", "opera browser"]);
+
+    // Browser requests delegate to Windows so the configured default browser is always used.
+    if (browserAliases.has(requested)) {
+      const child = spawn("cmd.exe", ["/c", "start", "", "about:blank"], { detached: true, stdio: "ignore", windowsHide: true });
+      await new Promise((resolve, reject) => {
+        child.once("error", (error) => reject(new Error(`Windows could not open the default browser: ${error.message}`)));
+        child.once("spawn", resolve);
+      });
+      child.unref();
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      if (desktopPermission === "one_action") desktopPermission = "none";
+      return { ok: true, verified: true, process: "default-browser", requested };
+    }
+
     const aliases = {
-      brave: ["brave.exe", `${process.env.LOCALAPPDATA}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`, `${process.env.ProgramFiles}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`, `${process.env["ProgramFiles(x86)"]}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`],
-      edge: ["msedge.exe", `${process.env["ProgramFiles(x86)"]}\\Microsoft\\Edge\\Application\\msedge.exe`],
-      chrome: ["chrome.exe", `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`],
-      firefox: ["firefox.exe", `${process.env.ProgramFiles}\\Mozilla Firefox\\firefox.exe`, `${process.env["ProgramFiles(x86)"]}\\Mozilla Firefox\\firefox.exe`],
       notepad: ["notepad.exe"],
       calculator: ["calc.exe"],
       paint: ["mspaint.exe"],
@@ -562,13 +574,9 @@ async function executeDesktopAction(action, params = {}) {
       terminal: ["wt.exe"],
       taskmgr: ["taskmgr.exe"],
     };
-    const requested = String(params.app || "").trim().toLowerCase();
     const candidates = aliases[requested];
-    if (!candidates) {
-      throw new Error(`Application is not allowed: ${requested || "requested app"}.`);
-    }
-    const target = candidates.find((candidate) => candidate && fs.existsSync(candidate))
-      || candidates.find((candidate) => /\.exe$/i.test(candidate));
+    if (!candidates) throw new Error(`Application is not allowed: ${requested || "requested app"}.`);
+    const target = candidates.find((candidate) => candidate && fs.existsSync(candidate)) || candidates.find((candidate) => /\.exe$/i.test(candidate));
     if (!target) throw new Error(`Could not find application: ${requested || "requested app"}.`);
     const child = spawn(target, [], { detached: true, stdio: "ignore", windowsHide: true });
     await new Promise((resolve, reject) => {
