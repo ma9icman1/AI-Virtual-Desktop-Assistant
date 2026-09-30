@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Eye, Crosshair, ScanLine, Target, X } from "lucide-react";
+import React from "react";
+import { ScanLine, X } from "lucide-react";
 import { VisionDetection } from "../../types";
 
 interface MagicXRayOverlayProps {
   vision: VisionDetection | null;
-  imageUrl?: string;
   visible: boolean;
   onClose: () => void;
   onTargetClick?: (element: VisionDetection["detectedElements"][number]) => void;
@@ -17,29 +16,7 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
   onClose,
   onTargetClick,
 }) => {
-  const [imageSize, setImageSize] = useState({ width: 1600, height: 900 });
-
-  useEffect(() => {
-    if (!imageUrl) return;
-    const image = new Image();
-    image.onload = () => {
-      setImageSize({
-        width: image.naturalWidth || 1600,
-        height: image.naturalHeight || 900,
-      });
-    };
-    image.src = imageUrl;
-  }, [imageUrl]);
-
-  const elements = useMemo(
-    () => (vision?.detectedElements || []).filter((element) => element.boundingBox),
-    [vision]
-  );
-
   if (!visible || !vision) return null;
-
-  const scaleX = window.innerWidth / imageSize.width;
-  const scaleY = window.innerHeight / imageSize.height;
 
   return (
     <div className="fixed inset-0 z-[65] pointer-events-none" aria-label="Magic X-Ray vision overlay">
@@ -69,14 +46,6 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
       {/* Target boxes are rendered over the captured image inside ChatFeed so they stay
           aligned with the actual screenshot instead of being pinned to the app viewport. */}
 
-      <div className="absolute bottom-4 left-4 max-w-sm rounded-xl border border-cyan-400/20 bg-slate-950/85 px-3 py-2 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <Eye className="h-3.5 w-3.5 text-cyan-300" />
-          <span className="text-[10px] font-semibold text-cyan-100">ACTIVE APPLICATION</span>
-        </div>
-        <p className="mt-0.5 text-xs text-white">{vision.activeApplication || "Unknown"}</p>
-        <p className="mt-1 text-[9px] leading-relaxed text-slate-500">{vision.summary}</p>
-      </div>
     </div>
   );
 };
