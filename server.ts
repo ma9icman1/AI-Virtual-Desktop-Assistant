@@ -60,10 +60,16 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   ];
   const requestedApp = appAliases.find(([pattern]) => pattern.test(request))?.[1];
   const asksToOpen = /\b(open|launch|start|load|run)\b/.test(request);
+  const websiteUrlMatch = message.match(
+    /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s+(https?:\/\/)?((?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
+  );
   const browserUrlMatch = message.match(
     /\b(?:open|go\s+to|navigate\s+to)\s+(?:https?:\/\/)?(www\.)?([a-z0-9.-]+\.[a-z]{2,})(?:\/[^\s]*)?\s+(?:in|using|with)\s+(edge|chrome|brave|firefox)\b/i
   );
   const fileMatch = message.match(/\b(?:open|load)\s+(?:the\s+)?file\s+["']?(.+?)["']?\s*$/i);
+  const webSearchMatch = message.match(
+    /\b(?:search(?:\s+the\s+web)?|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+  );
   const browserSearchMatch = message.match(
     /\b(?:in|using|with)\s+(edge|chrome|brave|firefox)\b[\s\S]*?\b(?:search|look\s+up|find)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
   );
@@ -86,6 +92,49 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
       }
     : null);
   const visibleInputMatch = message.match(/\b(?:click|go to|focus|use)\s+(?:the\s+)?(?:search|address|query|text)\s+(?:box|bar|field)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
+
+  if (websiteUrlMatch) {
+    const protocol = websiteUrlMatch[1] || "https://";
+    const url = `${protocol}${websiteUrlMatch[2]}`;
+    return {
+      ...parsed,
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: `Open ${url} in the Windows default browser`,
+        multiStepPlan: {
+          planTitle: `Open ${websiteUrlMatch[2]}`,
+          spokenIntro: `I will open ${websiteUrlMatch[2]} in your default browser.`,
+          steps: [
+            { stepNumber: 1, description: `Open ${url}`, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
+          ],
+          spokenCompletion: `${websiteUrlMatch[2]} is open.`,
+          currentStepIndex: 0,
+          status: "idle",
+        },
+      },
+    };
+  }
+
+  if (webSearchMatch) {
+    const query = webSearchMatch[1].trim();
+    return {
+      ...parsed,
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: `Search the web for ${query}`,
+        multiStepPlan: {
+          planTitle: `Search for ${query}`,
+          spokenIntro: `I will search the web for ${query} in your default browser.`,
+          steps: [
+            { stepNumber: 1, description: `Search for ${query}`, actionType: "SEARCH_WEB", params: { query }, status: "pending", estimatedDurationMs: 1200 },
+          ],
+          spokenCompletion: `I searched the web for ${query}.`,
+          currentStepIndex: 0,
+          status: "idle",
+        },
+      },
+    };
+  }
 
   if (browserUrlMatch) {
     const host = `${browserUrlMatch[1] || ""}${browserUrlMatch[2]}`;
@@ -869,6 +918,8 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
 // Multi-Step Task Planner Endpoint
 const PLANNER_ACTION_TYPES = new Set([
   "LAUNCH_APP",
+  "SEARCH_WEB",
+  "DETECT_WEBPAGE",
   "FOCUS_APP",
   "CLOSE_APP",
   "OPEN_FOLDER",
@@ -891,7 +942,7 @@ const PLANNER_ACTION_TYPES = new Set([
   "WAIT",
 ]);
 const PLANNER_APPS = new Set([
-  "brave", "edge", "chrome", "firefox", "notepad", "calculator",
+  "browser", "brave", "edge", "chrome", "firefox", "notepad", "calculator",
   "paint", "explorer", "files", "terminal", "taskmgr",
 ]);
 
@@ -969,6 +1020,18 @@ function validateAgentPlan(plan: any) {
         normalized.params.timeoutMs = Math.round(timeoutMs);
         normalized.params.intervalMs = Math.round(intervalMs);
       }
+    }
+    if (actionType === "SEARCH_WEB") {
+      const query = String(normalized.params.query || normalized.params.text || "").trim();
+      if (!query || query.length > 1000) throw new Error("Planner web search query is invalid.");
+      normalized.params = { query };
+    }
+    if (actionType === "DETECT_WEBPAGE") {
+      const timeoutMs = Number(normalized.params.timeoutMs ?? 5000);
+      const intervalMs = Number(normalized.params.intervalMs ?? 300);
+      if (!Number.isFinite(timeoutMs) || timeoutMs < 500 || timeoutMs > 10000) throw new Error("Planner webpage detection timeout is invalid.");
+      if (!Number.isFinite(intervalMs) || intervalMs < 150 || intervalMs > 1000) throw new Error("Planner webpage detection interval is invalid.");
+      normalized.params = { timeoutMs: Math.round(timeoutMs), intervalMs: Math.round(intervalMs) };
     }
     if (actionType === "NAVIGATE_URL") {
       const url = String(normalized.params.url || "").trim();
@@ -1051,7 +1114,7 @@ User Goal: "${goal}"
 Desktop Context: ${JSON.stringify(context)}
 
 Only use these executable step action types:
-- "LAUNCH_APP": { "app": "brave" | "edge" | "chrome" | "firefox" | "notepad" | "calculator" | "paint" | "explorer" | "files" | "terminal" | "taskmgr" }
+- "LAUNCH_APP": { "app": "browser" | "brave" | "edge" | "chrome" | "firefox" | "notepad" | "calculator" | "paint" | "explorer" | "files" | "terminal" | "taskmgr" } (any browser name delegates to the Windows default browser)
 - "FOCUS_APP": { "app": same app list }
 - "CLOSE_APP": { "app": same app list }
 - "OPEN_FOLDER": { "path": "absolute Windows folder path" }
@@ -1062,7 +1125,9 @@ Only use these executable step action types:
 - "READ_UI_ELEMENT": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional" }
 - "SET_UI_VALUE": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional", "value": string }
 - "WAIT_FOR_UI_ELEMENT": { "name": "optional", "automationId": "optional", "controlType": "optional", "process": "optional", "timeoutMs": number }
-- "NAVIGATE_URL": { "url": string }
+- "NAVIGATE_URL": { "url": string } (open a website in the Windows default browser)
+- "SEARCH_WEB": { "query": string } (search the web in the Windows default browser)
+- "DETECT_WEBPAGE": { "timeoutMs": number, "intervalMs": number } (detect the active browser page title/process/URL when needed)
 - "MOVE_MOUSE": { "x": number, "y": number }
 - "CLICK_BUTTON": { "x": number, "y": number }
 - "DOUBLE_CLICK": { "x": number, "y": number }
