@@ -298,3 +298,13 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 /* Magic X-Ray: centered at the bottom of the Chat column, below the visual capture. */
 .ma9ic-xray-hud { left:calc(225px + (100% - 225px - 300px) / 2) !important; top:auto !important; bottom:92px !important; right:auto !important; transform:translateX(-50%) !important; }
+
+
+/* Final Magic X-Ray position: centered within the Chat workspace, slightly lower. */
+.ma9ic-xray-hud {
+  left:calc(225px + (100% - 225px - 300px) / 2) !important;
+  top:auto !important;
+  bottom:82px !important;
+  right:auto !important;
+  transform:translateX(-50%) !important;
+}
