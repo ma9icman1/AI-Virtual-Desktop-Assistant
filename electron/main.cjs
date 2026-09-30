@@ -529,6 +529,57 @@ async function verifyProcessRunning(processName, attempts = 12, delayMs = 250) {
   return false;
 }
 
+async function detectWebpage(params = {}) {
+  const timeoutMs = Math.min(10000, Math.max(500, Number(params.timeoutMs) || 5000));
+  const intervalMs = Math.min(1000, Math.max(150, Number(params.intervalMs) || 300));
+  const browserProcesses = new Set(["msedge", "chrome", "brave", "firefox", "opera", "vivaldi"]);
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    const info = await getActiveWindowInfo();
+    const process = normalizeProcessName(info.process);
+    if (browserProcesses.has(process)) {
+      const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$pid = [int]$scriptArgs[0]
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+$url = ""
+foreach ($el in $elements) {
+  try {
+    if ($el.Current.ProcessId -ne $pid) { continue }
+    $name = [string]$el.Current.Name
+    $type = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', '')
+    if ($type -ne 'Edit') { continue }
+    if ($name -notmatch '(?i)(address|search|omnibox|web address|location)') { continue }
+    try {
+      $vp = $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+      $value = [string]$vp.Current.Value
+      if ($value -match '^(?i)(https?|file)://') { $url = $value; break }
+    } catch {}
+  } catch {}
+}
+[pscustomobject]@{ url=$url } | ConvertTo-Json -Compress
+`;
+      const raw = await runPowerShell(script, [String(info.pid || 0)]).catch(() => "{}");
+      let url = "";
+      try { url = String(JSON.parse(raw || "{}").url || ""); } catch {}
+      return {
+        ok: true,
+        detected: true,
+        browser: process,
+        title: String(info.title || "").trim(),
+        url,
+        elapsedMs: Date.now() - started,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return { ok: true, detected: false, browser: "", title: "", url: "", elapsedMs: Date.now() - started };
+}
+
 async function executeDesktopAction(action, params = {}) {
   if (desktopKilled || !["one_action", "one_session", "always"].includes(desktopPermission)) {
     throw new Error("Desktop control is not permitted.");
@@ -733,8 +784,23 @@ try {
     }
     const errorMessage = await shell.openExternal(url);
     if (errorMessage) throw new Error(`Could not open URL: ${errorMessage}`);
+    const webpage = await detectWebpage({ timeoutMs: 5000 });
     if (desktopPermission === "one_action") desktopPermission = "none";
-    return;
+    return { ok: true, verified: true, url, webpage };
+  }
+  if (action === "SEARCH_WEB") {
+    const query = String(params.query || params.text || "").trim();
+    if (!query) throw new Error("Web search requires a query.");
+    if (query.length > 1000) throw new Error("Web search query is too long.");
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    const errorMessage = await shell.openExternal(searchUrl);
+    if (errorMessage) throw new Error(`Could not open web search: ${errorMessage}`);
+    const webpage = await detectWebpage({ timeoutMs: 5000 });
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, query, url: searchUrl, webpage };
+  }
+  if (action === "DETECT_WEBPAGE") {
+    return await detectWebpage(params);
   }
   const supportedInputActions = new Set([
     "MOVE_MOUSE",
