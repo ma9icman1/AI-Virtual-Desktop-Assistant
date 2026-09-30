@@ -208,3 +208,6 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
   border-bottom:1px solid #102f51;
   background:#030b18;
 }
+
+/* The System Status header no longer has an overall Online badge. */
+.ma9ic-rail-title > b { display:none; }
