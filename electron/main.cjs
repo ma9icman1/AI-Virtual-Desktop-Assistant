@@ -554,7 +554,7 @@ async function executeDesktopAction(action, params = {}) {
 
     // Browser requests delegate to Windows so the configured default browser is always used.
     if (browserAliases.has(requested)) {
-      const child = spawn("cmd.exe", ["/c", "start", "", "about:blank"], { detached: true, stdio: "ignore", windowsHide: true });
+      const child = spawn("cmd.exe", ["/c", "start", "", "https://www.google.com"], { detached: true, stdio: "ignore", windowsHide: true });
       await new Promise((resolve, reject) => {
         child.once("error", (error) => reject(new Error(`Windows could not open the default browser: ${error.message}`)));
         child.once("spawn", resolve);
