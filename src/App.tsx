@@ -598,10 +598,26 @@ export default function App() {
   }, []);
 
   // Trigger Magic's greeting when the user says "Magic" or clicks the orb
+  const armWakeWord = useCallback(async () => {
+    VoiceEngine.setWakeWordMode(true);
+    try {
+      await VoiceEngine.startListening();
+      setIsListening(true);
+      setAssistantState("listening");
+      setVoiceNotice("Wake word active — say ma9icAI.");
+    } catch (error) {
+      VoiceEngine.setWakeWordMode(false);
+      setIsListening(false);
+      setAssistantState("idle");
+      setVoiceNotice(describeError(error, "Microphone access is unavailable."));
+    }
+  }, []);
+
   const triggerMagicGreeting = useCallback((startListeningAfter = true) => {
     // A wake word must hand the microphone to the greeting, then restart it
     // after TTS finishes. Otherwise the old listener can hear ma9icAI speaking
     // and immediately trigger another wake word.
+    VoiceEngine.setWakeWordMode(false);
     VoiceEngine.stopListening();
     VoiceEngine.stopSpeaking();
 
@@ -634,7 +650,7 @@ export default function App() {
 
     VoiceEngine.speak(greetingText, () => {
       if (!startListeningAfter) {
-        setAssistantState("idle");
+        void armWakeWord();
         return;
       }
 
@@ -915,6 +931,16 @@ export default function App() {
 
     // 3. Connect speech recognition callback
     const unsubSpeech = VoiceEngine.onSpeechRecognized((transcript: string) => {
+      const micOffCommand = /^(?:turn|switch|shut|stop)\s+(?:the\s+)?(?:mic|microphone|listening)(?:\s+off)?[.!?]*$/i.test(transcript.trim())
+        || /^(?:turn|switch|shut|stop)\s+off\s+(?:the\s+)?(?:mic|microphone|listening)[.!?]*$/i.test(transcript.trim());
+      if (micOffCommand) {
+        // "Turn off mic" exits active command mode and returns to local
+        // wake-word standby, so the assistant can still be awakened hands-free.
+        void armWakeWord();
+        VoiceEngine.speak("Microphone commands are off. Say ma9icAI when you need me.");
+        return;
+      }
+
       if (takeControlOpenRef.current) {
         setTakeControlTask((current) => `${current ? `${current} ` : ""}${transcript}`.trim());
         setIsTakeControlListening(false);
@@ -955,7 +981,7 @@ export default function App() {
       unsubVoiceError();
       VoiceEngine.stopListening();
     };
-  }, [handleSendMessage, triggerMagicGreeting]);
+  }, [armWakeWord, handleSendMessage, triggerMagicGreeting]);
 
   useEffect(() => {
     const greetingTimer = window.setTimeout(() => triggerMagicGreeting(false), 900);
