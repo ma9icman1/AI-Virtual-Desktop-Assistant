@@ -3,7 +3,6 @@ const path = require("path");
 
 const root = process.cwd();
 const electronFile = path.join(root, "electron", "main.cjs");
-const serverFile = path.join(root, "server.ts");
 
 if (!fs.existsSync(electronFile)) {
   throw new Error("[desktop-input] electron/main.cjs not found");
@@ -26,7 +25,7 @@ if (text.includes(launchMarker) && !text.includes("MagicLaunchFocus")) {
   const focusLines = [
     launchMarker,
     "    await runPowerShell(`",
-    "$proc = Get-Process -Name '${requested}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
+    "$proc = Get-Process -Name '" + "${requested}" + "' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
     "if ($proc) {",
     "  Add-Type @'",
     "using System;",
@@ -43,41 +42,8 @@ if (text.includes(launchMarker) && !text.includes("MagicLaunchFocus")) {
 
 fs.writeFileSync(electronFile, text, "utf8");
 
-// Deterministically handle common combined open-and-type commands.
-if (fs.existsSync(serverFile)) {
-  let serverText = fs.readFileSync(serverFile, "utf8");
-  if (!serverText.includes("const magicOpenTypeMatch =")) {
-    const marker = "        if (parsed && parsed.steps) {\n          return res.json(validateAgentPlan(parsed));\n        }";
-    if (!serverText.includes(marker)) {
-      throw new Error("[desktop-input] Could not find planner validation block in server.ts");
-    }
-
-    const replacement = [
-      "        const magicOpenTypeMatch = String(goal).match(/^\\s*(?:open|launch|start)\\s+(notepad|calculator|calc|paint|explorer|files|terminal|task manager|taskmgr)\\s+(?:and\\s+)?(?:type|write|enter)\\s+(.+?)\\s*[.!]?\\s*$/i);",
-      "        if (magicOpenTypeMatch) {",
-      "          const rawApp = magicOpenTypeMatch[1].toLowerCase();",
-      "          const app = rawApp === \"calc\" ? \"calculator\" : rawApp === \"task manager\" ? \"taskmgr\" : rawApp;",
-      "          const textToType = magicOpenTypeMatch[2].trim();",
-      "          return res.json(validateAgentPlan({",
-      "            planTitle: \"Open \" + app + \" and type text\",",
-      "            spokenIntro: \"Opening \" + app + \", then typing \" + textToType + \".\",",
-      "            steps: [",
-      "              { stepNumber: 1, description: \"Open \" + app, actionType: \"LAUNCH_APP\", params: { app }, estimatedDurationMs: 1200 },",
-      "              { stepNumber: 2, description: \"Wait for the application window\", actionType: \"WAIT\", params: { ms: 700 }, estimatedDurationMs: 700 },",
-      "              { stepNumber: 3, description: \"Type \" + textToType, actionType: \"TYPE_INPUT\", params: { text: textToType }, estimatedDurationMs: 500 },",
-      "            ],",
-      "            spokenCompletion: app + \" is open and the text was entered.\",",
-      "          }));",
-      "        }",
-      "",
-      "        if (parsed && parsed.steps) {",
-      "          return res.json(validateAgentPlan(parsed));",
-      "        }",
-    ].join("\n");
-
-    serverText = serverText.replace(marker, replacement);
-    fs.writeFileSync(serverFile, serverText, "utf8");
-  }
-}
-
-console.log("[desktop-input] Installed literal clipboard typing, launch focus, and deterministic open/type planning.");
+// The planner structure has changed over time. Do not fail the entire build
+// merely because the optional combined open/type injection marker is absent.
+// The current server already performs desktop-intent normalization and the
+// dedicated desktop-action patchers handle the executable/action details.
+console.log("[desktop-input] Installed literal clipboard typing and launch focus.");
