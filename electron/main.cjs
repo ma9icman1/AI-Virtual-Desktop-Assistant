@@ -140,6 +140,7 @@ async function startWhisperProcess(window) {
     windowsHide: true,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
   });
+  speechMode = "whisper";
 
   return await new Promise((resolve, reject) => {
     let output = "";
