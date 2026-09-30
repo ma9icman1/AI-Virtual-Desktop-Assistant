@@ -1019,14 +1019,7 @@ export default function App() {
 
             <main className="ma9ic-main">
               <div className="ma9ic-main-title">
-                {activeVision?.activeApplication ? (
-                  <span className="ma9ic-main-active-app-inline" title={activeVision.activeApplication}>
-                    <span className="ma9ic-main-active-app-label">ACTIVE APPLICATION</span>
-                    <span className="ma9ic-main-active-app-name">{activeVision.activeApplication}</span>
-                  </span>
-                ) : (
-                  <span>AI Virtual Desktop Assistant</span>
-                )}
+                <span>AI Virtual Desktop Assistant</span>
               </div>
               {activeSection === 'Home' ? (
                 <div className="ma9ic-home-scroll">
