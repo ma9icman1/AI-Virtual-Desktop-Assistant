@@ -356,6 +356,82 @@ async function callOllamaChat(params: {
   return data?.message?.content || "";
 }
 
+function parseLooseJson(raw: string): any | null {
+  const text = String(raw || "").trim();
+  const candidates = [
+    text,
+    text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim(),
+  ];
+
+  const firstObject = text.indexOf("{");
+  const lastObject = text.lastIndexOf("}");
+  if (firstObject >= 0 && lastObject > firstObject) {
+    candidates.push(text.slice(firstObject, lastObject + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try a conservative repair for vision models that emit an unescaped
+      // quote inside a JSON string or a trailing comma.
+      let repaired = "";
+      let inString = false;
+      let escaped = false;
+
+      for (let i = 0; i < candidate.length; i++) {
+        const ch = candidate[i];
+        if (escaped) {
+          repaired += ch;
+          escaped = false;
+          continue;
+        }
+        if (ch === "\\") {
+          repaired += ch;
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          if (!inString) {
+            inString = true;
+            repaired += ch;
+            continue;
+          }
+
+          let next = i + 1;
+          while (next < candidate.length && /\s/.test(candidate[next])) next++;
+          const nextChar = candidate[next];
+          if (next >= candidate.length || nextChar === "," || nextChar === "}" || nextChar === "]" || nextChar === ":") {
+            inString = false;
+            repaired += ch;
+          } else {
+            repaired += "\\\"";
+          }
+          continue;
+        }
+        if (inString && ch === "\n") {
+          repaired += "\\n";
+        } else if (inString && ch === "\r") {
+          repaired += "\\r";
+        } else if (inString && ch === "\t") {
+          repaired += "\\t";
+        } else {
+          repaired += ch;
+        }
+      }
+
+      repaired = repaired.replace(/,\s*([}\]])/g, "$1");
+      try {
+        return JSON.parse(repaired);
+      } catch {
+        // Continue with the next candidate.
+      }
+    }
+  }
+
+  return null;
+}
+
 // Gemini initialization
 let aiClient: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
@@ -738,21 +814,17 @@ Return structured JSON analysis in this exact format:
           timeoutMs: 180000,
         });
 
-        let parsed: any;
-        try {
-          parsed = JSON.parse(rawContent);
-        } catch {
-          const match = rawContent.match(/\{[\s\S]*\}/);
-          parsed = match ? JSON.parse(match[0]) : null;
-        }
+        const parsed = parseLooseJson(rawContent);
 
-        if (parsed) {
+        if (parsed && typeof parsed === "object") {
           return res.json({
             ...parsed,
             provider: "ollama",
             model: activeOllamaVisionModel,
           });
         }
+
+        throw new Error("Ollama vision returned malformed JSON that could not be repaired.");
       } catch (ollamaVisionErr: any) {
         console.warn("[Ollama] Vision analysis error:", ollamaVisionErr.message);
         if (!process.env.GEMINI_API_KEY) {
