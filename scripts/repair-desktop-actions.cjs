@@ -5,10 +5,20 @@ const electronFile = path.join(process.cwd(), 'electron', 'main.cjs');
 if (!fs.existsSync(electronFile)) process.exit(0);
 
 let text = fs.readFileSync(electronFile, 'utf8');
+
+// The generated verification code must test for numeric PowerShell output.
+// Repair the over-escaped regex produced by older desktop-action patches.
+text = text.replace(/if \(\/\^\\\\d\+\$\/\.test\(String\(result\)\.trim\(\)\)\)/g,
+  'if (/^\\d+$/.test(String(result).trim()))');
+
 const marker = '  const supportedInputActions = new Set([';
 const start = '  if (["MINIMIZE_APP", "MAXIMIZE_APP", "RESTORE_APP"].includes(action)) {';
 const markerIndex = text.indexOf(marker);
-if (markerIndex === -1) process.exit(0);
+if (markerIndex === -1) {
+  fs.writeFileSync(electronFile, text, 'utf8');
+  console.log('[desktop-actions] Repaired process verification regex.');
+  process.exit(0);
+}
 
 const safeBlock = `  if (["MINIMIZE_APP", "MAXIMIZE_APP", "RESTORE_APP"].includes(action)) {
     const requested = normalizeProcessName(params.app);
@@ -43,3 +53,4 @@ if (startIndex !== -1 && startIndex < markerIndex) {
 }
 
 fs.writeFileSync(electronFile, text, 'utf8');
+console.log('[desktop-actions] Process verification repair complete.');
