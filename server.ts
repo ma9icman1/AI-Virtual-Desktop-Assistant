@@ -139,23 +139,18 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   if (browserUrlMatch) {
     const host = `${browserUrlMatch[1] || ""}${browserUrlMatch[2]}`;
     const url = `https://${host}`;
-    const browser = browserUrlMatch[3].toLowerCase();
     return {
       ...parsed,
       action: {
         type: "MULTI_STEP_PLAN",
-        description: `Open ${url} in ${browser}`,
+        description: `Open ${url} in the Windows default browser`,
         multiStepPlan: {
           planTitle: `Open ${host}`,
-          spokenIntro: `I will open ${browser} and navigate to ${host}.`,
+          spokenIntro: `I will open ${host} in your default browser.`,
           steps: [
-            { stepNumber: 1, description: `Open ${browser}`, actionType: "LAUNCH_APP", params: { app: browser }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 2, description: "Wait for the browser window", actionType: "WAIT", params: { ms: 1800 }, status: "pending", estimatedDurationMs: 1800 },
-            { stepNumber: 3, description: "Focus the browser address bar", actionType: "KEY_PRESS", params: { key: "^l" }, status: "pending", estimatedDurationMs: 200 },
-            { stepNumber: 4, description: `Enter ${url}`, actionType: "TYPE_INPUT", params: { text: url }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 5, description: "Open the website", actionType: "KEY_PRESS", params: { key: "~" }, status: "pending", estimatedDurationMs: 300 },
+            { stepNumber: 1, description: `Open ${url}`, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
           ],
-          spokenCompletion: `${host} is open in ${browser}.`,
+          spokenCompletion: `${host} is open.`,
           currentStepIndex: 0,
           status: "idle",
         },
@@ -209,24 +204,19 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   }
 
   if (browserTypeMatch) {
-    const browser = browserTypeMatch[1].toLowerCase();
     const query = browserTypeMatch[2].replace(/\s+(?:and\s+)?(?:press|hit)\s+enter\s*$/i, "").trim();
     return {
       ...parsed,
       action: {
         type: "MULTI_STEP_PLAN",
-        description: `Type ${query} in ${browser} and submit`,
+        description: `Search the web for ${query}`,
         multiStepPlan: {
-          planTitle: `Use ${browser} search`,
-          spokenIntro: `I will open ${browser}, focus its address bar, type ${query}, and press Enter.`,
+          planTitle: `Search for ${query}`,
+          spokenIntro: `I will search the web for ${query} in your default browser.`,
           steps: [
-            { stepNumber: 1, description: `Open ${browser}`, actionType: "LAUNCH_APP", params: { app: browser }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 2, description: "Wait for the browser window", actionType: "WAIT", params: { ms: 1800 }, status: "pending", estimatedDurationMs: 1800 },
-            { stepNumber: 3, description: "Focus the browser address bar", actionType: "KEY_PRESS", params: { key: "^l" }, status: "pending", estimatedDurationMs: 200 },
-            { stepNumber: 4, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 5, description: "Submit the search", actionType: "KEY_PRESS", params: { key: "~" }, status: "pending", estimatedDurationMs: 300 },
+            { stepNumber: 1, description: `Search for ${query}`, actionType: "SEARCH_WEB", params: { query }, status: "pending", estimatedDurationMs: 1200 },
           ],
-          spokenCompletion: `The search has been submitted in ${browser}.`,
+          spokenCompletion: `I searched the web for ${query}.`,
           currentStepIndex: 0,
           status: "idle",
         },
@@ -258,24 +248,19 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   }
 
   if (browserSearchMatch) {
-    const browser = browserSearchMatch[1].toLowerCase();
     const query = browserSearchMatch[2].trim();
     return {
       ...parsed,
       action: {
         type: "MULTI_STEP_PLAN",
-        description: `Search for ${query} in ${browser}`,
+        description: `Search the web for ${query}`,
         multiStepPlan: {
           planTitle: `Search for ${query}`,
-          spokenIntro: `I will open ${browser}, focus the address bar, enter ${query}, and submit the search.`,
+          spokenIntro: `I will search the web for ${query} in your default browser.`,
           steps: [
-            { stepNumber: 1, description: `Open ${browser}`, actionType: "LAUNCH_APP", params: { app: browser }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 2, description: "Wait for the browser window", actionType: "WAIT", params: { ms: 1800 }, status: "pending", estimatedDurationMs: 1800 },
-            { stepNumber: 3, description: "Focus the browser address bar", actionType: "KEY_PRESS", params: { key: "^l" }, status: "pending", estimatedDurationMs: 200 },
-            { stepNumber: 4, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 5, description: "Submit the search", actionType: "KEY_PRESS", params: { key: "~" }, status: "pending", estimatedDurationMs: 300 },
+            { stepNumber: 1, description: `Search for ${query}`, actionType: "SEARCH_WEB", params: { query }, status: "pending", estimatedDurationMs: 1200 },
           ],
-          spokenCompletion: `The search for ${query} has been submitted in ${browser}.`,
+          spokenCompletion: `I searched the web for ${query}.`,
           currentStepIndex: 0,
           status: "idle",
         },
