@@ -447,6 +447,8 @@ export default function App() {
     try {
       const base64Image = await VisionService.captureScreen();
       setVisionThumbnail(base64Image);
+      // Screen captures belong in the conversation feed, not the Vision placeholder page.
+      setActiveSection("Chat");
 
       const response = await fetch("/api/vision/analyze", {
         method: "POST",
@@ -969,8 +971,6 @@ export default function App() {
             </button>
             <div className="ma9ic-header-tagline">✦ Your AI. Your Desktop. Your Control.</div>
             <div className="ma9ic-header-actions">
-              <button type="button" onClick={() => setIsSettingsOpen(true)} className="ma9ic-header-mic" title="Voice settings"><Mic2 /></button>
-              <button type="button" onClick={openOllamaSettings} className="ma9ic-window-btn ma9ic-model-btn" title="Ollama models & settings"><Cpu /><span>Models</span></button>
               <span className={`ma9ic-online ${aiConnected ? "ready" : "offline"}`}><i />{aiConnected ? "Online" : "Offline"}</span>
               <button type="button" onClick={() => (window as any).magicWindow?.minimize?.()} className="ma9ic-window-btn" title="Minimize">—</button>
               <button type="button" onClick={() => (window as any).magicWindow?.toggleMaximize?.()} className="ma9ic-window-btn" title="Maximize">□</button>
@@ -1000,12 +1000,13 @@ export default function App() {
 
             <main className="ma9ic-main">
               <div className="ma9ic-main-title">
-                <span>AI Virtual Desktop Assistant</span>
-                {activeVision?.activeApplication && (
-                  <span className="ma9ic-main-active-app" title={activeVision.activeApplication}>
+                {activeVision?.activeApplication ? (
+                  <span className="ma9ic-main-active-app-inline" title={activeVision.activeApplication}>
                     <span className="ma9ic-main-active-app-label">ACTIVE APPLICATION</span>
                     <span className="ma9ic-main-active-app-name">{activeVision.activeApplication}</span>
                   </span>
+                ) : (
+                  <span>AI Virtual Desktop Assistant</span>
                 )}
               </div>
               {activeSection === 'Home' ? (
