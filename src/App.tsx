@@ -509,6 +509,7 @@ export default function App() {
           role: "assistant",
           content: visionResult.summary,
           visionThumbnail: base64Image,
+          vision: visionResult,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -1026,12 +1027,12 @@ export default function App() {
                   <section className="ma9ic-home-chat">
                     <div className="ma9ic-home-chat-title"><MessageSquare /> <span>Chat</span></div>
                     <div className="ma9ic-home-chat-feed">
-                      <ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} />
+                      <ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} onVisionTargetClick={handleXRayTargetClick} />
                     </div>
                   </section>
                 </div>
               ) : activeSection === 'Chat' ? (
-                <div className="ma9ic-chat-page"><ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} /></div>
+                <div className="ma9ic-chat-page"><ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} onVisionTargetClick={handleXRayTargetClick} /></div>
               ) : (
                 <div className="ma9ic-section-placeholder">
                   <div className="ma9ic-placeholder-icon"><Sparkles /></div>
