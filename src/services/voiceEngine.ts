@@ -148,6 +148,7 @@ export class VoiceEngine {
   private selectedVoice: SpeechSynthesisVoice | null = null;
   private assistantName = "Nova";
   private wakeWordMode = false;
+  private lastWakeWordAt = 0;
 
   constructor(settings: VoiceSettings, callbacks: VoiceEngineCallbacks) {
     this.settings = settings;
@@ -244,17 +245,37 @@ export class VoiceEngine {
   private parseWakeWord(text: string): { pure: boolean; command: string | null } {
     const activeText = text.trim().replace(/\s+/g, " ");
     if (!activeText) return { pure: false, command: null };
-    const aliases = this.getWakeWordAliases()
-      .sort((a, b) => b.length - a.length)
+
+    // Whisper can repeat a short wake phrase in one segment ("magic AI, magic AI.").
+    const spokenNormalized = activeText.toLowerCase()
+      .replace(/[!?.,:;]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const aliasesRaw = this.getWakeWordAliases();
+    const aliases = aliasesRaw.sort((x, y) => y.length - x.length)
       .map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
     const aliasPattern = aliases.join("|");
-    const pure = new RegExp(`^\\s*(?:hey\\s+|hi\\s+|ok\\s+|okay\\s+)?(?:${aliasPattern})[!?.,]*\\s*$`, "i").test(activeText);
+
+    const pure = aliasesRaw.some((alias) => {
+      const normalizedAlias = alias.toLowerCase()
+        .replace(/[!?.,:;]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return spokenNormalized === normalizedAlias ||
+        spokenNormalized === `hey ${normalizedAlias}` ||
+        spokenNormalized === `hi ${normalizedAlias}` ||
+        spokenNormalized === `ok ${normalizedAlias}` ||
+        spokenNormalized === `okay ${normalizedAlias}` ||
+        spokenNormalized === `${normalizedAlias} ${normalizedAlias}` ||
+        spokenNormalized === `hey ${normalizedAlias} ${normalizedAlias}` ||
+        spokenNormalized === `hi ${normalizedAlias} ${normalizedAlias}`;
+    });
     if (pure) return { pure: true, command: null };
+
     const prefix = new RegExp(`^\\s*(?:hey\\s+|hi\\s+|ok\\s+|okay\\s+)?(?:${aliasPattern})[,:\\s]+(.+)$`, "i");
     const match = activeText.match(prefix);
     return { pure: false, command: match?.[1]?.trim() || null };
   }
-
   private initSpeechRecognition() {
     if (typeof window === "undefined") return;
 
@@ -607,6 +628,10 @@ export class VoiceEngine {
 
     const wake = this.parseWakeWord(activeText);
     if (wake.pure) {
+      // Debounce duplicate Whisper segments from the same spoken wake phrase.
+      const now = Date.now();
+      if (now - this.lastWakeWordAt < 1500) return;
+      this.lastWakeWordAt = now;
       this.wakeWordMode = false;
       this.callbacks.onWakeWordDetected(activeText);
       return;
