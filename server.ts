@@ -776,25 +776,26 @@ app.post("/api/vision/analyze", async (req, res) => {
     }
 
     const cleanBase64 = rawImage.replace(/^data:image\/\w+;base64,/, "");
-    const visionSystemPrompt = `Analyze the provided desktop screenshot or camera image.
-Return structured JSON analysis in this exact format:
+    const visionSystemPrompt = `Analyze this desktop screenshot for X-Ray targeting.
+Return ONLY compact, valid JSON. No markdown, commentary, or extra text.
+Use exactly:
 {
-  "summary": "Crisp 1-2 sentence spoken summary for voice feedback",
-  "openWindows": ["List of open applications/windows/tabs identified"],
-  "activeApplication": "Main window or focus area",
+  "summary": "One short sentence describing the screen",
+  "openWindows": ["up to 6 visible apps/windows"],
+  "activeApplication": "main focused app",
   "detectedElements": [
     {
-      "type": "button" | "input" | "menu" | "tab" | "text" | "window",
-      "label": "label text",
-      "location": "top-left" | "center" | "bottom-bar" | "modal",
-      "boundingBox": { "x": 0, "y": 0, "width": 0, "height": 0 },
-      "center": { "x": 0, "y": 0 }
+      "type": "button|input|menu|tab|text|window",
+      "label": "short visible label",
+      "location": "top-left|center|bottom-bar|modal",
+      "boundingBox": {"x":0,"y":0,"width":0,"height":0},
+      "center": {"x":0,"y":0}
     }
   ],
-  "extractedText": "Key OCR text read from screen",
-  "suggestedActions": ["Action 1", "Action 2"],
-  "details": "Detailed description of layout, application state, controls, coordinates, and relevant text"
-}`;
+  "extractedText": "Only important readable text",
+  "suggestedActions": ["up to 3 useful actions"]
+}
+Rules: at most 20 detectedElements; keep labels/text short; omit uncertain elements; coordinates are pixels in 1280x800 screenshot space.`;
 
     const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
 
@@ -806,7 +807,7 @@ Return structured JSON analysis in this exact format:
           messages: [
             {
               role: "user",
-              content: `${prompt}\nRespond strictly with valid JSON.`,
+              content: `${prompt}\nReturn only compact valid JSON matching the schema. No markdown or explanation.`,
               images: [cleanBase64],
             },
           ],
