@@ -1189,8 +1189,8 @@ async function createWindow() {
   });
 
   const window = new BrowserWindow({
-    width: 980,
-    height: 620,
+    width: 1280,
+    height: 820,
     minWidth: 980,
     minHeight: 620,
     center: true,
