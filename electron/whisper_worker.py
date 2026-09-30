@@ -16,7 +16,8 @@ MODEL_NAME = os.environ.get("MAGIC_WHISPER_MODEL", "small.en")
 
 
 def emit(kind, value="", confidence="0.9"):
-    sys.stdout.write(f"{kind}|{value}|{confidence}\n")
+    safe_value = str(value).replace("\r", " ").replace("\n", " ").replace("|", " ")
+    sys.stdout.write(f"{kind}|{safe_value}|{confidence}\n")
     sys.stdout.flush()
 
 
@@ -33,14 +34,14 @@ def transcribe(model, samples):
         vad_filter=True,
         condition_on_previous_text=False,
         initial_prompt=(
-            "ma9icAI, magic AI, magic eye, ma9ic AI, Edge, Firefox, Chrome, "
-            "browser, click, type, open, close, search, screen."
+            "Magic, hey Magic, okay Magic, ma9icAI, magic AI, magic eye, "
+            "Edge, Firefox, Chrome, browser, click, type, open, close, search, screen."
         ),
     )
     text = " ".join(segment.text.strip() for segment in segments).strip()
     if text:
         confidence = max(0.0, min(1.0, 1.0 - float(getattr(info, "no_speech_prob", 0.0))))
-        emit("TRANSCRIPT", text.replace("|", " "), f"{confidence:.3f}")
+        emit("TRANSCRIPT", text, f"{confidence:.3f}")
 
 
 def main():
@@ -67,13 +68,10 @@ def main():
 
     threading.Thread(target=read_commands, daemon=True).start()
 
-    # Keep the Whisper model resident. Opening the input stream is the only
-    # per-recording operation, so the mic button can become responsive again
-    # without reloading the model.
     try:
         device = sd.query_devices(kind="input")
         device_name = str(device.get("name", "Default microphone"))
-        emit("DEVICE", device_name.replace("|", " "), "0")
+        emit("DEVICE", device_name, "0")
     except Exception as error:
         emit("SPEECH_ERROR", f"No Windows input microphone is available: {error}", "0")
         return 1
@@ -111,23 +109,22 @@ def main():
                 callback=callback,
             ):
                 emit("RECORDING", "1", "1")
-                noise_floor = 0.003
+                noise_floor = 0.002
                 speech = []
                 speaking = False
                 silence_frames = 0
-                start_threshold_floor = 0.0045
-                stop_threshold_floor = 0.0035
+                start_threshold_floor = 0.0028
+                stop_threshold_floor = 0.0018
                 last_level_emit = 0.0
-                quit_after_recording = False
 
                 while not stop_recording.is_set():
                     try:
-                        command = command_queue.get(timeout=0.25)
+                        command = command_queue.get(timeout=0.05)
                         if command == "STOP":
                             stop_recording.set()
                         elif command == "QUIT":
                             stop_recording.set()
-                            quit_after_recording = True
+                            break
                     except queue.Empty:
                         pass
 
@@ -140,8 +137,9 @@ def main():
                         rms = float(np.sqrt(np.mean(np.square(frame)) + 1e-12))
                         if not speaking:
                             noise_floor = min(0.03, noise_floor * 0.98 + rms * 0.02)
-                        start_threshold = max(start_threshold_floor, noise_floor * 2.4)
-                        stop_threshold = max(stop_threshold_floor, noise_floor * 1.55)
+                        start_threshold = max(start_threshold_floor, noise_floor * 2.0)
+                        stop_threshold = max(stop_threshold_floor, noise_floor * 1.35)
+
                         now = time.monotonic()
                         if now - last_level_emit >= 0.1:
                             emit("LEVEL", f"{min(1.0, rms / 0.12):.3f}", "0")
@@ -151,29 +149,25 @@ def main():
                             if not speaking:
                                 speaking = True
                                 speech = []
+                                emit("SPEECH_START", "1", "1")
                             silence_frames = 0
                             speech.append(frame)
                         elif speaking:
                             speech.append(frame)
                             silence_frames += 1
                             duration = len(speech) * FRAME_MS / 1000
-                            if silence_frames >= 23 or duration >= 15:
+                            # End a phrase after ~0.45s of silence, or after 10s max.
+                            if silence_frames >= 15 or duration >= 10:
                                 transcribe(model, np.concatenate(speech))
                                 speech = []
                                 speaking = False
                                 silence_frames = 0
-
-                    if speaking and len(speech) > 0:
-                        # Automatic phrase completion leaves the worker in
-                        # RECORDING mode so the next phrase can start instantly.
-                        # Manual STOP breaks below and flushes the phrase.
-                        pass
+                                emit("SPEECH_END", "1", "1")
 
                 if speaking and speech:
                     transcribe(model, np.concatenate(speech))
+                emit("RECORDING", "0", "1")
                 emit("READY", MODEL_NAME, "1")
-                if quit_after_recording:
-                    return 0
         except Exception as error:
             emit("SPEECH_ERROR", f"Whisper microphone error: {error}", "0")
             emit("READY", MODEL_NAME, "1")
