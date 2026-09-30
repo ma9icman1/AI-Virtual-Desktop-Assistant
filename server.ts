@@ -51,6 +51,9 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     .toLowerCase()
     .replace(/\b(open|visit|load|browse\s+to)(?=(?:www\.)?[a-z0-9-]+\.[a-z]{2,})/gi, "$1 ")
     .replace(/\b(goto|go\s+to|navigate\s+to)(?=(?:www\.)?[a-z0-9-]+\.[a-z]{2,})/gi, (match) => match.replace(/goto/i, "go to") + " ");
+  // Speech recognition often adds sentence punctuation to a spoken URL.
+  // Strip only terminal punctuation for intent matching; keep the original message elsewhere.
+  const commandText = message.trim().replace(/[.!?]+$/g, "");
   const appAliases: Array<[RegExp, string]> = [
     [/\b(browser|web browser|internet browser)\b/, "browser"],
     [/\b(brave|brave browser)\b/, "brave"],
@@ -67,7 +70,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   ];
   const requestedApp = appAliases.find(([pattern]) => pattern.test(request))?.[1];
   const asksToOpen = /\b(open|launch|start|load|run)\b/.test(request);
-  const websiteUrlMatch = message.match(
+  const websiteUrlMatch = commandText.match(
     /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s*(https?:\/\/)?((?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
   );
   const browserUrlMatch = message.match(
