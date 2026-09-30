@@ -497,9 +497,13 @@ async function executeDesktopAction(action, params = {}) {
   const scalePoint = (value, axisSize, aiSize) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 0;
-    return params.coordinateSpace === "vision"
-      ? Math.round(numeric * axisSize / aiSize)
-      : Math.round(numeric);
+    if (params.coordinateSpace === "vision") {
+      // Vision coordinates come from the normalized 1280x800 capture. Clamp the
+      // model's occasional 1-2px overshoot before mapping into physical pixels.
+      const clamped = Math.max(0, Math.min(aiSize - 1, Math.round(numeric)));
+      return Math.round(clamped * axisSize / aiSize);
+    }
+    return Math.round(numeric);
   };
   const x = scalePoint(params.x, display.size.width, AI_SCREEN_WIDTH);
   const y = scalePoint(params.y, display.size.height, AI_SCREEN_HEIGHT);
@@ -707,12 +711,15 @@ try {
   };
 
   if (["MOVE_MOUSE", "CLICK", "RIGHT_CLICK", "DOUBLE_CLICK", "DRAG", "SCROLL"].includes(action)) {
-    boundedInteger(params.x, 0, AI_SCREEN_WIDTH - 1, "X coordinate");
-    boundedInteger(params.y, 0, AI_SCREEN_HEIGHT - 1, "Y coordinate");
+    // x/y are already converted into physical primary-display pixels above.
+    boundedInteger(x, 0, display.size.width - 1, "X coordinate");
+    boundedInteger(y, 0, display.size.height - 1, "Y coordinate");
   }
   if (action === "DRAG") {
-    boundedInteger(params.endX, 0, AI_SCREEN_WIDTH - 1, "End X coordinate");
-    boundedInteger(params.endY, 0, AI_SCREEN_HEIGHT - 1, "End Y coordinate");
+    const endX = scalePoint(params.endX, display.size.width, AI_SCREEN_WIDTH);
+    const endY = scalePoint(params.endY, display.size.height, AI_SCREEN_HEIGHT);
+    boundedInteger(endX, 0, display.size.width - 1, "End X coordinate");
+    boundedInteger(endY, 0, display.size.height - 1, "End Y coordinate");
   }
   if (action === "SCROLL") {
     boundedInteger(params.amount, -10000, 10000, "Scroll amount");
