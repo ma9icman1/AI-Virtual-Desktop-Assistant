@@ -15,6 +15,7 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
   imageUrl,
   visible,
   onClose,
+  onTargetClick,
 }) => {
   const [imageSize, setImageSize] = useState({ width: 1600, height: 900 });
 
