@@ -63,7 +63,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   const requestedApp = appAliases.find(([pattern]) => pattern.test(request))?.[1];
   const asksToOpen = /\b(open|launch|start|load|run)\b/.test(request);
   const websiteUrlMatch = message.match(
-    /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s+(https?:\/\/)?((?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
+    /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s*(https?:\/\/)?((?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
   );
   const browserUrlMatch = message.match(
     /\b(?:open|go\s+to|navigate\s+to)\s+(?:https?:\/\/)?(www\.)?([a-z0-9.-]+\.[a-z]{2,})(?:\/[^\s]*)?\s+(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b/i
