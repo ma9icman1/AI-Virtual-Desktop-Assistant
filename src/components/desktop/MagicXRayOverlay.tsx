@@ -4,6 +4,7 @@ import { VisionDetection } from "../../types";
 
 interface MagicXRayOverlayProps {
   vision: VisionDetection | null;
+  imageUrl?: string;
   visible: boolean;
   onClose: () => void;
   onTargetClick?: (element: VisionDetection["detectedElements"][number]) => void;
@@ -16,6 +17,8 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
   onClose,
   onTargetClick,
 }) => {
+  const elements = (vision?.detectedElements || []).filter((element) => element.boundingBox);
+
   if (!visible || !vision) return null;
 
   return (
