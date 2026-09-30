@@ -106,6 +106,7 @@ export default function App() {
   const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
   const [isVisionModalOpen, setIsVisionModalOpen] = useState(false);
   const [isXRayVisible, setIsXRayVisible] = useState(false);
+  const captureScreenRef = useRef<(() => Promise<VisionDetection | null>) | null>(null);
   const [connectionProgress, setConnectionProgress] = useState<number | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const lastGreetingRef = useRef(-1);
@@ -413,6 +414,13 @@ export default function App() {
             estimatedDurationMs: plan.steps[i].estimatedDurationMs,
             coordinateSpace: plan.steps[i].params?.coordinateSpace,
           });
+
+          // Web navigation/search is followed immediately by a visual scan so
+          // ma9icAI starts with a live understanding of the page it just opened.
+          if (["NAVIGATE_URL", "SEARCH_WEB"].includes(String(plan.steps[i].actionType).toUpperCase())) {
+            await new Promise((resolve) => setTimeout(resolve, 700));
+            await captureScreenRef.current?.();
+          }
         } catch (error) {
           const rawReason = describeError(error, "The desktop action did not complete.");
           const reason = rawReason.length > 180 ? "Windows rejected the desktop action. Check the target app and permissions." : rawReason;
@@ -528,6 +536,8 @@ export default function App() {
       setIsAnalyzingVision(false);
     }
   }, []);
+
+  captureScreenRef.current = handleCaptureScreen;
 
   // Web Camera Snapshot & Analysis
   const handleCaptureCamera = useCallback(async () => {
