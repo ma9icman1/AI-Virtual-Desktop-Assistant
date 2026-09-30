@@ -1025,7 +1025,7 @@ export default function App() {
 
             <aside className="ma9ic-right-rail">
               <section className="ma9ic-rail-card">
-                <div className="ma9ic-rail-title"><Activity /><span>System Status</span><b><i /> Online</b></div>
+                <div className="ma9ic-rail-title"><Activity /><span>System Status</span></div>
                 {[['Voice Recognition', true, <Mic2 />], ['ChatGPT API', aiConnected, <Settings />], ['Local Models', modelConnected, <Grid2X2 />], ['Desktop Control', permissionLevel !== 'none', <Monitor />]].map(([label, ready, icon]) => (
                   <div className="ma9ic-rail-row" key={String(label)}><span className="ma9ic-rail-icon">{icon}</span><strong>{label}</strong><em className={ready ? 'ready' : ''}><i />{ready ? (label === 'Desktop Control' ? 'Enabled' : label === 'ChatGPT API' ? 'Connected' : label === 'Local Models' ? 'Ready' : 'Active') : 'Offline'}</em><ChevronRight /></div>
                 ))}
