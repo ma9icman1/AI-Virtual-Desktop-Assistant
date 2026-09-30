@@ -221,3 +221,35 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 /* Shift the X-Ray HUD header left so it does not sit over the center workspace. */
 .ma9ic-xray-hud { left:18px !important; right:auto !important; transform:none !important; }
+
+
+/* Center the active application display in the title bar above Chat. */
+.ma9ic-main-title { position:relative; }
+.ma9ic-main-active-app {
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  align-items:center;
+  gap:7px;
+  white-space:nowrap;
+  pointer-events:none;
+}
+.ma9ic-main-active-app-label {
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.1em;
+  color:#64748b;
+}
+.ma9ic-main-active-app-name {
+  max-width:260px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:11px;
+  font-weight:600;
+  color:#c7ddf7;
+}
+.ma9ic-sidebar-active-app { display:none !important; }
+
+/* Move the Magic X-Ray HUD farther right without changing its size. */
+.ma9ic-xray-hud { left:220px !important; right:auto !important; transform:none !important; }
