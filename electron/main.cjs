@@ -1137,7 +1137,21 @@ async function createWindow() {
   process.on("unhandledRejection", (error) => log(`UNHANDLED: ${error?.stack || error}`));
   process.env.MAGIC_APP_ROOT = app.getAppPath();
   process.env.PORT = String(port);
-  const serverPath = path.join(app.getAppPath(), "dist", "server.cjs");
+  const appRoot = app.getAppPath();
+  const distIndexPath = path.join(appRoot, "dist", "index.html");
+  const serverPath = path.join(appRoot, "dist", "server.cjs");
+  log(`APP ROOT: ${appRoot}`);
+  log(`DIST INDEX: ${distIndexPath} exists=${fs.existsSync(distIndexPath)}`);
+  log(`SERVER PATH: ${serverPath} exists=${fs.existsSync(serverPath)}`);
+  if (fs.existsSync(distIndexPath)) {
+    try {
+      const indexHtml = fs.readFileSync(distIndexPath, "utf8");
+      const assetMatch = indexHtml.match(/(?:src|href)="([^"]+index-[^"]+\\.(?:js|css))"/);
+      log(`DIST ASSET: ${assetMatch ? assetMatch[1] : "not-found"}`);
+    } catch (error) {
+      log(`DIST INSPECTION FAILED: ${error?.message || error}`);
+    }
+  }
   if (!fs.existsSync(serverPath)) {
     throw new Error(`Built server is missing: ${serverPath}. Run npm run build before starting ma9icAI.`);
   }
