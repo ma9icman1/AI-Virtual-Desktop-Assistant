@@ -793,6 +793,8 @@ export default function App() {
       VoiceEngine.stopListening();
       setIsListening(false);
       setAssistantState("idle");
+      setAudioLevel(0);
+      setVoiceNotice(null);
     } else {
       setIsListening(true);
       setAssistantState("listening");
