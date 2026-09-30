@@ -11,8 +11,8 @@ if (!fs.existsSync(electronFile)) {
 
 let text = fs.readFileSync(electronFile, "utf8");
 
-// Replace the one-line SendKeys text handler with literal clipboard paste.
-const typeRegex = /  'TYPE_TEXT' \{[^\n]*\}/;
+// Replace the TYPE_TEXT PowerShell action with literal clipboard paste.
+const typeRegex = /  'TYPE_TEXT' \\{[^\\n]*\\}/;
 const typeHandler = "  'TYPE_TEXT' { Add-Type -AssemblyName System.Windows.Forms; $text = [string]$scriptArgs[1]; if ([string]::IsNullOrEmpty($text)) { break }; [System.Windows.Forms.Clipboard]::SetText($text); Start-Sleep -Milliseconds 150; [System.Windows.Forms.SendKeys]::SendWait('^v'); Start-Sleep -Milliseconds 150 }";
 if (typeRegex.test(text)) {
   text = text.replace(typeRegex, typeHandler);
@@ -26,7 +26,7 @@ if (text.includes(launchMarker) && !text.includes("MagicLaunchFocus")) {
   const focusLines = [
     launchMarker,
     "    await runPowerShell(`",
-    "$proc = Get-Process -Name '${requested.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
+    "$proc = Get-Process -Name '${requested}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
     "if ($proc) {",
     "  Add-Type @'",
     "using System;",
@@ -43,8 +43,7 @@ if (text.includes(launchMarker) && !text.includes("MagicLaunchFocus")) {
 
 fs.writeFileSync(electronFile, text, "utf8");
 
-// Deterministically handle the common combined command instead of relying on
-// the local planner to remember the required LAUNCH_APP step.
+// Deterministically handle common combined open-and-type commands.
 if (fs.existsSync(serverFile)) {
   let serverText = fs.readFileSync(serverFile, "utf8");
   if (!serverText.includes("const magicOpenTypeMatch =")) {
@@ -52,6 +51,7 @@ if (fs.existsSync(serverFile)) {
     if (!serverText.includes(marker)) {
       throw new Error("[desktop-input] Could not find planner validation block in server.ts");
     }
+
     const replacement = [
       "        const magicOpenTypeMatch = String(goal).match(/^\\s*(?:open|launch|start)\\s+(notepad|calculator|calc|paint|explorer|files|terminal|task manager|taskmgr)\\s+(?:and\\s+)?(?:type|write|enter)\\s+(.+?)\\s*[.!]?\\s*$/i);",
       "        if (magicOpenTypeMatch) {",
@@ -59,20 +59,22 @@ if (fs.existsSync(serverFile)) {
       "          const app = rawApp === \"calc\" ? \"calculator\" : rawApp === \"task manager\" ? \"taskmgr\" : rawApp;",
       "          const textToType = magicOpenTypeMatch[2].trim();",
       "          return res.json(validateAgentPlan({",
-      "            planTitle: `Open ${app} and type text`,",
-      "            spokenIntro: `Opening ${app}, then typing ${textToType}.`,",
+      "            planTitle: \"Open \" + app + \" and type text\",",
+      "            spokenIntro: \"Opening \" + app + \", then typing \" + textToType + \".\",",
       "            steps: [",
-      "              { stepNumber: 1, description: `Open ${app}`, actionType: \"LAUNCH_APP\", params: { app }, estimatedDurationMs: 1200 },",
+      "              { stepNumber: 1, description: \"Open \" + app, actionType: \"LAUNCH_APP\", params: { app }, estimatedDurationMs: 1200 },",
       "              { stepNumber: 2, description: \"Wait for the application window\", actionType: \"WAIT\", params: { ms: 700 }, estimatedDurationMs: 700 },",
-      "              { stepNumber: 3, description: `Type ${textToType}`, actionType: \"TYPE_INPUT\", params: { text: textToType }, estimatedDurationMs: 500 },",
+      "              { stepNumber: 3, description: \"Type \" + textToType, actionType: \"TYPE_INPUT\", params: { text: textToType }, estimatedDurationMs: 500 },",
       "            ],",
-      "            spokenCompletion: `${app} is open and the text was entered.`,",
+      "            spokenCompletion: app + \" is open and the text was entered.\",",
       "          }));",
       "        }",
-      "\n        if (parsed && parsed.steps) {",
+      "",
+      "        if (parsed && parsed.steps) {",
       "          return res.json(validateAgentPlan(parsed));",
       "        }",
     ].join("\n");
+
     serverText = serverText.replace(marker, replacement);
     fs.writeFileSync(serverFile, serverText, "utf8");
   }
