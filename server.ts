@@ -734,26 +734,11 @@ app.post("/api/vision/analyze", async (req, res) => {
     }
 
     const cleanBase64 = rawImage.replace(/^data:image\/\w+;base64,/, "");
-    const visionSystemPrompt = `Analyze this desktop screenshot for X-Ray targeting.
-Return ONLY compact, valid JSON. No markdown, commentary, or extra text.
-Use exactly:
-{
-  "summary": "One short sentence describing the screen",
-  "openWindows": ["up to 6 visible apps/windows"],
-  "activeApplication": "main focused app",
-  "detectedElements": [
-    {
-      "type": "button|input|menu|tab|text|window",
-      "label": "short visible label",
-      "location": "top-left|center|bottom-bar|modal",
-      "boundingBox": {"x":0,"y":0,"width":0,"height":0},
-      "center": {"x":0,"y":0}
-    }
-  ],
-  "extractedText": "Only important readable text",
-  "suggestedActions": ["up to 3 useful actions"]
-}
-Rules: at most 12 detectedElements; keep labels/text very short; omit uncertain elements; coordinates are pixels in 1280x800 screenshot space; prioritize actionable controls over decorative text.`;
+    const visionSystemPrompt = `You are a fast desktop UI detector.
+Return ONLY valid JSON, with no markdown.
+Use exactly this compact shape:
+{"summary":"short sentence","activeApplication":"focused app","detectedElements":[{"type":"button|input|menu|tab|text|window","label":"short label","boundingBox":{"x":0,"y":0,"width":0,"height":0},"center":{"x":0,"y":0}}]}
+Rules: return at most 8 detectedElements; prioritize clickable/input controls; omit uncertain elements; labels under 6 words; coordinates are pixels in the 1280x800 screenshot; keep the JSON short.`;
 
     const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
 
@@ -765,16 +750,16 @@ Rules: at most 12 detectedElements; keep labels/text very short; omit uncertain 
           messages: [
             {
               role: "user",
-              content: `${prompt}\nReturn only compact valid JSON matching the schema. No markdown or explanation.`,
+              content: `Find the active application and visible actionable controls. Return only the compact JSON schema above.`,
               images: [cleanBase64],
             },
           ],
           formatJson: true,
-          timeoutMs: 45000,
+          timeoutMs: 18000,
           options: {
-            temperature: 0.1,
+            temperature: 0,
             num_ctx: 2048,
-            num_predict: 480,
+            num_predict: 300,
           },
         });
 
