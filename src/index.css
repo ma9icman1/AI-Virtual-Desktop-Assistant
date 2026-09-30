@@ -308,3 +308,23 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
   right:auto !important;
   transform:translateX(-50%) !important;
 }
+
+
+/* Final lower-left layout: keep the sidebar Active Application card visible and
+   center Magic X-Ray directly above it. */
+.ma9ic-sidebar-active-app {
+  display:block !important;
+}
+.ma9ic-xray-hud {
+  left:132.5px !important;
+  top:auto !important;
+  bottom:110px !important;
+  right:auto !important;
+  transform:translateX(-50%) !important;
+  z-index:70 !important;
+}
+@media (max-width:1200px) {
+  .ma9ic-xray-hud {
+    left:112.5px !important;
+  }
+}
