@@ -378,7 +378,7 @@ function parseLooseJson(raw: string): any | null {
       let next = i + 1; while (next < candidate.length && /\\s/.test(candidate[next])) next++;
       if (!inString) inString = true;
       else if (next >= candidate.length || /[,}\\]:]/.test(candidate[next])) inString = false;
-      else { repaired += '\\"\'; continue; }
+      else { repaired += '\\\"'; continue; }
     }
     if (inString && ch === "\n") repaired += "\\n";
     else if (inString && ch === "\r") repaired += "\\r";
