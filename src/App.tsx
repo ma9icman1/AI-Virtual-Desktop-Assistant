@@ -283,12 +283,17 @@ export default function App() {
       SET_UI_VALUE: { action: "SET_UI_VALUE", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process, value: params.value ?? params.text ?? "" } },
       WAIT_FOR_UI_ELEMENT: { action: "WAIT_FOR_UI_ELEMENT", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process, timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
       NAVIGATE_URL: { action: "NAVIGATE_URL", params: { url: params.url || params.parameter || "" } },
+      SEARCH_WEB: { action: "SEARCH_WEB", params: { query: params.query || params.text || params.parameter || "" } },
+      DETECT_WEBPAGE: { action: "DETECT_WEBPAGE", params: { timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
       OPEN_FILE: { action: "OPEN_FILE", params: { path: params.path || params.parameter || "" } },
       WAIT: { action: "WAIT", params: { ms: params.ms || params.estimatedDurationMs || 500 } },
     };
     const mapped = actions[normalizedType];
     if (!mapped) throw new Error(`Unsupported desktop action: ${actionType}`);
     if (!(window as any).magicDesktop?.execute) throw new Error("Desktop control is unavailable in this app window.");
+    if (normalizedType === "SEARCH_WEB" && !String(mapped.params.query).trim()) {
+      throw new Error("No web search query was provided.");
+    }
     if (["MOVE_MOUSE", "CLICK_BUTTON", "DOUBLE_CLICK", "RIGHT_CLICK", "DRAG", "SCROLL"].includes(normalizedType)) {
       const x = mapped.params.x;
       const y = mapped.params.y;
