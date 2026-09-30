@@ -74,6 +74,7 @@ export interface ChatMessage {
     multiStepPlan?: MultiStepPlan;
   };
   visionThumbnail?: string;
+  vision?: VisionDetection;
   plan?: MultiStepPlan;
 }
 
