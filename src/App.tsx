@@ -10,6 +10,7 @@ import {
 } from "./types";
 import { VoiceEngine } from "./services/voiceEngine";
 import { VisionService } from "./services/visionService";
+import { publishVisionToUnreal } from "./services/unrealBridge";
 import { MemoryService } from "./services/memoryService";
 
 import { VoiceOrb } from "./components/assistant/VoiceOrb";
@@ -21,6 +22,7 @@ import { MemoryModal } from "./components/assistant/MemoryModal";
 import { VisionModal } from "./components/assistant/VisionModal";
 import { SuperAIPermissionDialog } from "./components/desktop/SuperAIPermissionDialog";
 import { TakeControlModal } from "./components/desktop/TakeControlModal";
+import { MagicXRayOverlay } from "./components/desktop/MagicXRayOverlay";
 
 import {
   Sparkles,
@@ -103,6 +105,7 @@ export default function App() {
   const [visionThumbnail, setVisionThumbnail] = useState<string | undefined>(undefined);
   const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
   const [isVisionModalOpen, setIsVisionModalOpen] = useState(false);
+  const [isXRayVisible, setIsXRayVisible] = useState(false);
   const [connectionProgress, setConnectionProgress] = useState<number | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const lastGreetingRef = useRef(-1);
@@ -445,6 +448,8 @@ export default function App() {
         };
       }
       setActiveVision(visionResult);
+      publishVisionToUnreal(visionResult);
+      setIsXRayVisible(true);
 
       setAssistantState("speaking");
       VoiceEngine.speak(visionResult.summary, () => {
@@ -959,7 +964,7 @@ export default function App() {
                     setActiveSection(String(label));
                     if (label === 'AI Models') openOllamaSettings();
                     else if (label === 'Voice') setIsSettingsOpen(true);
-                    else if (label === 'Vision') void handleCaptureCamera();
+                    else if (label === 'Vision') void handleCaptureScreen();
                     else if (label === 'Windows Control') setIsTakeControlOpen(true);
                   }}>
                     <span className="ma9ic-nav-icon">{icon}</span><span>{label}</span>
@@ -1047,6 +1052,13 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <MagicXRayOverlay
+        vision={activeVision}
+        imageUrl={visionThumbnail}
+        visible={isXRayVisible}
+        onClose={() => setIsXRayVisible(false)}
+      />
 
       {/* Voice & Settings Modal */}
       <VoiceSettingsModal
