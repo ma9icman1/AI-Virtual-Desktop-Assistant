@@ -253,3 +253,44 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 /* Move the Magic X-Ray HUD farther right without changing its size. */
 .ma9ic-xray-hud { left:220px !important; right:auto !important; transform:none !important; }
+
+
+/* Final chat/vision layout: active app replaces the title cleanly instead of overlapping it. */
+.ma9ic-main-active-app-inline {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  max-width:90%;
+  white-space:nowrap;
+}
+.ma9ic-main-active-app-inline .ma9ic-main-active-app-label {
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.1em;
+  color:#64748b;
+}
+.ma9ic-main-active-app-inline .ma9ic-main-active-app-name {
+  max-width:260px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:11px;
+  font-weight:600;
+  color:#c7ddf7;
+}
+
+/* Put the Magic X-Ray HUD in the center of the main chat column, below its title. */
+.ma9ic-xray-hud {
+  left:calc(50% + (265px - 345px) / 2) !important;
+  top:110px !important;
+  right:auto !important;
+  transform:translateX(-50%) !important;
+}
+@media (max-width:1200px) {
+  .ma9ic-xray-hud {
+    left:calc(50% + (225px - 300px) / 2) !important;
+  }
+}
+
+/* The old overlapping absolute active-app treatment is no longer used. */
+.ma9ic-main-active-app { display:none !important; }
