@@ -824,7 +824,19 @@ Return structured JSON analysis in this exact format:
           });
         }
 
-        throw new Error("Ollama vision returned malformed JSON that could not be repaired.");
+        console.warn("[Ollama] Vision response could not be parsed; returning a safe fallback instead of blocking X-Ray.");
+        return res.json({
+          summary: "I examined your screen. The screenshot was captured, but the local vision model returned malformed structured data.",
+          openWindows: ["Active Desktop Workspace"],
+          activeApplication: "Main Workspace",
+          detectedElements: [],
+          extractedText: "",
+          suggestedActions: ["Try examining the screen again", "Ask me what is visible"],
+          details: "Screen capture succeeded. Vision JSON parsing failed safely; no desktop action was taken.",
+          warning: "Local vision model returned malformed JSON.",
+          provider: "ollama",
+          model: activeOllamaVisionModel,
+        });
       } catch (ollamaVisionErr: any) {
         console.warn("[Ollama] Vision analysis error:", ollamaVisionErr.message);
         if (!process.env.GEMINI_API_KEY) {
