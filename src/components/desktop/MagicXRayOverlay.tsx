@@ -45,7 +45,7 @@ export const MagicXRayOverlay: React.FC<MagicXRayOverlayProps> = ({
     <div className="fixed inset-0 z-[65] pointer-events-none" aria-label="Magic X-Ray vision overlay">
       <div className="absolute inset-0 bg-cyan-400/[0.025]" />
 
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
+      <div className="ma9ic-xray-hud absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
         <div className="flex items-center gap-2 rounded-full border border-cyan-300/40 bg-slate-950/90 px-3 py-1.5 shadow-2xl shadow-cyan-950/50 backdrop-blur-xl">
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-75" />
