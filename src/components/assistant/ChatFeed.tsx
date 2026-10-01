@@ -253,9 +253,9 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                           className="absolute z-10 cursor-crosshair rounded-sm border border-cyan-300/90 bg-cyan-300/[0.08] shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_12px_rgba(34,211,238,0.2)] hover:bg-cyan-300/[0.16]"
                           style={{
                             left: `${(box.x / (Number(msg.vision?.visionWidth) || 1280)) * 100}%`,
-                            top: `${(box.y / (Number(msg.vision?.visionHeight) || 720)) * 100}%,`.slice(0, -1),
-                            width: `${(box.width / (Number(msg.vision?.visionWidth) || 1280)) * 100}%,`.slice(0, -1),
-                            height: `${(box.height / (Number(msg.vision?.visionHeight) || 720)) * 100}%,`.slice(0, -1),
+                            top: `${(box.y / (Number(msg.vision?.visionHeight) || 720)) * 100}%`,
+                            width: `${(box.width / (Number(msg.vision?.visionWidth) || 1280)) * 100}%`,
+                            height: `${(box.height / (Number(msg.vision?.visionHeight) || 720)) * 100}%`,
                           }}
                           onClick={() => onVisionTargetClick?.(element)}
                           title={`Click ${element.label || element.type}`}
