@@ -19,8 +19,11 @@ if (!gotSingleInstanceLock) {
 }
 
 const port = Number(process.env.MAGIC_PORT || 3210);
+// Vision uses a fixed 16:9 canvas so AI coordinates preserve the same geometry
+// as the real Windows display. The primary display is captured at native size
+// and resized proportionally to this canvas before being sent to the vision model.
 const AI_SCREEN_WIDTH = 1280;
-const AI_SCREEN_HEIGHT = 800;
+const AI_SCREEN_HEIGHT = 720;
 let desktopPermission = "none";
 let desktopKilled = false;
 let speechProcess = null;
@@ -620,15 +623,17 @@ async function executeDesktopAction(action, params = {}) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 0;
     if (params.coordinateSpace === "vision") {
-      // Vision coordinates come from the normalized 1280x800 capture. Clamp the
-      // model's occasional 1-2px overshoot before mapping into physical pixels.
+      // Vision coordinates come from the 16:9 vision canvas. Allow callers to
+      // provide the exact canvas dimensions used for the current screenshot.
       const clamped = Math.max(0, Math.min(aiSize - 1, Math.round(numeric)));
       return Math.round(clamped * axisSize / aiSize);
     }
     return Math.round(numeric);
   };
-  const x = scalePoint(params.x, display.size.width, AI_SCREEN_WIDTH);
-  const y = scalePoint(params.y, display.size.height, AI_SCREEN_HEIGHT);
+  const visionWidth = Number(params.visionWidth) > 0 ? Number(params.visionWidth) : AI_SCREEN_WIDTH;
+  const visionHeight = Number(params.visionHeight) > 0 ? Number(params.visionHeight) : AI_SCREEN_HEIGHT;
+  const x = scalePoint(params.x, display.size.width, visionWidth);
+  const y = scalePoint(params.y, display.size.height, visionHeight);
   if (action === "LAUNCH_APP") {
     const requested = String(params.app || "").trim().toLowerCase();
     const browserAliases = new Set(["browser", "web browser", "internet", "internet browser", "edge", "microsoft edge", "chrome", "google chrome", "firefox", "mozilla firefox", "brave", "brave browser", "opera", "opera browser", "vivaldi", "vivaldi browser"]);
@@ -1049,8 +1054,8 @@ public static class MagicKeyInput {
   }
   }`;
 
-  const endX = scalePoint(params.endX, display.size.width, AI_SCREEN_WIDTH);
-  const endY = scalePoint(params.endY, display.size.height, AI_SCREEN_HEIGHT);
+  const endX = scalePoint(params.endX, display.size.width, visionWidth);
+  const endY = scalePoint(params.endY, display.size.height, visionHeight);
   const actionArgs = [action, String(x), String(y), String(params.text ?? params.key ?? params.app ?? params.ms ?? ""), String(endX), String(endY)];
   console.log(`[DEBUG INPUT] actionArgs=${JSON.stringify(actionArgs)} textParam=${JSON.stringify(params.text)} keyParam=${JSON.stringify(params.key)}`);
   const result = await runPowerShell(script, actionArgs);
@@ -1102,7 +1107,12 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
     if (!source || source.thumbnail.isEmpty()) {
       throw new Error("Windows did not return a desktop screenshot.");
     }
-    const normalized = source.thumbnail.resize({ width: AI_SCREEN_WIDTH, height: AI_SCREEN_HEIGHT, quality: "good" });
+    const normalized = source.thumbnail.resize({
+      width: AI_SCREEN_WIDTH,
+      height: AI_SCREEN_HEIGHT,
+      quality: "good",
+    });
+    console.log("[VISION CAPTURE] source=%dx%d vision=%dx%d", display.size.width, display.size.height, AI_SCREEN_WIDTH, AI_SCREEN_HEIGHT);
     return `data:image/jpeg;base64,${normalized.toJPEG(60).toString("base64")}`;
   } finally {
     if (wasVisible && window && !window.isDestroyed()) window.show();
