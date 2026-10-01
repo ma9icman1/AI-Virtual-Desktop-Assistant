@@ -9,44 +9,42 @@ const ROBLOX_EXE = "C:\\Users\\ma9ic\\AppData\\Local\\Roblox\\Versions\\version-
 if (fs.existsSync(electronFile)) {
   let text = fs.readFileSync(electronFile, "utf8");
 
-  // Some of the earlier desktop-action repair passes could accidentally strip
-  // async from executeDesktopAction even though the function uses await.
-  // Restore it before any Roblox changes are written.
+  // Keep the native desktop action handler async because the launch path awaits
+  // the child-process spawn and focus/verification work.
   text = text.replace(/(^|\n)\s*function executeDesktopAction\s*\(/, "$1async function executeDesktopAction(");
 
-  // Replace the entire aliases section so any older malformed Roblox injection
-  // is removed before the desktop launch code is rebuilt.
-  const aliasesPattern = /    const aliases = \{[\s\S]*?\n    \};\n    const candidates = aliases\[requested\];/;
-  const aliasesReplacement = `    const aliases = {
-      notepad: ["notepad.exe"],
-      calculator: ["calc.exe"],
-      paint: ["mspaint.exe"],
-      explorer: ["explorer.exe"],
-      files: ["explorer.exe"],
-      terminal: ["wt.exe"],
-      taskmgr: ["taskmgr.exe"],
-      roblox: [${JSON.stringify(ROBLOX_EXE)}],
-    };
-    const candidates = aliases[requested];`;
-
-  if (!aliasesPattern.test(text)) {
-    throw new Error("[roblox] Could not find the desktop application aliases section in electron/main.cjs");
+  // The desktop-action repair scripts can change whitespace or the contents of
+  // the aliases object. Do not depend on the old exact block; find the aliases
+  // object itself and add Roblox to it.
+  const aliasesPattern = /(\bconst aliases\s*=\s*\{)([\s\S]*?)(\n\s*\};)/;
+  const aliasesMatch = text.match(aliasesPattern);
+  if (!aliasesMatch) {
+    throw new Error("[roblox] Could not find the desktop application aliases object in electron/main.cjs");
   }
-  text = text.replace(aliasesPattern, aliasesReplacement);
 
-  // Absolute executable paths such as RobloxPlayerBeta.exe are verified by a
-  // successful spawn; normal executable names keep their process verification.
-  const verificationPattern = /    const verifyTarget = normalizeProcessName\(target\);\n    const verified = await verifyProcessRunning\(verifyTarget\);/;
-  const verificationReplacement = `    const verified = path.isAbsolute(target)
+  if (!/\broblox\s*:/.test(aliasesMatch[2])) {
+    const robloxLine = `\n      roblox: [${JSON.stringify(ROBLOX_EXE)}],`;
+    text = text.replace(aliasesPattern, `$1$2${robloxLine}$3`);
+  } else {
+    // Replace an older Roblox alias with the deterministic executable path.
+    text = text.replace(/(\broblox\s*:\s*)\[[^\]]*\]/, `$1[${JSON.stringify(ROBLOX_EXE)}]`);
+  }
+
+  // Absolute executable paths are already deterministic launch targets. They
+  // do not need process-name verification, which can fail because Roblox may
+  // hand off to another process during startup.
+  const verificationPattern = /\s*const verifyTarget = normalizeProcessName\(target\);\s*\n\s*const verified = await verifyProcessRunning\(verifyTarget\);/;
+  const verificationReplacement = `
+    const verifyTarget = normalizeProcessName(target);
+    const verified = path.isAbsolute(target)
       ? true
-      : await verifyProcessRunning(normalizeProcessName(target));`;
+      : await verifyProcessRunning(verifyTarget);`;
 
   if (verificationPattern.test(text)) {
     text = text.replace(verificationPattern, verificationReplacement);
   }
 
-  // Final guard: do not leave a syntactically invalid main process file behind.
-  // executeDesktopAction must remain async because the launch path awaits spawn.
+  // Final guard: never leave executeDesktopAction non-async.
   text = text.replace(/(^|\n)\s*function executeDesktopAction\s*\(/, "$1async function executeDesktopAction(");
 
   fs.writeFileSync(electronFile, text, "utf8");
