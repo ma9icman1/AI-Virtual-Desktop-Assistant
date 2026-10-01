@@ -5,54 +5,32 @@ const serverFile = path.join(process.cwd(), "server.ts");
 if (!fs.existsSync(serverFile)) process.exit(0);
 
 let text = fs.readFileSync(serverFile, "utf8");
+const marker = "  const requestedApp = appAliases.find(([pattern]) => pattern.test(request))?.[1];";
+const signature = "// Multi-action open-and-type support";
 
-const insertMarker = '  if (fileMatch && parsed?.action?.type !== "OPEN_FILE") {';
-const alreadyInstalled = text.includes("// Multi-action voice commands: split open-and-type requests into an ordered plan.");
-
-if (alreadyInstalled) {
-  console.log("[multi-action] Ordered voice command plans already present; skipped.");
+if (text.includes(signature)) {
+  console.log("[multi-action] Open-and-type support already present; skipped.");
   process.exit(0);
 }
 
-if (!text.includes(insertMarker)) {
-  throw new Error("[multi-action] Could not find desktop intent insertion point in server.ts");
+if (!text.includes(marker)) {
+  throw new Error("[multi-action] Could not find requestedApp insertion point in server.ts");
 }
 
 const block = [
-  "  // Multi-action voice commands: split open-and-type requests into an ordered plan.",
-  "  // Keep everything after the typing verb intact, including phrases containing 'and'.",
-  "  const multiAction = message.trim().replace(/[.!?]+$/g, \"\").match(/^(?:please\\s+)?(?:open|launch|start|run)\\s+(notepad|calculator|paint|explorer|files|terminal|task manager|taskmgr|chrome|edge|brave|firefox|browser)(?:\\s+and\\s+then|\\s+then|\\s+and)\\s+(?:type|enter|write)\\s+(.+)$/i);",
-  "  if (multiAction) {",
-  "    const rawApp = multiAction[1].toLowerCase().replace(/\\s+/g, \" \");",
-  "    const appMap: Record<string, string> = { notepad: \"notepad\", calculator: \"calculator\", paint: \"paint\", explorer: \"explorer\", files: \"explorer\", terminal: \"terminal\", \"task manager\": \"taskmgr\", taskmgr: \"taskmgr\", chrome: \"chrome\", edge: \"edge\", brave: \"brave\", firefox: \"firefox\", browser: \"browser\" };",
-  "    const app = appMap[rawApp];",
-  "    const typedText = multiAction[2].replace(/\\s+(?:and\\s+)?(?:press|hit)\\s+enter\\s*$/i, \"\").trim();",
-  "    if (app && typedText) {",
-  "      return {",
-  "        ...parsed,",
-  "        spokenResponse: \"Opening \" + app + \" and typing \" + typedText + \".\",",
-  "        spokenReply: \"Opening \" + app + \" and typing \" + typedText + \".\",",
-  "        action: {",
-  "          type: \"MULTI_STEP_PLAN\",",
-  "          description: \"Open \" + app + \" and type \" + typedText,",
-  "          multiStepPlan: {",
-  "            planTitle: \"Open \" + app + \" and type text\",",
-  "            spokenIntro: \"I will open \" + app + \", focus it, and type your text.\",",
-  "            steps: [",
-  "              { stepNumber: 1, description: \"Open \" + app, actionType: \"LAUNCH_APP\", params: { app }, status: \"pending\", estimatedDurationMs: 1200 },",
-  "              { stepNumber: 2, description: \"Type \" + typedText, actionType: \"TYPE_INPUT\", params: { text: typedText }, status: \"pending\", estimatedDurationMs: 500 },",
-  "            ],",
-  "            spokenCompletion: \"Done. I opened \" + app + \" and typed your text.\",",
-  "            currentStepIndex: 0,",
-  "            status: \"idle\",",
-  "          },",
-  "        },",
-  "      };",
+  "  // Multi-action open-and-type support",
+  "  const openAndTypeMatch = commandText.match(/^(?:please\\s+)?(?:open|launch|start|run)\\s+(notepad|calculator|paint|explorer|files|terminal|task manager|taskmgr|chrome|edge|brave|firefox)(?:\\s+and\\s+then|\\s+then|\\s+and)\\s+(?:type|enter|write)\\s+(.+)$/i);",
+  "  if (openAndTypeMatch) {",
+  "    const openTypeApps: Record<string, string> = { notepad: \"notepad\", calculator: \"calculator\", paint: \"paint\", explorer: \"explorer\", files: \"explorer\", terminal: \"terminal\", \"task manager\": \"taskmgr\", taskmgr: \"taskmgr\", chrome: \"chrome\", edge: \"edge\", brave: \"brave\", firefox: \"firefox\" };",
+  "    const openTypeApp = openTypeApps[openAndTypeMatch[1].toLowerCase()];",
+  "    const openTypeText = openAndTypeMatch[2].replace(/\\s+(?:and\\s+)?(?:press|hit)\\s+enter\\s*$/i, \"\").trim();",
+  "    if (openTypeApp && openTypeText) {",
+  "      return { ...parsed, spokenResponse: \"Opening \" + openTypeApp + \" and typing your text.\", spokenReply: \"Opening \" + openTypeApp + \" and typing your text.\", action: { type: \"MULTI_STEP_PLAN\", description: \"Open \" + openTypeApp + \" and type text\", multiStepPlan: { planTitle: \"Open and type\", spokenIntro: \"I will open \" + openTypeApp + \", focus it, and type your text.\", steps: [ { stepNumber: 1, description: \"Open \" + openTypeApp, actionType: \"LAUNCH_APP\", params: { app: openTypeApp }, status: \"pending\", estimatedDurationMs: 1200 }, { stepNumber: 2, description: \"Type the requested text\", actionType: \"TYPE_INPUT\", params: { text: openTypeText }, status: \"pending\", estimatedDurationMs: 500 } ], spokenCompletion: \"Done.\", currentStepIndex: 0, status: \"idle\" } } };",
   "    }",
   "  }",
   "",
 ].join("\n");
 
-text = text.replace(insertMarker, block + insertMarker);
+text = text.replace(marker, marker + "\n" + block);
 fs.writeFileSync(serverFile, text, "utf8");
-console.log("[multi-action] Installed ordered voice command plans for open-and-type commands.");
+console.log("[multi-action] Installed safe open-and-type command plan support.");
