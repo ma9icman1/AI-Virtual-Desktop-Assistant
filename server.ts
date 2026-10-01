@@ -148,10 +148,9 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   );
   if (combinedBrowserCommandMatch) {
     const browser = combinedBrowserCommandMatch[1].toLowerCase();
-    const host = String(combinedBrowserCommandMatch[3] || "").trim();
-    const path = String(combinedBrowserCommandMatch[4] || "").trim();
-    const targetLabel = String(combinedBrowserCommandMatch[5] || "").replace(/[.!?]+$/g, "").trim();
-    const url = "https://" + (combinedBrowserCommandMatch[2] ? "www." : "") + host + path;
+    const hostAndPath = String(combinedBrowserCommandMatch[3] || "").trim();
+    const targetLabel = String(combinedBrowserCommandMatch[4] || "").replace(/[.!?]+$/g, "").trim();
+    const url = "https://" + (combinedBrowserCommandMatch[2] ? "www." : "") + hostAndPath;
     return {
       ...parsed,
       spokenResponse: "Opening " + browser + ", navigating to " + url + ", then clicking " + targetLabel + ".",
