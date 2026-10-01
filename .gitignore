@@ -11,3 +11,10 @@ dist-app/
 release/
 
 
+
+# Electron build output
+release/
+release-*/
+*.tmp/
+win-unpacked/
+

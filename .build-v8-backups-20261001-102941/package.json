@@ -1,0 +1,56 @@
+{
+  "name": "magic-ai-assistant",
+  "version": "1.0.0",
+  "description": "Magic AI Desktop Assistant for Windows 11",
+  "author": "ma9ic",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "postinstall": "npm run build",
+    "build": "node scripts/fix-wakeword.cjs && node scripts/fix-desktop-actions.cjs && node scripts/repair-desktop-actions.cjs && node scripts/fix-type-input.cjs && node scripts/fix-multi-action.cjs && node scripts/fix-focus-verification.cjs && node scripts/fix-vision-click-v2.cjs && node scripts/fix-site-search.cjs && node scripts/fix-site-search-runtime.cjs && node scripts/fix-contextual-site-search.cjs && node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
+    "desktop:dev": "npm run build && electron .",
+    "desktop:package": "npm run build && npx electron-builder --win nsis portable",
+    "desktop:build": "npm run desktop:package",
+    "release:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\release-quick.ps1",
+    "preview": "vite preview",
+    "clean": "rm -rf dist server.js",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.21",
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.0.0"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.magicai.assistant",
+    "productName": "ma9icAI",
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "electron/**/*", "public/**/*", "package.json"],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] }] },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "ma9icAI" }
+  }
+}

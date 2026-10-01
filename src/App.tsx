@@ -292,6 +292,49 @@ export default function App() {
       OPEN_FILE: { action: "OPEN_FILE", params: { path: params.path || params.parameter || "" } },
       WAIT: { action: "WAIT", params: { ms: params.ms || params.estimatedDurationMs || 500 } },
     };
+    if (normalizedType === "VISION_CLICK_TARGET") {
+      const imageData = await VisionService.captureScreen();
+          console.log("[VISION CLICK] screenshot captured", { bytes: imageData?.length || 0 });
+      console.log("[VISION CLICK TARGET] screenshot captured", { bytes: imageData?.length || 0, targetLabel: params.targetLabel });
+      const response = await fetch("/api/vision/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: imageData,
+          prompt: "Identify the exact visible clickable control matching the target in the CURRENT SCREENSHOT. Return detectedElements with label, type, boundingBox, and center coordinates in the ACTUAL SCREENSHOT PIXEL COORDINATE SYSTEM. If the target is a search bar, return only the site/page search input, not the browser toolbar, address bar, logo, menu, or arbitrary text. Do not return normalized 0-1 or 0-1000 coordinates. Do not guess coordinates. Never use a point near the top-left corner such as (0,0) unless the target is visibly there."
+        }),
+      });
+      if (!response.ok) throw new Error("Vision analysis failed while locating the target control.");
+      const vision = await response.json();
+      const elements = Array.isArray(vision?.detectedElements)
+        ? vision.detectedElements
+        : (Array.isArray(vision?.elements) ? vision.elements : []);
+      const targetLabel = String(params.targetLabel || "search").toLowerCase();
+      const targetWords = targetLabel.split(/[^a-z0-9]+/).filter(Boolean);
+      const target = elements.find((element: any) => {
+        const label = String(element?.label || "").toLowerCase();
+        const type = String(element?.type || "").toLowerCase();
+        if (!label && !type) return false;
+        if (targetWords.includes("search") && /search|query|find/.test(label + " " + type)) return true;
+        return targetWords.some((word) => label.includes(word) || type.includes(word));
+      });
+      const point = target?.center || (target?.boundingBox
+        ? {
+            x: target.boundingBox.x + target.boundingBox.width / 2,
+            y: target.boundingBox.y + target.boundingBox.height / 2,
+          }
+        : null);
+      if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+        throw new Error(`Vision could not find the visible ${params.targetLabel || "target control"}.`);
+      }
+      console.log("[VISION CLICK TARGET] matched", { label: target?.label, type: target?.type, point });
+      if (!(window as any).magicDesktop?.execute) throw new Error("Desktop control is unavailable in this app window.");
+      return await (window as any).magicDesktop.execute("CLICK", {
+        x: point.x,
+        y: point.y,
+        coordinateSpace: "vision",
+      });
+    }
     const mapped = actions[normalizedType];
     if (!mapped) throw new Error(`Unsupported desktop action: ${actionType}`);
     if (!(window as any).magicDesktop?.execute) throw new Error("Desktop control is unavailable in this app window.");
@@ -825,6 +868,28 @@ export default function App() {
       setAudioLevel(0);
       setVoiceNotice(null);
     } else {
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
       VoiceEngine.setWakeWordMode(false);
       VoiceEngine.setWakeWordMode(false);
       VoiceEngine.setWakeWordMode(false);

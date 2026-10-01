@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import path from "path";
 import { Readable } from "stream";
 import { GoogleGenAI } from "@google/genai";
@@ -126,44 +126,6 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     : null);
   const visibleInputMatch = message.match(/\b(?:click|go to|focus|use)\s+(?:the\s+)?(?:search|address|query|text)\s+(?:box|bar|field)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
 
-  // [site-search-fix] contextual routing installed
-  const siteSearchCommandMatch = commandText.match(
-    /^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)\s+(roblox(?:\.com)?|youtube(?:\.com)?|amazon(?:\.com)?|ebay(?:\.com)?|reddit(?:\.com)?|discord(?:\.com)?|facebook(?:\.com)?|instagram(?:\.com)?|tiktok(?:\.com)?|twitter(?:\.com)?|x(?:\.com)?)\s+(?:and\s+)?(?:search|look\s+up)\s+(?:on\s+)?(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?$/i
-  );
-  const searchSiteCommandMatch = commandText.match(
-    /^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s+(roblox(?:\.com)?|youtube(?:\.com)?|amazon(?:\.com)?|ebay(?:\.com)?|reddit(?:\.com)?|discord(?:\.com)?|facebook(?:\.com)?|instagram(?:\.com)?|tiktok(?:\.com)?|twitter(?:\.com)?|x(?:\.com)?)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?$/i
-  );
-  const siteSearchMatch = siteSearchCommandMatch || searchSiteCommandMatch;
-
-  if (siteSearchMatch) {
-    const host = String(siteSearchMatch[1]).replace(/\.com$/i, "") + ".com";
-    const query = String(siteSearchMatch[2]).trim().replace(/[.!?]+$/g, "");
-    const url = "https://" + host + "/";
-
-    return {
-      ...parsed,
-      spokenResponse: "Opening " + host + ", finding its search box, and searching for " + query + ".",
-      spokenReply: "Opening " + host + ", finding its search box, and searching for " + query + ".",
-      action: {
-        type: "MULTI_STEP_PLAN",
-        description: "Open " + host + " and search the site for " + query,
-        multiStepPlan: {
-          planTitle: "Search " + host,
-          spokenIntro: "I will open " + host + ", analyze the live page, find its search box, and search for " + query + ".",
-          steps: [
-            { stepNumber: 1, description: "Open " + url, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 2, description: "Analyze the live page and click its search box", actionType: "VISION_CLICK_TARGET", params: { targetLabel: "search bar" }, status: "pending", estimatedDurationMs: 900 },
-            { stepNumber: 3, description: "Type " + query, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 4, description: "Submit the site search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 }
-          ],
-          spokenCompletion: "I searched " + host + " for " + query + ".",
-          currentStepIndex: 0,
-          status: "idle"
-        }
-      }
-    };
-  }
-
   if (websiteUrlMatch) {
     const protocol = websiteUrlMatch[1] || "https://";
     const url = `${protocol}${websiteUrlMatch[2]}`;
@@ -188,101 +150,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     };
   }
 
-  const searchFieldCommandMatch = commandText.match(
-    /\b(?:click|go\s+to|focus|use)\s+(?:the\s+)?(?:search|address|query|text)\s+(?:box|bar|field)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i
-  );
-
-  if (searchFieldCommandMatch) {
-    const query = searchFieldCommandMatch[1].trim();
-    return {
-      ...parsed,
-      spokenResponse: `I will find the visible search field, enter ${query}, and submit it.`,
-      spokenReply: `I will find the visible search field, enter ${query}, and submit it.`,
-      action: {
-        type: "MULTI_STEP_PLAN",
-        description: `Use the live screen to find the search field and enter ${query}`,
-        multiStepPlan: {
-          planTitle: "Find search field",
-          spokenIntro: `I will analyze the current screen, click the search field, and search for ${query}.`,
-          steps: [
-            { stepNumber: 1, description: "Analyze the live screen and click the search field", actionType: "VISION_CLICK_TARGET", params: { targetLabel: "search bar" }, status: "pending", estimatedDurationMs: 900 },
-            { stepNumber: 2, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 3, description: "Submit the search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 },
-          ],
-          spokenCompletion: "The search was submitted.",
-          currentStepIndex: 0,
-          status: "idle",
-        },
-      },
-    };
-  }
-  const websiteSearchMatch = commandText.match(
-    /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s*(?:https?:\/\/)?((?:www\.)?[a-z0-9-]+\.[a-z]{2,})\s+(?:and\s+)?(?:search|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i
-  );
-
-  if (websiteSearchMatch) {
-    const host = websiteSearchMatch[1];
-    const query = websiteSearchMatch[2].trim();
-    const url = `https://${host}`;
-    return {
-      ...parsed,
-      spokenResponse: `Opening ${host}, finding its search box, and searching for ${query}.`,
-      spokenReply: `Opening ${host}, finding its search box, and searching for ${query}.`,
-      action: {
-        type: "MULTI_STEP_PLAN",
-        description: `Open ${host} and search the page for ${query}`,
-        multiStepPlan: {
-          planTitle: `Open ${host} and search`,
-          spokenIntro: `I will open ${host}, analyze the page, click its search box, and search for ${query}.`,
-          steps: [
-            { stepNumber: 1, description: `Open ${url}`, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 2, description: "Analyze the live page and click its search box", actionType: "VISION_CLICK_TARGET", params: { targetLabel: "search bar" }, status: "pending", estimatedDurationMs: 900 },
-            { stepNumber: 3, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 4, description: "Submit the search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 },
-          ],
-          spokenCompletion: `I searched ${host} for ${query}.`,
-          currentStepIndex: 0,
-          status: "idle",
-        },
-      },
-    };
-  }
-  const contextualSiteSearchMatch = commandText.match(
-    /^(?:please\s+)?(?:(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)\s+)?(roblox(?:\.com)?|youtube(?:\.com)?|amazon(?:\.com)?|ebay(?:\.com)?|reddit(?:\.com)?|discord(?:\.com)?|facebook(?:\.com)?|instagram(?:\.com)?|tiktok(?:\.com)?|twitter(?:\.com)?|x(?:\.com)?)\s+(?:and\s+(?:then\s+)?)?(?:search|look\s+up)\s+(?:on\s+)?(?:for\s+)?["\']?(.+?)["\']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?$/i
-  );
-  const searchOnSiteMatch = commandText.match(
-    /^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s+(roblox(?:\.com)?|youtube(?:\.com)?|amazon(?:\.com)?|ebay(?:\.com)?|reddit(?:\.com)?|discord(?:\.com)?|facebook(?:\.com)?|instagram(?:\.com)?|tiktok(?:\.com)?|twitter(?:\.com)?|x(?:\.com)?)\s+(?:for\s+)?["\']?(.+?)["\']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?$/i
-  );
-
-  const siteSearch = contextualSiteSearchMatch || searchOnSiteMatch;
-  if (siteSearch) {
-    const host = String(siteSearch[1]).replace(/\.com$/i, "") + ".com";
-    const query = String(siteSearch[2]).trim().replace(/[.!?]+$/g, "");
-    const url = `https://${host}/`;
-    return {
-      ...parsed,
-      spokenResponse: `Opening ${host}, finding its search box, and searching for ${query}.`,
-      spokenReply: `Opening ${host}, finding its search box, and searching for ${query}.`,
-      action: {
-        type: "MULTI_STEP_PLAN",
-        description: `Open ${host} and search it for ${query}`,
-        multiStepPlan: {
-          planTitle: `Search ${host}`,
-          spokenIntro: `I will open ${host}, analyze the current screen, find its search box, and search for ${query}.`,
-          steps: [
-            { stepNumber: 1, description: `Open ${url}`, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 2, description: "Find the named site search box on the live screen", actionType: "VISION_CLICK_TARGET", params: { targetLabel: "search bar" }, status: "pending", estimatedDurationMs: 900 },
-            { stepNumber: 3, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 4, description: "Submit the site search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 },
-          ],
-          spokenCompletion: `I searched ${host} for ${query}.`,
-          currentStepIndex: 0,
-          status: "idle",
-        },
-      },
-    };
-  }
-  // [contextual-site-search] generic site routing installed\n  // Handle both explicit commands ('open wikipedia and search for magic') and\n  // vision-style transcripts ('Wikipedia search bar. Click it and type magic').\n  const siteAliasMap: Record<string, string> = { wikipedia: "wikipedia.org", roblox: "roblox.com", youtube: "youtube.com", amazon: "amazon.com", ebay: "ebay.com", reddit: "reddit.com", discord: "discord.com", facebook: "facebook.com", instagram: "instagram.com", tiktok: "tiktok.com", twitter: "twitter.com", x: "x.com" };\n  const siteSearchInstructionMatch = commandText.match(/^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)?\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:search\s+(?:bar|box|field)|search|look\s+up)[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);\n  const siteSearchNaturalMatch = commandText.match(/^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);\n  const siteSearchMatch = siteSearchInstructionMatch || siteSearchNaturalMatch;\n  if (siteSearchMatch) {\n    const rawHost = String(siteSearchMatch[1]).replace(/^www\./i, "").toLowerCase();\n    const host = siteAliasMap[rawHost] || rawHost;\n    const query = String(siteSearchMatch[2]).trim().replace(/[.!?]+$/g, "");\n    if (query) {\n      const url = "https://" + host + "/";\n      const spoken = "Opening " + host + ", finding its search box, and searching for " + query + ".";\n      return { ...parsed, spokenResponse: spoken, spokenReply: spoken, action: { type: "MULTI_STEP_PLAN", description: "Search " + host + " for " + query, multiStepPlan: { planTitle: "Search " + host, spokenIntro: spoken, steps: [\n        { stepNumber: 1, description: "Open " + url, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },\n        { stepNumber: 2, description: "Analyze the live page and click its search box", actionType: "VISION_CLICK_TARGET", params: { targetLabel: "search bar" }, status: "pending", estimatedDurationMs: 900 },\n        { stepNumber: 3, description: "Type " + query, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },\n        { stepNumber: 4, description: "Submit the site search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 }\n      ], spokenCompletion: "I searched " + host + " for " + query + ".", currentStepIndex: 0, status: "idle" } } };\n    }\n  }\n  if (webSearchMatch) {
+  if (webSearchMatch) {
     const query = webSearchMatch[1].replace(/\s+(?:in|using|with)\s+(?:edge|chrome|brave|firefox|opera|vivaldi)\s*$/i, "").trim();
     return {
       ...parsed,
@@ -339,7 +207,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
             { stepNumber: 1, description: `Move to ${targetElement.label || "search field"}`, actionType: "MOVE_MOUSE", params: { ...targetPoint, coordinateSpace: "vision" }, status: "pending", estimatedDurationMs: 600 },
             { stepNumber: 2, description: "Click the visible search field", actionType: "CLICK_BUTTON", params: { ...targetPoint, coordinateSpace: "vision" }, status: "pending", estimatedDurationMs: 200 },
             { stepNumber: 3, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },
-            { stepNumber: 4, description: "Submit the search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 },
+            { stepNumber: 4, description: "Submit the search", actionType: "KEY_PRESS", params: { key: "~" }, status: "pending", estimatedDurationMs: 300 },
           ],
           spokenCompletion: "The search was submitted.",
           currentStepIndex: 0,
