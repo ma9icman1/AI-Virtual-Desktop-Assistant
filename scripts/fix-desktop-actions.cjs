@@ -26,13 +26,14 @@ if (fs.existsSync(serverFile)) {
     const block = String.raw`  // Deterministic voice desktop commands. These run before the general AI intent so
   // common commands do not depend on model formatting.
   const desktopVoiceWindowMatch = request.match(/\b(?:switch|focus|bring)\s+(?:to\s+)?(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceOpenTypeMatch = request.match(/\b(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s+and\s+(?:type|write|enter)\s+["']?(.+?)["']?\s*$/i);
   const desktopVoiceOpenMatch = request.match(/\b(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s*$/i);
   const desktopVoiceCloseMatch = request.match(/\b(?:close|quit|exit|kill)\s+(?:the\s+)?(.+?)\s*$/i);
   const desktopVoiceMinMatch = request.match(/\bminimi[sz]e\s+(?:the\s+)?(.+?)\s*$/i);
   const desktopVoiceMaxMatch = request.match(/\bmaximi[sz]e\s+(?:the\s+)?(.+?)\s*$/i);
   const desktopVoiceRestoreMatch = request.match(/\brestore\s+(?:the\s+)?(.+?)\s*$/i);
   const desktopVoiceTypeMatch = message.match(/\b(?:type|write|enter)\s+["']?(.+?)["']?\s*$/i);
-  const desktopVoiceKeyMatch = message.match(/\b(?:press|hit)\s+(.+?)\s*$/i);
+  const desktopVoiceKeyMatch = request.match(/\b(?:press|hit)\s+(.+?)\s*$/i);
   const desktopVoiceClickMatch = request.match(/\b(double[- ]?click|right[- ]?click|click)\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
   const desktopVoiceMoveMatch = request.match(/\b(?:move|put)\s+(?:the\s+)?mouse\s+(?:to\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
   const desktopVoiceScrollMatch = request.match(/\bscroll\s+(up|down)(?:\s+(\d+))?/i);
@@ -45,6 +46,18 @@ if (fs.existsSync(serverFile)) {
       planTitle: title, spokenIntro: description, steps, spokenCompletion: completion, currentStepIndex: 0, status: "idle"
     } }
   });
+
+  // Handle the common combined command as one deterministic plan. This must
+  // run before the generic open/type handlers so "notepad and type hello"
+  // isn't interpreted as an application literally named "notepad and type hello".
+  if (desktopVoiceOpenTypeMatch && !requestedApp) {
+    const app = desktopVoiceOpenTypeMatch[1].trim();
+    const textToType = desktopVoiceOpenTypeMatch[2].trim().replace(/\s+[0-9]+$/, "");
+    return makePlan("Open " + app + " and type", "I will open " + app + " and type " + textToType + ".", [
+      { stepNumber: 1, description: "Open " + app, actionType: "LAUNCH_APP", params: { app, parameter: app }, status: "pending", estimatedDurationMs: 800 },
+      { stepNumber: 2, description: "Type " + textToType, actionType: "TYPE_INPUT", params: { text: textToType }, status: "pending", estimatedDurationMs: 500 }
+    ], "Text entered.");
+  }
 
   if (desktopVoiceMoveMatch) {
     const x = Number(desktopVoiceMoveMatch[1]); const y = Number(desktopVoiceMoveMatch[2]);
@@ -108,7 +121,7 @@ if (fs.existsSync(serverFile)) {
   }
 
   if (desktopVoiceTypeMatch && !/\b(?:what|who|where|when|why|how)\b/.test(request)) {
-    const textToType = desktopVoiceTypeMatch[1].trim();
+    const textToType = desktopVoiceTypeMatch[1].trim().replace(/\s+[0-9]+$/, "");
     return makePlan("Type text", "I will type " + textToType + ".", [
       { stepNumber: 1, description: "Type " + textToType, actionType: "TYPE_INPUT", params: { text: textToType }, status: "pending", estimatedDurationMs: 400 }
     ], "Text entered.");
@@ -157,9 +170,6 @@ if (fs.existsSync(electronFile)) {
     console.log('[desktop-actions] Added native minimize/maximize/restore actions.');
   }
 
-  // A launched process can exist without becoming the foreground window. Voice
-  // commands such as "Open Notepad" followed by "Type ..." must leave the
-  // launched app focused so the next input action reaches it instead of ma9icAI.
   if (!text.includes('[desktop-actions] launch focus repair')) {
     const verifyLine = '    if (!verified) throw new Error(`Windows started ${requested}, but the process could not be verified.`);';
     if (!text.includes(verifyLine)) throw new Error('[desktop-actions] Launch verification marker not found');
