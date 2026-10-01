@@ -6,10 +6,8 @@ if (!fs.existsSync(serverFile)) process.exit(0);
 
 let text = fs.readFileSync(serverFile, "utf8");
 
-// Insert into the current normalizeDesktopIntent implementation without
-// depending on its function name/signature, which has changed over time.
 const insertMarker = '  if (fileMatch && parsed?.action?.type !== "OPEN_FILE") {';
-const alreadyInstalled = text.includes("// Multi-action voice commands: split the spoken request into an ordered execution plan.");
+const alreadyInstalled = text.includes("// Multi-action voice commands: split open-and-type requests into an ordered plan.");
 
 if (alreadyInstalled) {
   console.log("[multi-action] Ordered voice command plans already present; skipped.");
@@ -53,7 +51,7 @@ const block = [
   "    }",
   "  }",
   "",
-].join("\\n");
+].join("\n");
 
 text = text.replace(insertMarker, block + insertMarker);
 fs.writeFileSync(serverFile, text, "utf8");
