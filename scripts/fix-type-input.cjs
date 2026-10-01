@@ -22,17 +22,13 @@ const typeHandler = `  'TYPE_TEXT' {
     }
   }`;
 
-const switchCase = /  'TYPE_TEXT'\s*\{[\s\S]*?\n  \}(?=\s*\n\s*'[A-Z_]+')/;
-if (switchCase.test(text)) {
-  text = text.replace(switchCase, typeHandler);
-} else {
-  const keyPressMarker = "  'KEY_PRESS' {";
-  const markerIndex = text.indexOf(keyPressMarker);
-  if (markerIndex < 0) {
-    throw new Error("[desktop-input] Could not find the KEY_PRESS insertion point in electron/main.cjs");
-  }
-  text = text.slice(0, markerIndex) + typeHandler + "\n" + text.slice(markerIndex);
+// Current main.cjs keeps the switch cases inline on single lines. Match the
+// complete TYPE_TEXT case without depending on a particular KEY_PRESS layout.
+const typeCase = /  'TYPE_TEXT'\s*\{[\s\S]*?\}(?=\s*'KEY_PRESS'\s*\{)/;
+if (!typeCase.test(text)) {
+  throw new Error("[desktop-input] Could not find TYPE_TEXT case in electron/main.cjs");
 }
 
+text = text.replace(typeCase, typeHandler + "\n");
 fs.writeFileSync(electronFile, text, "utf8");
 console.log("[desktop-input] Installed robust literal clipboard typing.");
