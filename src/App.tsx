@@ -784,6 +784,43 @@ export default function App() {
         return;
       }
 
+      const normalizedScreenRequest = text.trim().toLowerCase().replace(/[?!.,]+$/g, "");
+      const isDirectScreenInspection = /^(?:please\s+)?(?:examine|inspect|analyze|analyse|look\s+at|show\s+me)\s+(?:my\s+)?(?:screen|desktop|display)(?:\s+and\s+tell\s+me\s+what(?:'s|\s+is)\s+(?:active|visible))?$/.test(normalizedScreenRequest);
+
+      if (isDirectScreenInspection) {
+        const userMsg: ChatMessage = {
+          id: `msg-user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          role: "user",
+          content: text,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        setAssistantState("processing");
+
+        try {
+          const visionResult = await handleCaptureScreen();
+          if (!visionResult) throw new Error("Screen capture returned no vision result.");
+          const spokenText = visionResult.summary || "I examined your screen.";
+          const assistantMsg: ChatMessage = {
+            id: `msg-asst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            role: "assistant",
+            content: spokenText,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            visionThumbnail,
+            vision: visionResult,
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+          setAssistantState("speaking");
+          VoiceEngine.speak(spokenText, () => setAssistantState("idle"));
+        } catch (err) {
+          console.error("Direct screen inspection error:", err);
+          setAssistantState("error");
+          VoiceEngine.speak(`Screen inspection failed: ${describeError(err, "the screen could not be analyzed.")}`);
+          setTimeout(() => setAssistantState("idle"), 3000);
+        }
+        return;
+      }
+
       const userMsg: ChatMessage = {
         id: `msg-user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         role: "user",
