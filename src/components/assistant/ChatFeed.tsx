@@ -190,7 +190,7 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                       </span>
                     </div>
                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-                      {msg.action.multiStepPlan.status.replace("_", " ")}
+                      {String(msg.action.multiStepPlan.status || "idle").replace(/_/g, " ")}
                     </span>
                   </div>
 
