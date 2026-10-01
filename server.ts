@@ -51,6 +51,36 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     .toLowerCase()
     .replace(/\b(open|visit|load|browse\s+to)(?=(?:www\.)?[a-z0-9-]+\.[a-z]{2,})/gi, "$1 ")
     .replace(/\b(goto|go\s+to|navigate\s+to)(?=(?:www\.)?[a-z0-9-]+\.[a-z]{2,})/gi, (match) => match.replace(/goto/i, "go to") + " ");
+  // Normalize a few speech/model spelling variants before Electron validates the app.
+  const normalizeAppName = (value: unknown) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    const aliases: Record<string, string> = {
+      calcuator: "calculator",
+      calc: "calculator",
+      "task manager": "taskmgr",
+      "file explorer": "explorer",
+    };
+    return aliases[normalized] || normalized;
+  };
+  if (parsed?.action && typeof parsed.action === "object") {
+    const action = { ...parsed.action };
+    if (action.app) action.app = normalizeAppName(action.app);
+    if (action.params?.app) action.params = { ...action.params, app: normalizeAppName(action.params.app) };
+    if (action.parameter && typeof action.parameter === "string") action.parameter = normalizeAppName(action.parameter);
+    if (action.type === "MULTI_STEP_PLAN" && action.multiStepPlan?.steps) {
+      action.multiStepPlan = {
+        ...action.multiStepPlan,
+        steps: action.multiStepPlan.steps.map((step: any) => {
+          if (!step || typeof step !== "object") return step;
+          if (!["LAUNCH_APP", "FOCUS_APP", "CLOSE_APP"].includes(String(step.actionType))) return step;
+          const params = step.params && typeof step.params === "object" ? { ...step.params } : {};
+          if (params.app) params.app = normalizeAppName(params.app);
+          return { ...step, params };
+        }),
+      };
+    }
+    parsed = { ...parsed, action };
+  }
   // Speech recognition often adds sentence punctuation to a spoken URL.
   // Strip only terminal punctuation for intent matching; keep the original message elsewhere.
   const commandText = message.trim().replace(/[.!?]+$/g, "");
