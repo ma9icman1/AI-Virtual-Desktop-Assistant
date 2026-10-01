@@ -9,12 +9,8 @@ coverage/
 public/models/nova.compressed.glb
 dist-app/
 release/
-
-
-
-# Electron build output
-release/
 release-*/
 *.tmp/
 win-unpacked/
-
+native/target/
+native/bin/
