@@ -303,7 +303,8 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
         { stepNumber: 4, description: "Submit the site search", actionType: "KEY_PRESS", params: { key: "ENTER" }, status: "pending", estimatedDurationMs: 300 }
       ], spokenCompletion: "I searched " + host + " for " + query + ".", currentStepIndex: 0, status: "idle" } } };
     }
-  }\n  if (webSearchMatch) {
+  }
+  if (webSearchMatch) {
     const query = webSearchMatch[1].replace(/\s+(?:in|using|with)\s+(?:edge|chrome|brave|firefox|opera|vivaldi)\s*$/i, "").trim();
     return {
       ...parsed,
@@ -720,7 +721,9 @@ function parseLooseJson(raw: string): any | null {
       else if (next >= candidate.length || /[,}\\]:]/.test(candidate[next])) inString = false;
       else { repaired += '\\\"'; continue; }
     }
-    if (inString && ch === "\n") repaired += "\\n";
+    if (inString && ch === "
+") repaired += "\
+";
     else if (inString && ch === "\r") repaired += "\\r";
     else if (inString && ch === "\t") repaired += "\\t";
     else repaired += ch;
@@ -1164,7 +1167,8 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
               },
             },
             {
-              text: `${prompt}\n${visionSystemPrompt}`,
+              text: `${prompt}
+${visionSystemPrompt}`,
             },
           ],
         },
