@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 
 [dependencies]
+base64 = "0.22"
 enigo = "0.6.1"
 image = "0.25"
 serde = { version = "1", features = ["derive"] }
