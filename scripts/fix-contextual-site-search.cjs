@@ -44,7 +44,7 @@ const injection = [
   "    }",
   "  }",
   "",
-].join("\\n");
+].join("\n");
 
 server = server.replace(marker, injection + marker);
 fs.writeFileSync(serverFile, server, "utf8");
