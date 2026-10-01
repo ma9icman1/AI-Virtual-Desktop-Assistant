@@ -232,7 +232,12 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                     </span>
                     <span className="text-[10px] text-cyan-400 font-mono">Gemini Flash (Latest) OCR</span>
                   </div>
-                  <div className="relative aspect-[8/5] rounded-lg overflow-hidden border border-slate-800 bg-slate-950 group">
+                  <div
+                    className="relative w-full rounded-lg overflow-hidden border border-slate-800 bg-slate-950 group"
+                    style={{
+                      aspectRatio: `${Math.max(1, Number(msg.vision?.visionWidth) || 1280)} / ${Math.max(1, Number(msg.vision?.visionHeight) || 720)}`,
+                    }}
+                  >
                     <img
                       src={msg.visionThumbnail}
                       alt="Screen capture"
@@ -247,10 +252,10 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                           type="button"
                           className="absolute z-10 cursor-crosshair rounded-sm border border-cyan-300/90 bg-cyan-300/[0.08] shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_12px_rgba(34,211,238,0.2)] hover:bg-cyan-300/[0.16]"
                           style={{
-                            left: `${(box.x / 1280) * 100}%`,
-                            top: `${(box.y / 800) * 100}%`,
-                            width: `${(box.width / 1280) * 100}%`,
-                            height: `${(box.height / 800) * 100}%`,
+                            left: `${(box.x / (Number(msg.vision?.visionWidth) || 1280)) * 100}%`,
+                            top: `${(box.y / (Number(msg.vision?.visionHeight) || 720)) * 100}%,`.slice(0, -1),
+                            width: `${(box.width / (Number(msg.vision?.visionWidth) || 1280)) * 100}%,`.slice(0, -1),
+                            height: `${(box.height / (Number(msg.vision?.visionHeight) || 720)) * 100}%,`.slice(0, -1),
                           }}
                           onClick={() => onVisionTargetClick?.(element)}
                           title={`Click ${element.label || element.type}`}
