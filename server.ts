@@ -139,6 +139,39 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   const browserTypeMatch = message.match(
     /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
   );
+
+  // Deterministic combined browser workflow: preserve every requested operation
+  // instead of falling through to a launch-only fallback when the LLM parser
+  // does not emit a complete executable plan.
+  const combinedBrowserCommandMatch = commandText.match(
+    /^(?:please\s+)?open\s+(edge|chrome|brave|firefox|opera|vivaldi)(?:\s+browser)?\s+(?:and\s+)?(?:go\s+to|navigate\s+to|visit|load)\s+(?:https?:\/\/)?(www\.)?([a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s,]+)?)\s*(?:,|\s+and\s+)?\s*(?:click|press|select|hit)\s+(?:on\s+)?(?:the\s+)?(.+?)\s*$/i
+  );
+  if (combinedBrowserCommandMatch) {
+    const browser = combinedBrowserCommandMatch[1].toLowerCase();
+    const url = "https://" + combinedBrowserCommandMatch[2] + combinedBrowserCommandMatch[3];
+    const targetLabel = combinedBrowserCommandMatch[4].replace(/[.!?]+$/g, "").trim();
+    return {
+      ...parsed,
+      spokenResponse: "Opening " + browser + ", navigating to " + combinedBrowserCommandMatch[2] + combinedBrowserCommandMatch[3] + ", then clicking " + targetLabel + ".",
+      spokenReply: "Opening " + browser + ", navigating to " + combinedBrowserCommandMatch[2] + combinedBrowserCommandMatch[3] + ", then clicking " + targetLabel + ".",
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: "Open browser, navigate, and click target",
+        multiStepPlan: {
+          planTitle: "Browser navigation and click",
+          spokenIntro: "I will open the browser, navigate to the requested site, inspect the live page, and click the requested target.",
+          steps: [
+            { stepNumber: 1, description: "Open " + browser, actionType: "LAUNCH_APP", params: { app: browser, parameter: browser }, status: "pending", estimatedDurationMs: 800 },
+            { stepNumber: 2, description: "Navigate to " + url, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
+            { stepNumber: 3, description: "Find and click " + targetLabel, actionType: "VISION_CLICK_TARGET", params: { targetLabel }, status: "pending", estimatedDurationMs: 900 }
+          ],
+          spokenCompletion: "The requested page navigation and click are complete.",
+          currentStepIndex: 0,
+          status: "idle"
+        }
+      }
+    };
+  }
   const coordinateClickMatch = message.match(/\bclick\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
   const calculatorButtonMatch = request.match(/\b(?:click|press|select|hit|enter)\s+(?:the\s+)?(?:calculator\s+)?(?:button\s+)?([0-9])(?:\s+button)?\b/i);
   const activeCalculatorRequest = /\bcalculator\b/.test(request);
