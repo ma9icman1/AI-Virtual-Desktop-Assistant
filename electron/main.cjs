@@ -687,10 +687,10 @@ public static class MagicLaunchFocusV2 { [DllImport("user32.dll")] public static
 }
 Start-Sleep -Milliseconds 500
 `, [requested]);
-    // [desktop-actions] launch focus repair
-    const focusScript = "Add-Type @'\nusing System;\nusing System.Runtime.InteropServices;\npublic static class MagicLaunchFocus { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\n'@\n$proc = Get-Process -Name '" + verifyTarget.replace(/'/g, "''") + "' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1\nif ($proc) { [MagicLaunchFocus]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null }\n";
-    await runPowerShell(focusScript);
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    // The launch-focus v2 block above already focuses the window.
+    // Do not run a second no-argument PowerShell script here because runPowerShell
+    // initializes $scriptArgs from MAGIC_RUN_ARGS, and an empty argument list can
+    // make ConvertFrom-Json fail before the application action completes.
     if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, process: requested };
   }
