@@ -436,7 +436,10 @@ export default function App() {
         })),
       });
       if (!steps.length) {
-        throw new Error("The assistant created an empty desktop action plan.");
+        setAssistantState("error");
+        setShowActivityPanel(false);
+        VoiceEngine.speak("The assistant created an empty desktop action plan.", () => setAssistantState("idle"));
+        return;
       }
 
       for (let i = 0; i < steps.length; i++) {
