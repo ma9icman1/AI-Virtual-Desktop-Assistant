@@ -73,18 +73,66 @@ public static class MagicTextInput {
   }
 `;
 
+const keyPressBlock = `  'KEY_PRESS' {
+    $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
+    $vk = switch ($key) {
+      'ENTER' { 0x0D }
+      'RETURN' { 0x0D }
+      'TAB' { 0x09 }
+      'ESC' { 0x1B }
+      'ESCAPE' { 0x1B }
+      'BACKSPACE' { 0x08 }
+      'SPACE' { 0x20 }
+      'LEFT' { 0x25 }
+      'UP' { 0x26 }
+      'RIGHT' { 0x27 }
+      'DOWN' { 0x28 }
+      'DELETE' { 0x2E }
+      'HOME' { 0x24 }
+      'END' { 0x23 }
+      'PAGEUP' { 0x21 }
+      'PAGEDOWN' { 0x22 }
+      'F1' { 0x70 }; 'F2' { 0x71 }; 'F3' { 0x72 }; 'F4' { 0x73 }
+      'F5' { 0x74 }; 'F6' { 0x75 }; 'F7' { 0x76 }; 'F8' { 0x77 }
+      'F9' { 0x78 }; 'F10' { 0x79 }; 'F11' { 0x7A }; 'F12' { 0x7B }
+      default { if ($key.Length -eq 1) { [byte][char]$key[0] } else { 0 } }
+    }
+    if (-not $vk) { throw "Unsupported key: $key" }
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicKeyInput {
+  [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+  public const uint KEYUP = 0x0002;
+}
+'@
+    [MagicKeyInput]::keybd_event([byte]$vk, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 40
+    [MagicKeyInput]::keybd_event([byte]$vk, 0, [MagicKeyInput]::KEYUP, [UIntPtr]::Zero)
+    Write-Host "[KEY_PRESS] Complete: $key"
+  }
+`;
+
+const waitBlock = `  'WAIT' {
+    $ms = [int]$scriptArgs[3]
+    if ($ms -lt 0 -or $ms -gt 10000) { throw "WAIT duration is outside the allowed range." }
+    Start-Sleep -Milliseconds $ms
+  }
+`;
+
 // Replace an existing TYPE_TEXT case, regardless of its previous implementation.
-// Accept both quote styles because older patches used double quotes.
 const existingCase = /  ['\"]TYPE_TEXT['\"]\s*\{[\s\S]*?(?=\n\s*['\"]KEY_PRESS['\"]\s*\{)/;
 if (existingCase.test(text)) {
   text = text.replace(existingCase, newBlock);
+  if (!/['\"]KEY_PRESS['\"]\s*\{/.test(text)) {
+    text = text.replace(/\n\s*}\`;\s*\n/, `\n${keyPressBlock}${waitBlock}  }\`;\n`);
+  }
   fs.writeFileSync(electronFile, text, "utf8");
   console.log("[desktop-input] Installed Win32 Unicode SendInput TYPE_TEXT handler.");
   process.exit(0);
 }
 
-// If a previous repair removed TYPE_TEXT entirely, insert it immediately before
-// the KEY_PRESS case instead of failing the entire build.
+// If a previous repair removed TYPE_TEXT entirely but KEY_PRESS remains, insert TYPE_TEXT.
 const keyPressCase = /\n\s*['\"]KEY_PRESS['\"]\s*\{/;
 if (keyPressCase.test(text)) {
   text = text.replace(keyPressCase, `\n${newBlock}  'KEY_PRESS' {`);
@@ -93,5 +141,16 @@ if (keyPressCase.test(text)) {
   process.exit(0);
 }
 
-console.warn("[desktop-input] No TYPE_TEXT/KEY_PRESS switch block found; leaving electron/main.cjs unchanged.");
+// Current fallback: some repair passes removed BOTH TYPE_TEXT and KEY_PRESS from
+// the PowerShell switch. Insert the complete input cases immediately before the
+// switch's closing brace. The distinctive SCROLL case keeps this targeted.
+const switchEndPattern = /(  'SCROLL'\s*\{[\s\S]*?\n  \}\n)(  \}\`;)/;
+if (switchEndPattern.test(text)) {
+  text = text.replace(switchEndPattern, `$1${newBlock}${keyPressBlock}${waitBlock}$2`);
+  fs.writeFileSync(electronFile, text, "utf8");
+  console.log("[desktop-input] TYPE_TEXT/KEY_PRESS/WAIT cases were missing; inserted all three handlers.");
+  process.exit(0);
+}
+
+console.warn("[desktop-input] No compatible input switch block found; leaving electron/main.cjs unchanged.");
 process.exit(0);
