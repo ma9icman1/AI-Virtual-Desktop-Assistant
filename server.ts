@@ -69,6 +69,17 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     [/\b(opera|vivaldi)\b/, "browser"],
   ];
   const requestedApp = appAliases.find(([pattern]) => pattern.test(request))?.[1];
+  // Multi-action open-and-type support
+  const openAndTypeMatch = commandText.match(/^(?:please\s+)?(?:open|launch|start|run)\s+(notepad|calculator|paint|explorer|files|terminal|task manager|taskmgr|chrome|edge|brave|firefox)(?:\s+and\s+then|\s+then|\s+and)\s+(?:type|enter|write)\s+(.+)$/i);
+  if (openAndTypeMatch) {
+    const openTypeApps: Record<string, string> = { notepad: "notepad", calculator: "calculator", paint: "paint", explorer: "explorer", files: "explorer", terminal: "terminal", "task manager": "taskmgr", taskmgr: "taskmgr", chrome: "chrome", edge: "edge", brave: "brave", firefox: "firefox" };
+    const openTypeApp = openTypeApps[openAndTypeMatch[1].toLowerCase()];
+    const openTypeText = openAndTypeMatch[2].replace(/\s+(?:and\s+)?(?:press|hit)\s+enter\s*$/i, "").trim();
+    if (openTypeApp && openTypeText) {
+      return { ...parsed, spokenResponse: "Opening " + openTypeApp + " and typing your text.", spokenReply: "Opening " + openTypeApp + " and typing your text.", action: { type: "MULTI_STEP_PLAN", description: "Open " + openTypeApp + " and type text", multiStepPlan: { planTitle: "Open and type", spokenIntro: "I will open " + openTypeApp + ", focus it, and type your text.", steps: [ { stepNumber: 1, description: "Open " + openTypeApp, actionType: "LAUNCH_APP", params: { app: openTypeApp }, status: "pending", estimatedDurationMs: 1200 }, { stepNumber: 2, description: "Type the requested text", actionType: "TYPE_INPUT", params: { text: openTypeText }, status: "pending", estimatedDurationMs: 500 } ], spokenCompletion: "Done.", currentStepIndex: 0, status: "idle" } } };
+    }
+  }
+
   const asksToOpen = /\b(open|launch|start|load|run)\b/.test(request);
   const websiteUrlMatch = commandText.match(
     /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s*(https?:\/\/)?((?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
@@ -291,6 +302,124 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
       },
     };
   }
+  // Deterministic voice desktop commands. These run before the general AI intent so
+  // common commands do not depend on model formatting.
+  const desktopVoiceWindowMatch = request.match(/\b(?:switch|focus|bring)\s+(?:to\s+)?(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceOpenTypeMatch = request.match(/\b(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s+and\s+(?:type|write|enter)\s+["']?(.+?)["']?\s*$/i);
+  const desktopVoiceOpenMatch = request.match(/\b(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceCloseMatch = request.match(/\b(?:close|quit|exit|kill)\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceMinMatch = request.match(/\bminimi[sz]e\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceMaxMatch = request.match(/\bmaximi[sz]e\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceRestoreMatch = request.match(/\brestore\s+(?:the\s+)?(.+?)\s*$/i);
+  const desktopVoiceTypeMatch = message.match(/\b(?:type|write|enter)\s+["']?(.+?)["']?\s*$/i);
+  const desktopVoiceKeyMatch = request.match(/\b(?:press|hit)\s+(.+?)\s*$/i);
+  const desktopVoiceClickMatch = request.match(/\b(double[- ]?click|right[- ]?click|click)\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
+  const desktopVoiceMoveMatch = request.match(/\b(?:move|put)\s+(?:the\s+)?mouse\s+(?:to\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
+  const desktopVoiceScrollMatch = request.match(/\bscroll\s+(up|down)(?:\s+(\d+))?/i);
+  const desktopVoiceFolderMatch = message.match(/\b(?:open|go\s+to)\s+(?:the\s+)?folder\s+["']?(.+?)["']?\s*$/i);
+  const desktopVoiceFileMatch = message.match(/\b(?:open|load)\s+(?:the\s+)?file\s+["']?(.+?)["']?\s*$/i);
+
+  const makePlan = (title, description, steps, completion) => ({
+    ...parsed,
+    action: { type: "MULTI_STEP_PLAN", description, multiStepPlan: {
+      planTitle: title, spokenIntro: description, steps, spokenCompletion: completion, currentStepIndex: 0, status: "idle"
+    } }
+  });
+
+  // Handle the common combined command as one deterministic plan. This must
+  // run before the generic open/type handlers so "notepad and type hello"
+  // isn't interpreted as an application literally named "notepad and type hello".
+  if (desktopVoiceOpenTypeMatch && !requestedApp) {
+    const app = desktopVoiceOpenTypeMatch[1].trim();
+    const textToType = desktopVoiceOpenTypeMatch[2].trim().replace(/\s+[0-9]+$/, "");
+    return makePlan("Open " + app + " and type", "I will open " + app + " and type " + textToType + ".", [
+      { stepNumber: 1, description: "Open " + app, actionType: "LAUNCH_APP", params: { app, parameter: app }, status: "pending", estimatedDurationMs: 800 },
+      { stepNumber: 2, description: "Type " + textToType, actionType: "TYPE_INPUT", params: { text: textToType }, status: "pending", estimatedDurationMs: 500 }
+    ], "Text entered.");
+  }
+
+  if (desktopVoiceMoveMatch) {
+    const x = Number(desktopVoiceMoveMatch[1]); const y = Number(desktopVoiceMoveMatch[2]);
+    return makePlan("Move mouse to " + x + ", " + y, "I will move the mouse to " + x + ", " + y + ".", [
+      { stepNumber: 1, description: "Move mouse to " + x + ", " + y, actionType: "MOVE_MOUSE", params: { x, y }, status: "pending", estimatedDurationMs: 400 }
+    ], "Mouse moved.");
+  }
+
+  if (desktopVoiceClickMatch) {
+    const kind = desktopVoiceClickMatch[1].toLowerCase(); const x = Number(desktopVoiceClickMatch[2]); const y = Number(desktopVoiceClickMatch[3]);
+    const actionType = kind.startsWith("double") ? "DOUBLE_CLICK" : kind.startsWith("right") ? "RIGHT_CLICK" : "CLICK_BUTTON";
+    return makePlan(kind + " at " + x + ", " + y, "I will " + kind + " at " + x + ", " + y + ".", [
+      { stepNumber: 1, description: kind + " at " + x + ", " + y, actionType, params: { x, y }, status: "pending", estimatedDurationMs: 300 }
+    ], "Done.");
+  }
+
+  if (desktopVoiceScrollMatch) {
+    const direction = desktopVoiceScrollMatch[1].toLowerCase(); const count = Math.min(12, Math.max(1, Number(desktopVoiceScrollMatch[2] || 1)));
+    const key = direction === "up" ? "{PGUP}" : "{PGDN}";
+    return makePlan("Scroll " + direction, "I will scroll " + direction + ".", [
+      { stepNumber: 1, description: "Scroll " + direction, actionType: "SCROLL", params: { x: 640, y: 400, key: Array(count).fill(key).join("") }, status: "pending", estimatedDurationMs: 250 }
+    ], "Done.");
+  }
+
+  if (desktopVoiceMinMatch || desktopVoiceMaxMatch || desktopVoiceRestoreMatch) {
+    const match = desktopVoiceMinMatch || desktopVoiceMaxMatch || desktopVoiceRestoreMatch;
+    const actionType = desktopVoiceMinMatch ? "MINIMIZE_APP" : desktopVoiceMaxMatch ? "MAXIMIZE_APP" : "RESTORE_APP";
+    const app = match[1].trim();
+    const verb = actionType === "MINIMIZE_APP" ? "minimize" : actionType === "MAXIMIZE_APP" ? "maximize" : "restore";
+    return makePlan(verb + " " + app, "I will " + verb + " " + app + ".", [
+      { stepNumber: 1, description: verb + " " + app, actionType, params: { app, parameter: app }, status: "pending", estimatedDurationMs: 500 }
+    ], "Done.");
+  }
+
+  if (desktopVoiceCloseMatch) {
+    const app = desktopVoiceCloseMatch[1].trim();
+    return makePlan("Close " + app, "I will close " + app + ".", [
+      { stepNumber: 1, description: "Close " + app, actionType: "CLOSE_APP", params: { app, parameter: app }, status: "pending", estimatedDurationMs: 500 }
+    ], app + " closed.");
+  }
+
+  if (desktopVoiceWindowMatch && !/\b(?:what|where|which)\b/.test(request)) {
+    const app = desktopVoiceWindowMatch[1].trim();
+    return makePlan("Switch to " + app, "I will switch to " + app + ".", [
+      { stepNumber: 1, description: "Focus " + app, actionType: "FOCUS_APP", params: { app, parameter: app }, status: "pending", estimatedDurationMs: 500 }
+    ], app + " is focused.");
+  }
+
+  if (desktopVoiceFolderMatch) {
+    const folder = desktopVoiceFolderMatch[1].trim();
+    return makePlan("Open folder", "I will open the folder " + folder + ".", [
+      { stepNumber: 1, description: "Open folder " + folder, actionType: "OPEN_FOLDER", params: { path: folder, parameter: folder }, status: "pending", estimatedDurationMs: 700 }
+    ], "Folder opened.");
+  }
+
+  if (desktopVoiceFileMatch) {
+    const file = desktopVoiceFileMatch[1].trim();
+    return makePlan("Open file", "I will open the file " + file + ".", [
+      { stepNumber: 1, description: "Open file " + file, actionType: "OPEN_FILE", params: { path: file, parameter: file }, status: "pending", estimatedDurationMs: 700 }
+    ], "File opened.");
+  }
+
+  if (desktopVoiceTypeMatch && !/\b(?:what|who|where|when|why|how)\b/.test(request)) {
+    const textToType = desktopVoiceTypeMatch[1].trim().replace(/\s+[0-9]+$/, "");
+    return makePlan("Type text", "I will type " + textToType + ".", [
+      { stepNumber: 1, description: "Type " + textToType, actionType: "TYPE_INPUT", params: { text: textToType }, status: "pending", estimatedDurationMs: 400 }
+    ], "Text entered.");
+  }
+
+  if (desktopVoiceKeyMatch && /\b(?:enter|return|tab|escape|esc|backspace|delete|space|up|down|left|right|home|end|page up|page down|ctrl|control|alt|shift|win|windows)\b/i.test(desktopVoiceKeyMatch[1])) {
+    const key = desktopVoiceKeyMatch[1].trim().toLowerCase().replace(/\bcontrol\b/g, "ctrl").replace(/\bescape\b/g, "esc").replace(/\bwindows\b/g, "win");
+    return makePlan("Press " + key, "I will press " + key + ".", [
+      { stepNumber: 1, description: "Press " + key, actionType: "KEY_PRESS", params: { key }, status: "pending", estimatedDurationMs: 250 }
+    ], "Done.");
+  }
+
+  if (desktopVoiceOpenMatch && !requestedApp) {
+    const app = desktopVoiceOpenMatch[1].trim();
+    return makePlan("Open " + app, "I will open " + app + ".", [
+      { stepNumber: 1, description: "Open " + app, actionType: "LAUNCH_APP", params: { app, parameter: app }, status: "pending", estimatedDurationMs: 800 }
+    ], app + " opened.");
+  }
+
   if (requestedApp && asksToOpen && parsed?.action?.type !== "LAUNCH_APP" && parsed?.action?.type !== "MULTI_STEP_PLAN") {
     return {
       ...parsed,

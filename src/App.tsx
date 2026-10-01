@@ -276,6 +276,9 @@ export default function App() {
       FOCUS_APP: { action: "FOCUS_APP", params: { app: params.app || params.parameter || "" } },
       CLOSE_APP: { action: "CLOSE_APP", params: { app: params.app || params.parameter || "" } },
       OPEN_FOLDER: { action: "OPEN_FOLDER", params: { path: params.path || params.parameter || "" } },
+      MINIMIZE_APP: { action: "MINIMIZE_APP", params: { app: params.app || params.parameter || "" } },
+      MAXIMIZE_APP: { action: "MAXIMIZE_APP", params: { app: params.app || params.parameter || "" } },
+      RESTORE_APP: { action: "RESTORE_APP", params: { app: params.app || params.parameter || "" } },
       GET_ACTIVE_WINDOW: { action: "GET_ACTIVE_WINDOW", params: {} },
       INSPECT_UI_TREE: { action: "INSPECT_UI_TREE", params: { process: params.process || "", maxDepth: params.maxDepth, maxNodes: params.maxNodes, activeOnly: params.activeOnly !== false, includeUnnamed: params.includeUnnamed === true } },
       FIND_UI_ELEMENT: { action: "FIND_UI_ELEMENT", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process } },
@@ -604,7 +607,7 @@ export default function App() {
       await VoiceEngine.startListening();
       setIsListening(true);
       setAssistantState("listening");
-      setVoiceNotice("Wake word active — say ma9icAI.");
+      setVoiceNotice("Wake word active — say Magic.");
     } catch (error) {
       VoiceEngine.setWakeWordMode(false);
       setIsListening(false);
@@ -822,6 +825,32 @@ export default function App() {
       setAudioLevel(0);
       setVoiceNotice(null);
     } else {
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
       setIsListening(true);
       setAssistantState("listening");
       setVoiceNotice("Starting microphone…");
@@ -937,7 +966,7 @@ export default function App() {
         // "Turn off mic" exits active command mode and returns to local
         // wake-word standby, so the assistant can still be awakened hands-free.
         void armWakeWord();
-        VoiceEngine.speak("Microphone commands are off. Say ma9icAI when you need me.");
+        VoiceEngine.speak("Microphone is off. Click the mic when you want to talk.");
         return;
       }
 
@@ -982,11 +1011,7 @@ export default function App() {
       VoiceEngine.stopListening();
     };
   }, [armWakeWord, handleSendMessage, triggerMagicGreeting]);
-
-  useEffect(() => {
-    const greetingTimer = window.setTimeout(() => triggerMagicGreeting(false), 900);
-    return () => window.clearTimeout(greetingTimer);
-  }, [triggerMagicGreeting]);
+  // Microphone starts OFF. User enables voice by clicking the round mic button.
 
   const dashboardPrompts = [
     { title: 'Open Chrome', sub: 'Launch applications', icon: <AppWindow />, prompt: 'Open Chrome' },

@@ -249,6 +249,7 @@ async function startWhisperProcess(window) {
 
 /* desktop execution policy hardening v1 */
 function runPowerShell(script, args = []) {
+  console.log(`[DEBUG PS] args=${JSON.stringify(args.map((value) => String(value ?? "")))}`);
   return new Promise((resolve, reject) => {
     const scriptArgs = JSON.stringify(args.map((value) => String(value ?? "")));
     const safeScript = "$scriptArgs = ConvertFrom-Json $env:MAGIC_RUN_ARGS;\n" + script;
@@ -262,8 +263,13 @@ function runPowerShell(script, args = []) {
         env: { ...process.env, MAGIC_RUN_ARGS: scriptArgs },
       },
       (error, stdout, stderr) => {
-        if (error) reject(new Error(stderr.trim() || error.message));
-        else resolve(stdout.trim());
+        if (error) {
+          console.error(`[DEBUG PS] ERROR stdout=${JSON.stringify(stdout)} stderr=${JSON.stringify(stderr)} message=${error.message}`);
+          reject(new Error(stderr.trim() || error.message));
+        } else {
+          console.log(`[DEBUG PS] OK stdout=${JSON.stringify(stdout)} stderr=${JSON.stringify(stderr)}`);
+          resolve(stdout.trim());
+        }
       }
     );
   });
@@ -512,6 +518,7 @@ async function verifyProcessRunning(processName, attempts = 12, delayMs = 250) {
     chrome: ["chrome"],
     brave: ["brave"],
     firefox: ["firefox"],
+      roblox: ["C:\\Users\\ma9ic\\AppData\\Local\\Roblox\\Versions\\version-2366ba214ec740ca\\RobloxPlayerBeta.exe"],
   };
   const names = verificationNames[normalized] || [normalized];
   const escapedNames = names.map((name) => `'${name.replace(/'/g, "''")}'`).join(",");
@@ -521,7 +528,7 @@ async function verifyProcessRunning(processName, attempts = 12, delayMs = 250) {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const result = await runPowerShell(script).catch(() => "");
-    if (/^\\d+$/.test(String(result).trim())) return true;
+    if (/^\d+$/.test(String(result).trim())) return true;
     if (attempt < attempts - 1) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -603,6 +610,7 @@ foreach ($el in $elements) {
 }
 
 async function executeDesktopAction(action, params = {}) {
+  console.log(`[DEBUG ACTION] action=${JSON.stringify(action)} params=${JSON.stringify(params)}`);
   if (desktopKilled || !["one_action", "one_session", "always"].includes(desktopPermission)) {
     throw new Error("Desktop control is not permitted.");
   }
@@ -658,8 +666,29 @@ async function executeDesktopAction(action, params = {}) {
     });
     child.unref();
     const verifyTarget = normalizeProcessName(target);
-    const verified = await verifyProcessRunning(verifyTarget);
+    const verified = path.isAbsolute(target)
+      ? true
+      : await verifyProcessRunning(verifyTarget);
     if (!verified) throw new Error(`Windows started ${requested}, but the process could not be verified.`);
+    // [desktop-input] launch focus v2
+    await runPowerShell(`
+$processName = $scriptArgs[0]
+$proc = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if ($proc) {
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicLaunchFocusV2 { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow); }
+'@
+  [void][MagicLaunchFocusV2]::ShowWindowAsync($proc.MainWindowHandle, 9)
+  [void][MagicLaunchFocusV2]::SetForegroundWindow($proc.MainWindowHandle)
+}
+Start-Sleep -Milliseconds 500
+`, [requested]);
+    // [desktop-actions] launch focus repair
+    const focusScript = "Add-Type @'\nusing System;\nusing System.Runtime.InteropServices;\npublic static class MagicLaunchFocus { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\n'@\n$proc = Get-Process -Name '" + verifyTarget.replace(/'/g, "''") + "' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1\nif ($proc) { [MagicLaunchFocus]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null }\n";
+    await runPowerShell(focusScript);
+    await new Promise((resolve) => setTimeout(resolve, 180));
     if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, process: requested };
   }
@@ -824,6 +853,27 @@ try {
   if (action === "DETECT_WEBPAGE") {
     return await detectWebpage(params);
   }
+  if (["MINIMIZE_APP", "MAXIMIZE_APP", "RESTORE_APP"].includes(action)) {
+    const requested = normalizeProcessName(params.app);
+    const processName = resolveAutomationProcessName(requested);
+    if (!requested) throw new Error("No application was provided for window control.");
+    const mode = action === "MINIMIZE_APP" ? 6 : action === "MAXIMIZE_APP" ? 3 : 9;
+    const psLines = [
+      "Add-Type @'",
+      "using System;",
+      "using System.Runtime.InteropServices;",
+      "public static class MagicWindowState {",
+      "  [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);",
+      "}",
+      "'@",
+      "$proc = Get-Process -Name '" + processName.replace(/'/g, "''") + "' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
+      "if (-not $proc) { throw 'No visible window was found.' }",
+      "[MagicWindowState]::ShowWindow($proc.MainWindowHandle, " + mode + ") | Out-Null",
+    ].join("\n");
+    await runPowerShell(psLines);
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, process: requested, action };
+  }
   const supportedInputActions = new Set([
     "MOVE_MOUSE",
     "CLICK",
@@ -891,16 +941,18 @@ switch ($action) {
   'RIGHT_CLICK' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); [MagicInput]::mouse_event(8,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(16,0,0,0,[UIntPtr]::Zero) }
   'DOUBLE_CLICK' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); 1..2 | ForEach-Object { [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80 } }
   'DRAG' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); [MagicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 100; [MagicInput]::SetCursorPos([int]$scriptArgs[4], [int]$scriptArgs[5]); Start-Sleep -Milliseconds 100; [MagicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
-  'SCROLL' { [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2]); Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($scriptArgs[3]) }
-  'TYPE_TEXT' { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($scriptArgs[1]) }
-  'KEY_PRESS' { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($scriptArgs[1]) }
-  'WAIT' { Start-Sleep -Milliseconds ([int]$scriptArgs[1]) }
-}`;
+  'SCROLL' {
+    [MagicInput]::SetCursorPos([int]$scriptArgs[1], [int]$scriptArgs[2])
+    [MagicInput]::mouse_event(0x0800, 0, 0, [int]$scriptArgs[3], [UIntPtr]::Zero)
+  }
+  }`;
 
   const endX = scalePoint(params.endX, display.size.width, AI_SCREEN_WIDTH);
   const endY = scalePoint(params.endY, display.size.height, AI_SCREEN_HEIGHT);
-  const actionArgs = [action, String(x), String(y), String(params.text || params.key || params.app || params.ms || ""), String(endX), String(endY)];
+  const actionArgs = [action, String(x), String(y), String(params.text ?? params.key ?? params.app ?? params.ms ?? ""), String(endX), String(endY)];
+  console.log(`[DEBUG INPUT] actionArgs=${JSON.stringify(actionArgs)} textParam=${JSON.stringify(params.text)} keyParam=${JSON.stringify(params.key)}`);
   const result = await runPowerShell(script, actionArgs);
+  console.log(`[DEBUG INPUT] result=${JSON.stringify(result)}`);
   if (desktopPermission === "one_action") desktopPermission = "none";
   return result;
 }
@@ -923,7 +975,10 @@ ipcMain.on("desktop-control-permission", (event, level) => {
 
 ipcMain.handle("desktop-control-action", async (event, action, params) => {
   assertTrustedRenderer(event);
-  return executeDesktopAction(action, params);
+  console.log(`[DEBUG IPC] desktop-control-action action=${JSON.stringify(action)} params=${JSON.stringify(params)}`);
+  const result = await executeDesktopAction(action, params);
+  console.log(`[DEBUG IPC] desktop-control-action result=${JSON.stringify(result)}`);
+  return result;
 });
 ipcMain.handle("desktop-capture-screen", async (event) => {
   assertTrustedRenderer(event);
