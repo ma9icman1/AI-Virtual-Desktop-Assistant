@@ -9,41 +9,42 @@ const ROBLOX_EXE = "C:\\Users\\ma9ic\\AppData\\Local\\Roblox\\Versions\\version-
 if (fs.existsSync(electronFile)) {
   let text = fs.readFileSync(electronFile, "utf8");
 
-  // Replace any previous Roblox launcher patch and install one directly before
-  // the normal application-alias validation. This avoids the generic allowlist
-  // rejecting "roblox" and avoids process-name verification races.
-  const launcher = [
-    '    if (requested === "roblox") {',
-    `      const robloxTarget = ${JSON.stringify(ROBLOX_EXE)};`,
-    '      if (!fs.existsSync(robloxTarget)) throw new Error("RobloxPlayerBeta.exe was not found at: " + robloxTarget);',
-    '      const child = spawn(robloxTarget, [], { detached: true, stdio: "ignore", windowsHide: true });',
-    '      await new Promise((resolve, reject) => {',
-    '        child.once("error", (error) => reject(new Error("Windows could not launch Roblox: " + error.message)));',
-    '        child.once("spawn", resolve);',
-    '      });',
-    '      child.unref();',
-    '      if (desktopPermission === "one_action") desktopPermission = "none";',
-    '      return { ok: true, verified: true, process: "roblox", executable: robloxTarget };',
-    '    }',
-    ''
-  ].join("\n");
+  // Replace the entire aliases section so any older malformed Roblox injection
+  // is removed before the desktop launch code is rebuilt.
+  const aliasesPattern = /    const aliases = \{[\s\S]*?\n    \};\n    const candidates = aliases\[requested\];/;
+  const aliasesReplacement = `    const aliases = {
+      notepad: ["notepad.exe"],
+      calculator: ["calc.exe"],
+      paint: ["mspaint.exe"],
+      explorer: ["explorer.exe"],
+      files: ["explorer.exe"],
+      terminal: ["wt.exe"],
+      taskmgr: ["taskmgr.exe"],
+      roblox: [${JSON.stringify(ROBLOX_EXE)}],
+    };
+    const candidates = aliases[requested];`;
 
-  // Remove every old generated Roblox block immediately before the aliases table.
-  text = text.replace(/\n\s*if \(requested === ["']roblox["']\) \{[\s\S]*?\n\s*\}\n(?=\s*const aliases = \{)/g, "\n");
-
-  const marker = /\n\s*const aliases = \{/;
-  if (marker.test(text)) {
-    text = text.replace(marker, "\n" + launcher + "    const aliases = {");
-  } else {
-    throw new Error("[roblox] Could not find the desktop application aliases block in electron/main.cjs");
+  if (!aliasesPattern.test(text)) {
+    throw new Error("[roblox] Could not find the desktop application aliases section in electron/main.cjs");
   }
+  text = text.replace(aliasesPattern, aliasesReplacement);
+
+  // Absolute executable paths such as RobloxPlayerBeta.exe are verified by a
+  // successful spawn; normal executable names keep their process verification.
+  const verificationPattern = /    const verifyTarget = normalizeProcessName\(target\);\n    const verified = await verifyProcessRunning\(verifyTarget\);/;
+  const verificationReplacement = `    const verified = path.isAbsolute(target)
+      ? true
+      : await verifyProcessRunning(normalizeProcessName(target));`;
+
+  if (!verificationPattern.test(text)) {
+    throw new Error("[roblox] Could not find the desktop launch verification block in electron/main.cjs");
+  }
+  text = text.replace(verificationPattern, verificationReplacement);
 
   fs.writeFileSync(electronFile, text, "utf8");
-  console.log("[roblox] Installed fixed direct RobloxPlayerBeta.exe launcher.");
+  console.log("[roblox] Installed safe direct RobloxPlayerBeta.exe launcher.");
 }
 
-// The voice planner already normalizes the spoken command to "roblox" in the
-// current build. Keep this script focused on the native launch implementation.
 if (fs.existsSync(serverFile)) {
   console.log("[roblox] Voice command uses the native roblox desktop action.");
 }
