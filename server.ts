@@ -110,6 +110,46 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
   );
   const coordinateClickMatch = message.match(/\bclick\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
+  const calculatorButtonMatch = request.match(/\\b(?:click|press|select|hit|enter)\\s+(?:the\\s+)?(?:calculator\\s+)?(?:button\\s+)?([0-9])(?:\\s+button)?\\b/i);
+  const activeCalculatorRequest = /\\bcalculator\\b/.test(request);
+  if (calculatorButtonMatch && activeCalculatorRequest) {
+    const digit = calculatorButtonMatch[1];
+    return {
+      ...parsed,
+      spokenResponse: `I will press the Calculator ${digit} button.`,
+      spokenReply: `I will press the Calculator ${digit} button.`,
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: `Press Calculator button ${digit}`,
+        multiStepPlan: {
+          planTitle: `Calculator: ${digit}`,
+          spokenIntro: `I will press the Calculator ${digit} button.`,
+          steps: [
+            {
+              stepNumber: 1,
+              description: `Find Calculator button ${digit}`,
+              actionType: "FIND_UI_ELEMENT",
+              params: { name: digit, controlType: "Button", process: "calculatorapp" },
+              status: "pending",
+              estimatedDurationMs: 500,
+            },
+            {
+              stepNumber: 2,
+              description: `Press Calculator button ${digit}`,
+              actionType: "CLICK_UI_ELEMENT",
+              params: { name: digit, controlType: "Button", process: "calculatorapp" },
+              status: "pending",
+              estimatedDurationMs: 300,
+            },
+          ],
+          spokenCompletion: `Calculator button ${digit} was pressed.`,
+          currentStepIndex: 0,
+          status: "idle",
+        },
+      },
+    };
+  }
+
   const visibleElements = Array.isArray(visionContext?.detectedElements) ? visionContext.detectedElements : [];
   const targetElement = visibleElements.find((element: any) => {
     const label = String(element.label || "").toLowerCase();
