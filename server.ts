@@ -1146,11 +1146,22 @@ app.post("/api/vision/analyze", async (req, res) => {
     }
 
     const cleanBase64 = rawImage.replace(/^data:image\/\w+;base64,/, "");
+    const visionWidth = Math.max(1, Math.round(Number(req.body.visionWidth) || 1280));
+    const visionHeight = Math.max(1, Math.round(Number(req.body.visionHeight) || 720));
+    const sourceWidth = Math.max(1, Math.round(Number(req.body.sourceWidth) || visionWidth));
+    const sourceHeight = Math.max(1, Math.round(Number(req.body.sourceHeight) || visionHeight));
+    const coordinateMetadata = {
+      coordinateSpace: "vision",
+      visionWidth,
+      visionHeight,
+      sourceWidth,
+      sourceHeight,
+    };
     const visionSystemPrompt = `You are a fast desktop UI detector.
 Return ONLY valid JSON, with no markdown.
 Use exactly this compact shape:
 {"summary":"short sentence","activeApplication":"focused app","detectedElements":[{"type":"button|input|menu|tab|text|window","label":"short label","boundingBox":{"x":0,"y":0,"width":0,"height":0},"center":{"x":0,"y":0}}]}
-Rules: return at most 8 detectedElements; prioritize clickable/input controls; omit uncertain elements; labels under 6 words; coordinates are pixels in the 1280x800 screenshot; keep the JSON short.`;
+Rules: return at most 8 detectedElements; prioritize clickable/input controls; omit uncertain elements; labels under 6 words; coordinates are pixels in the exact ${visionWidth}x${visionHeight} screenshot; keep the JSON short.`;
 
     const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
 
@@ -1182,6 +1193,7 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
             ? parsed.detectedElements.slice(0, 8).filter((item: any) => item && typeof item === "object")
             : [];
           return res.json({
+            ...coordinateMetadata,
             summary: String(parsed.summary || "Screen examined successfully."),
             openWindows: Array.isArray(parsed.openWindows) ? parsed.openWindows.slice(0, 6) : [],
             activeApplication: String(parsed.activeApplication || "Desktop Workspace"),
@@ -1195,6 +1207,7 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
 
         console.warn("[Ollama] Vision response could not be parsed; returning a safe fallback instead of blocking X-Ray.");
         return res.json({
+          ...coordinateMetadata,
           summary: "I examined your screen. The screenshot was captured, but the local vision model returned malformed structured data.",
           openWindows: ["Active Desktop Workspace"],
           activeApplication: "Main Workspace",
@@ -1210,6 +1223,7 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
         console.warn("[Ollama] Vision analysis error:", ollamaVisionErr.message);
         if (!process.env.GEMINI_API_KEY) {
           return res.json({
+            ...coordinateMetadata,
             summary: "I examined your screen. You have active application content open with readable text and controls.",
             openWindows: ["Active Desktop Workspace"],
             activeApplication: "Main Workspace",
@@ -1261,10 +1275,11 @@ ${visionSystemPrompt}`,
       throw new Error("Could not parse vision analysis response");
     }
 
-    res.json(parsed);
+    res.json({ ...coordinateMetadata, ...parsed });
   } catch (error: any) {
     console.error("Error in /api/vision/analyze:", error);
     res.json({
+      ...coordinateMetadata,
       summary: "I examined your screen. You have active application content open with readable text and controls.",
       openWindows: ["Active Browser", "Editor Workspace"],
       activeApplication: "Main Workspace",
