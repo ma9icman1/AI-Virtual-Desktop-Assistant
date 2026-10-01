@@ -12,8 +12,6 @@ const typeStart = text.indexOf("'TYPE_TEXT' {");
 const keyStart = typeStart === -1 ? -1 : text.indexOf("'KEY_PRESS' {", typeStart);
 
 if (typeStart === -1 || keyStart === -1) {
-  // If another desktop repair has already installed a non-switch TYPE_TEXT
-  // implementation, leave it alone instead of breaking the entire build.
   if (/TYPE_TEXT/.test(text)) {
     console.log("[desktop-input] TYPE_TEXT already present; skipped switch-case repair.");
     process.exit(0);
@@ -23,7 +21,9 @@ if (typeStart === -1 || keyStart === -1) {
 
 const typeHandler = `  'TYPE_TEXT' {
     Add-Type -AssemblyName System.Windows.Forms
-    $value = [string]$scriptArgs[1]
+    # actionArgs layout is: action, x, y, text/key/app/value, endX, endY.
+    # The old handler incorrectly used scriptArgs[1], which is the X coordinate.
+    $value = [string]$scriptArgs[3]
     if ([string]::IsNullOrEmpty($value)) { break }
     $oldClipboard = $null
     try { $oldClipboard = [System.Windows.Forms.Clipboard]::GetText() } catch {}
@@ -40,4 +40,4 @@ const typeHandler = `  'TYPE_TEXT' {
 
 text = text.slice(0, typeStart) + typeHandler + text.slice(keyStart);
 fs.writeFileSync(electronFile, text, "utf8");
-console.log("[desktop-input] Installed robust literal clipboard typing.");
+console.log("[desktop-input] Installed literal clipboard typing using the actual text argument.");
