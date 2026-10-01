@@ -1,4 +1,4 @@
-const { app, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const { NativeComputerControl } = require("./native-computer.cjs");
 
 const nativeComputer = new NativeComputerControl();
@@ -34,11 +34,19 @@ ipcMain.handle = (channel, listener) => {
 
   if (channel === "desktop-capture-screen") {
     return originalHandle(channel, async (event, ...args) => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const wasVisible = window && !window.isDestroyed() && window.isVisible();
+      if (wasVisible) {
+        window.hide();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
       try {
         return await nativeComputer.screenshot({ width: 1280, height: 800 });
       } catch (error) {
         console.warn("[native-computer] screenshot fallback:", error.message);
         return listener(event, ...args);
+      } finally {
+        if (wasVisible && window && !window.isDestroyed()) window.show();
       }
     });
   }
