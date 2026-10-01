@@ -79,6 +79,12 @@ export interface ChatMessage {
 }
 
 export interface VisionDetection {
+  // Coordinates in detectedElements are pixels on this vision canvas.
+  visionWidth?: number;
+  visionHeight?: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  coordinateSpace?: "vision";
   summary: string;
   openWindows: string[];
   activeApplication: string;
