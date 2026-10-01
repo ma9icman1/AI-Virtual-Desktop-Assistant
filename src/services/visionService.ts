@@ -1,6 +1,49 @@
 import { VisionDetection } from "../types";
 
+export interface VisionScreenFrame {
+  image: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  visionWidth: number;
+  visionHeight: number;
+}
+
 export class VisionService {
+  public static async captureScreenFrame(): Promise<VisionScreenFrame> {
+    const nativeCaptureInfo = (window as any).magicDesktop?.captureScreenInfo;
+    if (typeof nativeCaptureInfo === "function") {
+      const frame = await nativeCaptureInfo();
+      if (frame?.image && Number(frame.visionWidth) > 0 && Number(frame.visionHeight) > 0) {
+        return {
+          image: String(frame.image),
+          sourceWidth: Number(frame.sourceWidth) || 0,
+          sourceHeight: Number(frame.sourceHeight) || 0,
+          visionWidth: Number(frame.visionWidth),
+          visionHeight: Number(frame.visionHeight),
+        };
+      }
+    }
+
+    const image = await this.captureScreen();
+    const dimensions = await this.getImageDimensions(image);
+    return {
+      image,
+      sourceWidth: dimensions.width,
+      sourceHeight: dimensions.height,
+      visionWidth: dimensions.width,
+      visionHeight: dimensions.height,
+    };
+  }
+
+  private static getImageDimensions(dataUrl: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
+      image.onerror = () => reject(new Error("Could not determine captured screen dimensions."));
+      image.src = dataUrl;
+    });
+  }
+
   public static async captureScreen(): Promise<string> {
     const nativeCapture = (window as any).magicDesktop?.captureScreen;
     if (typeof nativeCapture === "function") {
