@@ -288,11 +288,11 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   const siteAliasMap: Record<string, string> = { wikipedia: "wikipedia.org", roblox: "roblox.com", youtube: "youtube.com", amazon: "amazon.com", ebay: "ebay.com", reddit: "reddit.com", discord: "discord.com", facebook: "facebook.com", instagram: "instagram.com", tiktok: "tiktok.com", twitter: "twitter.com", x: "x.com" };
   const siteSearchInstructionMatch = commandText.match(/^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)?\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:search\s+(?:bar|box|field)|search|look\s+up)[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
   const siteSearchNaturalMatch = commandText.match(/^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
-  const siteSearchMatch = siteSearchInstructionMatch || siteSearchNaturalMatch;
-  if (siteSearchMatch) {
-    const rawHost = String(siteSearchMatch[1]).replace(/^www\./i, "").toLowerCase();
+  const genericSiteSearchMatch = siteSearchInstructionMatch || siteSearchNaturalMatch;
+  if (genericSiteSearchMatch) {
+    const rawHost = String(genericSiteSearchMatch[1]).replace(/^www\./i, "").toLowerCase();
     const host = siteAliasMap[rawHost] || rawHost;
-    const query = String(siteSearchMatch[2]).trim().replace(/[.!?]+$/g, "");
+    const query = String(genericSiteSearchMatch[2]).trim().replace(/[.!?]+$/g, "");
     if (query) {
       const url = "https://" + host + "/";
       const spoken = "Opening " + host + ", finding its search box, and searching for " + query + ".";
