@@ -659,9 +659,9 @@ async function executeDesktopAction(action, params = {}) {
     if (!candidates) throw new Error(`Application is not allowed: ${requested || "requested app"}.`);
     const target = candidates.find((candidate) => candidate && fs.existsSync(candidate)) || candidates.find((candidate) => /\.exe$/i.test(candidate));
     if (!target) throw new Error(`Could not find application: ${requested || "requested app"}.`);
-    // Launch GUI apps without hiding the application window. Some Windows GUI apps (including
-    // modern Notepad) can be started successfully while their window remains hidden if
-    // windowsHide is used on the detached child process.\n    const child = spawn(target, [], { detached: true, stdio: "ignore", windowsHide: false });
+    // Launch GUI apps without hiding the application window.
+    // Keep the child declaration on its own real source line.
+    const child = spawn(target, [], { detached: true, stdio: "ignore", windowsHide: false });
     await new Promise((resolve, reject) => {
       child.once("error", (error) => reject(new Error(`Windows could not launch ${requested || target}: ${error.message}`)));
       child.once("spawn", resolve);
