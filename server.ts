@@ -148,12 +148,14 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   );
   if (combinedBrowserCommandMatch) {
     const browser = combinedBrowserCommandMatch[1].toLowerCase();
-    const url = "https://" + combinedBrowserCommandMatch[2] + combinedBrowserCommandMatch[3];
-    const targetLabel = combinedBrowserCommandMatch[4].replace(/[.!?]+$/g, "").trim();
+    const host = String(combinedBrowserCommandMatch[3] || "").trim();
+    const path = String(combinedBrowserCommandMatch[4] || "").trim();
+    const targetLabel = String(combinedBrowserCommandMatch[5] || "").replace(/[.!?]+$/g, "").trim();
+    const url = "https://" + (combinedBrowserCommandMatch[2] ? "www." : "") + host + path;
     return {
       ...parsed,
-      spokenResponse: "Opening " + browser + ", navigating to " + combinedBrowserCommandMatch[2] + combinedBrowserCommandMatch[3] + ", then clicking " + targetLabel + ".",
-      spokenReply: "Opening " + browser + ", navigating to " + combinedBrowserCommandMatch[2] + combinedBrowserCommandMatch[3] + ", then clicking " + targetLabel + ".",
+      spokenResponse: "Opening " + browser + ", navigating to " + url + ", then clicking " + targetLabel + ".",
+      spokenReply: "Opening " + browser + ", navigating to " + url + ", then clicking " + targetLabel + ".",
       action: {
         type: "MULTI_STEP_PLAN",
         description: "Open browser, navigate, and click target",
@@ -1211,7 +1213,7 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
             },
           ],
           formatJson: true,
-          timeoutMs: 12000,
+          timeoutMs: 30000,
           options: {
             temperature: 0,
             num_ctx: 2048,
