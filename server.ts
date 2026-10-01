@@ -110,7 +110,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
   );
   const coordinateClickMatch = message.match(/\bclick\s+(?:at\s+)?(?:x\s*)?(\d{2,5})\s*(?:,|and)\s*(?:y\s*)?(\d{2,5})\b/i);
-  const calculatorButtonMatch = request.match(/\\b(?:click|press|select|hit|enter)\\s+(?:the\\s+)?(?:calculator\\s+)?(?:button\\s+)?([0-9])(?:\\s+button)?\\b/i);
+  const calculatorButtonMatch = request.match(/\b(?:click|press|select|hit|enter)\s+(?:the\s+)?(?:calculator\s+)?(?:button\s+)?([0-9])(?:\s+button)?\b/i);
   const activeCalculatorRequest = /\\bcalculator\\b/.test(request);
   if (calculatorButtonMatch && activeCalculatorRequest) {
     const digit = calculatorButtonMatch[1];
