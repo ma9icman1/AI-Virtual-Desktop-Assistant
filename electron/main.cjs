@@ -1118,6 +1118,43 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
     if (wasVisible && window && !window.isDestroyed()) window.show();
   }
 });
+ipcMain.handle("desktop-capture-screen-info", async (event) => {
+  assertTrustedRenderer(event);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const wasVisible = window && !window.isDestroyed() && window.isVisible();
+  if (wasVisible) {
+    window.hide();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+
+  try {
+    const display = screen.getPrimaryDisplay();
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: display.size.width, height: display.size.height },
+      fetchWindowIcons: false,
+    });
+    const source = sources.find((candidate) => candidate.display_id === String(display.id)) || sources[0];
+    if (!source || source.thumbnail.isEmpty()) {
+      throw new Error("Windows did not return a desktop screenshot.");
+    }
+    const normalized = source.thumbnail.resize({
+      width: AI_SCREEN_WIDTH,
+      height: AI_SCREEN_HEIGHT,
+      quality: "good",
+    });
+    return {
+      image: `data:image/jpeg;base64,${normalized.toJPEG(60).toString("base64")}`,
+      sourceWidth: display.size.width,
+      sourceHeight: display.size.height,
+      visionWidth: AI_SCREEN_WIDTH,
+      visionHeight: AI_SCREEN_HEIGHT,
+    };
+  } finally {
+    if (wasVisible && window && !window.isDestroyed()) window.show();
+  }
+});
+
 
 function spawnWindowsSpeech(window) {
   const scriptPath = path.join(__dirname, "windows_speech.ps1");
