@@ -264,8 +264,8 @@ export default function App() {
     const coordinates = params.coordinates || {};
     const normalizedType = actionType.toUpperCase();
     const actions: Record<string, { action: string; params: Record<string, any> }> = {
-      MOVE_MOUSE: { action: "MOVE_MOUSE", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
-      CLICK_BUTTON: { action: "CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
+      MOVE_MOUSE: { action: "MOVE_MOUSE", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace, visionWidth: params.visionWidth, visionHeight: params.visionHeight } },
+      CLICK_BUTTON: { action: "CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace, visionWidth: params.visionWidth, visionHeight: params.visionHeight } },
       DOUBLE_CLICK: { action: "DOUBLE_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
       RIGHT_CLICK: { action: "RIGHT_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
       DRAG: { action: "DRAG", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, endX: params.endX, endY: params.endY, coordinateSpace: params.coordinateSpace } },
@@ -293,14 +293,23 @@ export default function App() {
       WAIT: { action: "WAIT", params: { ms: params.ms || params.estimatedDurationMs || 500 } },
     };
     if (normalizedType === "VISION_CLICK_TARGET") {
-      const imageData = await VisionService.captureScreen();
-          console.log("[VISION CLICK] screenshot captured", { bytes: imageData?.length || 0 });
-      console.log("[VISION CLICK TARGET] screenshot captured", { bytes: imageData?.length || 0, targetLabel: params.targetLabel });
+      const frame = await VisionService.captureScreenFrame();
+      const imageData = frame.image;
+      console.log("[VISION CLICK TARGET] screenshot captured", {
+        bytes: imageData?.length || 0,
+        targetLabel: params.targetLabel,
+        visionSize: `${frame.visionWidth}x${frame.visionHeight}`,
+        sourceSize: `${frame.sourceWidth}x${frame.sourceHeight}`,
+      });
       const response = await fetch("/api/vision/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageBase64: imageData,
+          sourceWidth: frame.sourceWidth,
+          sourceHeight: frame.sourceHeight,
+          visionWidth: frame.visionWidth,
+          visionHeight: frame.visionHeight,
           prompt: "Identify the exact visible clickable control matching the target in the CURRENT SCREENSHOT. Return detectedElements with label, type, boundingBox, and center coordinates in the ACTUAL SCREENSHOT PIXEL COORDINATE SYSTEM. If the target is a search bar, return only the site/page search input, not the browser toolbar, address bar, logo, menu, or arbitrary text. Do not return normalized 0-1 or 0-1000 coordinates. Do not guess coordinates. Never use a point near the top-left corner such as (0,0) unless the target is visibly there."
         }),
       });
@@ -333,6 +342,8 @@ export default function App() {
         x: point.x,
         y: point.y,
         coordinateSpace: "vision",
+        visionWidth: Number(vision?.visionWidth) || frame.visionWidth,
+        visionHeight: Number(vision?.visionHeight) || frame.visionHeight,
       });
     }
     const mapped = actions[normalizedType];
@@ -483,6 +494,8 @@ export default function App() {
             coordinates: steps[i].coordinates,
             estimatedDurationMs: steps[i].estimatedDurationMs,
             coordinateSpace: steps[i].params?.coordinateSpace,
+            visionWidth: steps[i].params?.visionWidth,
+            visionHeight: steps[i].params?.visionHeight,
           });
 
           // Web navigation/search is followed immediately by a visual scan so
@@ -547,7 +560,8 @@ export default function App() {
     VoiceEngine.speak("Examining your screen right now.");
 
     try {
-      const base64Image = await VisionService.captureScreen();
+      const frame = await VisionService.captureScreenFrame();
+      const base64Image = frame.image;
       setVisionThumbnail(base64Image);
       // Screen captures belong in the conversation feed, not the Vision placeholder page.
       setActiveSection("Chat");
@@ -557,6 +571,10 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageData: base64Image,
+          sourceWidth: frame.sourceWidth,
+          sourceHeight: frame.sourceHeight,
+          visionWidth: frame.visionWidth,
+          visionHeight: frame.visionHeight,
           instruction:
             "Find the active application and visible actionable controls. Return exact screenshot-pixel boundingBox and center coordinates for each important control.",
         }),
@@ -565,6 +583,11 @@ export default function App() {
       let visionResult: VisionDetection;
       if (response.ok) {
         visionResult = await response.json();
+        visionResult.visionWidth = Number(visionResult.visionWidth) || frame.visionWidth;
+        visionResult.visionHeight = Number(visionResult.visionHeight) || frame.visionHeight;
+        visionResult.sourceWidth = Number(visionResult.sourceWidth) || frame.sourceWidth;
+        visionResult.sourceHeight = Number(visionResult.sourceHeight) || frame.sourceHeight;
+        visionResult.coordinateSpace = "vision";
       } else {
         visionResult = {
           summary: "I examined the screen snapshot and am ready for your next instruction.",
@@ -573,6 +596,11 @@ export default function App() {
           detectedElements: [],
           extractedText: "",
           suggestedActions: ["Ask question", "Run command"],
+          visionWidth: frame.visionWidth,
+          visionHeight: frame.visionHeight,
+          sourceWidth: frame.sourceWidth,
+          sourceHeight: frame.sourceHeight,
+          coordinateSpace: "vision",
         };
       }
       setActiveVision(visionResult);
