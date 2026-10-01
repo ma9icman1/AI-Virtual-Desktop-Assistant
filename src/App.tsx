@@ -851,6 +851,16 @@ export default function App() {
       VoiceEngine.setWakeWordMode(false);
       VoiceEngine.setWakeWordMode(false);
       VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
+      VoiceEngine.setWakeWordMode(false);
       setIsListening(true);
       setAssistantState("listening");
       setVoiceNotice("Starting microphone…");
