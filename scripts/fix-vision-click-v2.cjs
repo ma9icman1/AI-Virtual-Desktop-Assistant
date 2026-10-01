@@ -171,6 +171,52 @@ if (fs.existsSync(serverFile)) {
     if (server.includes(marker)) server = server.replace(marker, injection + marker);
   }
 
+  // Contextual in-site search: when the user names a site/app, SEARCH_WEB must
+  // never take over. Open the named site, then re-scan the live screen for its
+  // search control, type the query, and submit it.
+  if (!server.includes("const contextualSiteSearchMatch = commandText.match")) {
+    const marker = "  if (webSearchMatch) {";
+    const injection = [
+      '  const contextualSiteSearchMatch = commandText.match(',
+      '    /^(?:please\\s+)?(?:(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to)\\s+)?(roblox(?:\\.com)?|youtube(?:\\.com)?|amazon(?:\\.com)?|ebay(?:\\.com)?|reddit(?:\\.com)?|discord(?:\\.com)?|facebook(?:\\.com)?|instagram(?:\\.com)?|tiktok(?:\\.com)?|twitter(?:\\.com)?|x(?:\\.com)?)\\s+(?:and\\s+(?:then\\s+)?)?(?:search|look\\s+up)\\s+(?:on\\s+)?(?:for\\s+)?["\\\']?(.+?)["\\\']?(?:\\s+(?:and\\s+)?(?:press|hit)\\s+enter)?$/i',
+      '  );',
+      '  const searchOnSiteMatch = commandText.match(',
+      '    /^(?:please\\s+)?(?:search|look\\s+up)\\s+(?:on|in|using)\\s+(roblox(?:\\.com)?|youtube(?:\\.com)?|amazon(?:\\.com)?|ebay(?:\\.com)?|reddit(?:\\.com)?|discord(?:\\.com)?|facebook(?:\\.com)?|instagram(?:\\.com)?|tiktok(?:\\.com)?|twitter(?:\\.com)?|x(?:\\.com)?)\\s+(?:for\\s+)?["\\\']?(.+?)["\\\']?(?:\\s+(?:and\\s+)?(?:press|hit)\\s+enter)?$/i',
+      '  );',
+      '',
+      '  const siteSearch = contextualSiteSearchMatch || searchOnSiteMatch;',
+      '  if (siteSearch) {',
+      '    const host = String(siteSearch[1]).replace(/\\.com$/i, "") + ".com";',
+      '    const query = String(siteSearch[2]).trim().replace(/[.!?]+$/g, "");',
+      '    const url = `https://${host}/`;',
+      '    return {',
+      '      ...parsed,',
+      '      spokenResponse: `Opening ${host}, finding its search box, and searching for ${query}.`,',
+      '      spokenReply: `Opening ${host}, finding its search box, and searching for ${query}.`,',
+      '      action: {',
+      '        type: "MULTI_STEP_PLAN",',
+      '        description: `Open ${host} and search it for ${query}`,',
+      '        multiStepPlan: {',
+      '          planTitle: `Search ${host}`,',
+      '          spokenIntro: `I will open ${host}, analyze the current screen, find its search box, and search for ${query}.`,',
+      '          steps: [',
+      '            { stepNumber: 1, description: `Open ${url}`, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },',
+      '            { stepNumber: 2, description: "Find the named site search box on the live screen", actionType: "VISION_CLICK_TARGET", params: { targetLabel: "search bar" }, status: "pending", estimatedDurationMs: 900 },',
+      '            { stepNumber: 3, description: `Type ${query}`, actionType: "TYPE_INPUT", params: { text: query }, status: "pending", estimatedDurationMs: 500 },',
+      '            { stepNumber: 4, description: "Submit the site search", actionType: "KEY_PRESS", params: { key: "~" }, status: "pending", estimatedDurationMs: 300 },',
+      '          ],',
+      '          spokenCompletion: `I searched ${host} for ${query}.`,',
+      '          currentStepIndex: 0,',
+      '          status: "idle",',
+      '        },',
+      '      },',
+      '    };',
+      '  }',
+      '',
+    ].join("\n");
+    if (server.includes(marker)) server = server.replace(marker, injection + marker);
+  }
+
   fs.writeFileSync(serverFile, server, "utf8");
   console.log("[vision-click-v2] Server voice-intent fixes applied.");
 }
