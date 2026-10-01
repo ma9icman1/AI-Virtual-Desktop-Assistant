@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("magicDesktop", {
   setPermission: (level) => ipcRenderer.send("desktop-control-permission", level),
   execute: (action, params) => ipcRenderer.invoke("desktop-control-action", action, params),
   captureScreen: () => ipcRenderer.invoke("desktop-capture-screen"),
+  captureScreenInfo: () => ipcRenderer.invoke("desktop-capture-screen-info"),
   emergencyStop: () => ipcRenderer.send("desktop-control-kill"),
 });
 
