@@ -340,7 +340,7 @@ foreach ($el in $elements) {
     if ($name -and $n -notlike $name) { continue }
     if ($aid -and $a -ne $aid) { continue }
     if ($type -and $ct.ToLowerInvariant() -ne $type) { continue }
-    if ($proc -and $pn.ToLowerInvariant() -ne $proc) { continue }
+    if ($proc -and $pn.ToLowerInvariant() -ne $proc -and !($proc -eq "calculatorapp" -and $pn.ToLowerInvariant() -eq "applicationframehost")) { continue }
     $r = $el.Current.BoundingRectangle
     if ($r.Width -le 0 -or $r.Height -le 0) { continue }
     $matches += [pscustomobject]@{
