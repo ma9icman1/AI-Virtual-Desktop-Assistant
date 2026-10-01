@@ -8,31 +8,34 @@ let text = fs.readFileSync(electronFile, "utf8");
 
 // Desktop action arguments:
 // [action, x, y, text/key/app/value, endX, endY]
-// Use keybd_event's documented Unicode mode for TYPE_TEXT. This avoids the
-// INPUT/union marshaling problem that can make SendInput return 0.
+// TYPE_TEXT uses the Windows clipboard + Ctrl+V. This is much more reliable
+// than synthesizing one Unicode key event per character (which can produce
+// incorrect repeated characters on some Windows keyboard/input configurations).
 const newBlock = `  'TYPE_TEXT' {
     $value = [string]$scriptArgs[3]
     if ([string]::IsNullOrEmpty($value)) { break }
 
+    Add-Type -AssemblyName System.Windows.Forms
     Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class MagicTextInput {
-  [DllImport("user32.dll", SetLastError = true)]
+public static class MagicPasteInput {
+  [DllImport("user32.dll")]
   public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
   public const uint KEYEVENTF_KEYUP = 0x0002;
-  public const uint KEYEVENTF_UNICODE = 0x0004;
-  public static void TypeText(string text) {
-    foreach (char c in text) {
-      keybd_event(0, (byte)(c & 0xFF), KEYEVENTF_UNICODE, UIntPtr.Zero);
-      keybd_event(0, (byte)(c & 0xFF), KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, UIntPtr.Zero);
-    }
-  }
+  public const byte VK_CONTROL = 0x11;
+  public const byte VK_V = 0x56;
 }
 '@
 
     Write-Host "[TYPE_TEXT] Sending text: $value"
-    [MagicTextInput]::TypeText($value)
+    [System.Windows.Forms.Clipboard]::SetText($value)
+    Start-Sleep -Milliseconds 100
+    [MagicPasteInput]::keybd_event([MagicPasteInput]::VK_CONTROL, 0, 0, [UIntPtr]::Zero)
+    [MagicPasteInput]::keybd_event([MagicPasteInput]::VK_V, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 60
+    [MagicPasteInput]::keybd_event([MagicPasteInput]::VK_V, 0, [MagicPasteInput]::KEYEVENTF_KEYUP, [UIntPtr]::Zero)
+    [MagicPasteInput]::keybd_event([MagicPasteInput]::VK_CONTROL, 0, [MagicPasteInput]::KEYEVENTF_KEYUP, [UIntPtr]::Zero)
     Write-Host "[TYPE_TEXT] Complete"
   }
 `;
@@ -73,25 +76,22 @@ const waitBlock = `  'WAIT' {
   }
 `;
 
-// Replace an existing TYPE_TEXT case, regardless of implementation.
 const existingCase = /  ['\"]TYPE_TEXT['\"]\s*\{[\s\S]*?(?=\n\s*['\"]KEY_PRESS['\"]\s*\{)/;
 if (existingCase.test(text)) {
   text = text.replace(existingCase, newBlock);
   fs.writeFileSync(electronFile, text, "utf8");
-  console.log("[desktop-input] Replaced TYPE_TEXT with keybd_event Unicode handler.");
+  console.log("[desktop-input] Replaced TYPE_TEXT with clipboard/paste handler.");
   process.exit(0);
 }
 
-// If TYPE_TEXT is missing but KEY_PRESS remains, insert it immediately before KEY_PRESS.
 const keyPressCase = /\n\s*['\"]KEY_PRESS['\"]\s*\{/;
 if (keyPressCase.test(text)) {
   text = text.replace(keyPressCase, `\n${newBlock}  'KEY_PRESS' {`);
   fs.writeFileSync(electronFile, text, "utf8");
-  console.log("[desktop-input] Inserted keybd_event Unicode TYPE_TEXT handler.");
+  console.log("[desktop-input] Inserted clipboard/paste TYPE_TEXT handler.");
   process.exit(0);
 }
 
-// If both are missing, restore the input cases before the PowerShell switch closes.
 const switchEndPattern = /(  'SCROLL'\s*\{[\s\S]*?\n  \}\n)(  \}\`;)/;
 if (switchEndPattern.test(text)) {
   text = text.replace(switchEndPattern, `$1${newBlock}${keyPressBlock}${waitBlock}$2`);
