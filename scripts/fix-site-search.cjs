@@ -6,10 +6,21 @@ if (!fs.existsSync(serverFile)) process.exit(0);
 
 let server = fs.readFileSync(serverFile, "utf8");
 
-// Route site-specific searches through the live page UI instead of Google.
-if (!server.includes("[site-search-fix] contextual routing installed")) {
-  const marker = "  if (websiteUrlMatch) {";
-  const injection = `  // [site-search-fix] contextual routing installed
+// Route explicit site-search commands through the live page UI instead of Google.
+// This repair must remain non-fatal because newer voice-intent repair scripts can
+// legitimately restructure normalizeDesktopIntent before this script runs.
+if (server.includes("[site-search-fix] contextual routing installed")) {
+  console.log("[site-search-fix] already installed; skipped");
+  process.exit(0);
+}
+
+const marker = "  if (websiteUrlMatch) {";
+if (!server.includes(marker)) {
+  console.log("[site-search-fix] websiteUrlMatch marker changed or already handled; skipped safely");
+  process.exit(0);
+}
+
+const injection = `  // [site-search-fix] contextual routing installed
   const siteSearchCommandMatch = commandText.match(
     /^(?:please\\s+)?(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to)\\s+(roblox(?:\\.com)?|youtube(?:\\.com)?|amazon(?:\\.com)?|ebay(?:\\.com)?|reddit(?:\\.com)?|discord(?:\\.com)?|facebook(?:\\.com)?|instagram(?:\\.com)?|tiktok(?:\\.com)?|twitter(?:\\.com)?|x(?:\\.com)?)\\s+(?:and\\s+)?(?:search|look\\s+up)\\s+(?:on\\s+)?(?:for\\s+)?["']?(.+?)["']?(?:\\s+(?:and\\s+)?(?:press|hit)\\s+enter)?$/i
   );
@@ -49,13 +60,6 @@ if (!server.includes("[site-search-fix] contextual routing installed")) {
 
 `;
 
-  if (!server.includes(marker)) {
-    throw new Error("[site-search-fix] Could not find websiteUrlMatch marker in server.ts");
-  }
-
-  server = server.replace(marker, injection + marker);
-  fs.writeFileSync(serverFile, server, "utf8");
-  console.log("[site-search-fix] contextual routing installed");
-} else {
-  console.log("[site-search-fix] already installed; skipped");
-}
+server = server.replace(marker, injection + marker);
+fs.writeFileSync(serverFile, server, "utf8");
+console.log("[site-search-fix] contextual routing installed");
