@@ -386,7 +386,13 @@ export default function App() {
         stepNumber: 1,
         description: "Click " + (element.label || "selected target"),
         actionType: "CLICK_BUTTON",
-        params: { x: point.x, y: point.y, coordinateSpace: "vision" },
+        params: {
+        x: point.x,
+        y: point.y,
+        coordinateSpace: "vision",
+        visionWidth: activeVision?.visionWidth,
+        visionHeight: activeVision?.visionHeight,
+      },
         status: "pending",
         estimatedDurationMs: 500,
       }],
@@ -409,7 +415,7 @@ export default function App() {
       console.warn("Magic X-Ray target click failed:", error);
       VoiceEngine.speak(describeError(error, "Desktop control is not enabled for that target."));
     }
-  }, [executeDesktopAction, permissionLevel]);
+  }, [executeDesktopAction, permissionLevel, activeVision]);
 
   // Handle Assistant Speech Output
   const handleSpeakText = useCallback((text: string) => {
