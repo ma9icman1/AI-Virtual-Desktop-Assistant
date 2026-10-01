@@ -11,15 +11,15 @@ if (!server.includes("[site-search-fix] contextual routing installed")) {
   const marker = "  if (websiteUrlMatch) {";
   const injection = `  // [site-search-fix] contextual routing installed
   const siteSearchCommandMatch = commandText.match(
-    /^(?:please\\s+)?(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to)\\s+(roblox(?:\\.com)?|youtube(?:\\.com)?|amazon(?:\\.com)?|ebay(?:\\.com)?|reddit(?:\\.com)?|discord(?:\\.com)?|facebook(?:\\.com)?|instagram(?:\\.com)?|tiktok(?:\\.com)?|twitter(?:\\.com)?|x(?:\\.com)?)\\s+(?:and\\s+)?(?:search|look\\s+up)\\s+(?:on\\s+)?(?:for\\s+)?["']?(.+?)["']?(?:\\s+(?:and\\s+)?(?:press|hit)\\s+enter)?$/i
+    /^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)\s+(roblox(?:\.com)?|youtube(?:\.com)?|amazon(?:\.com)?|ebay(?:\.com)?|reddit(?:\.com)?|discord(?:\.com)?|facebook(?:\.com)?|instagram(?:\.com)?|tiktok(?:\.com)?|twitter(?:\.com)?|x(?:\.com)?)\s+(?:and\s+)?(?:search|look\s+up)\s+(?:on\s+)?(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?$/i
   );
   const searchSiteCommandMatch = commandText.match(
-    /^(?:please\\s+)?(?:search|look\\s+up)\\s+(?:on|in|using)\\s+(roblox(?:\\.com)?|youtube(?:\\.com)?|amazon(?:\\.com)?|ebay(?:\\.com)?|reddit(?:\\.com)?|discord(?:\\.com)?|facebook(?:\\.com)?|instagram(?:\\.com)?|tiktok(?:\\.com)?|twitter(?:\\.com)?|x(?:\\.com)?)\\s+(?:for\\s+)?["']?(.+?)["']?(?:\\s+(?:and\\s+)?(?:press|hit)\\s+enter)?$/i
+    /^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s+(roblox(?:\.com)?|youtube(?:\.com)?|amazon(?:\.com)?|ebay(?:\.com)?|reddit(?:\.com)?|discord(?:\.com)?|facebook(?:\.com)?|instagram(?:\.com)?|tiktok(?:\.com)?|twitter(?:\.com)?|x(?:\.com)?)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?$/i
   );
   const siteSearchMatch = siteSearchCommandMatch || searchSiteCommandMatch;
 
   if (siteSearchMatch) {
-    const host = String(siteSearchMatch[1]).replace(/\\.com$/i, "") + ".com";
+    const host = String(siteSearchMatch[1]).replace(/\.com$/i, "") + ".com";
     const query = String(siteSearchMatch[2]).trim().replace(/[.!?]+$/g, "");
     const url = \`https://\${host}/\`;
 
