@@ -1246,7 +1246,7 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
             {
               inlineData: {
                 data: cleanBase64,
-                mimeType: "image/png",
+                mimeType: "image/jpeg",
               },
             },
             {
@@ -1275,7 +1275,7 @@ ${visionSystemPrompt}`,
       throw new Error("Could not parse vision analysis response");
     }
 
-    res.json({ ...coordinateMetadata, ...parsed });
+    res.json({ ...parsed, ...coordinateMetadata });
   } catch (error: any) {
     console.error("Error in /api/vision/analyze:", error);
     res.json({
