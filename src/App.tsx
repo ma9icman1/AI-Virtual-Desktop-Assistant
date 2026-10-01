@@ -423,14 +423,30 @@ export default function App() {
       setAssistantState("executing");
       setShowActivityPanel(true);
 
-      for (let i = 0; i < plan.steps.length; i++) {
+      const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];
+      const steps = rawSteps.filter((step: any) => step && typeof step === "object" && String(step.actionType || "").trim());
+      console.log("[PLAN EXECUTOR] received plan", {
+        title: plan?.planTitle || "",
+        stepCount: rawSteps.length,
+        executableStepCount: steps.length,
+        steps: steps.map((step: any) => ({
+          actionType: step.actionType,
+          description: step.description,
+          params: step.params || {},
+        })),
+      });
+      if (!steps.length) {
+        throw new Error("The assistant created an empty desktop action plan.");
+      }
+
+      for (let i = 0; i < steps.length; i++) {
         if (stopExecutionRef.current) {
           setAssistantState("idle");
           setActivityText("");
           setShowActivityPanel(false);
           return;
         }
-        setActivityText(plan.steps[i].description || `Running step ${i + 1}`);
+        setActivityText(steps[i].description || `Running step ${i + 1}`);
         // Update plan progress
         setMessages((prev) =>
           prev.map((msg) => {
@@ -453,17 +469,22 @@ export default function App() {
         );
 
         try {
-          await executeDesktopAction(plan.steps[i].actionType, {
-            ...plan.steps[i].params,
-            parameter: plan.steps[i].parameter,
-            coordinates: plan.steps[i].coordinates,
-            estimatedDurationMs: plan.steps[i].estimatedDurationMs,
-            coordinateSpace: plan.steps[i].params?.coordinateSpace,
+          console.log("[PLAN EXECUTOR] invoking desktop action", {
+            step: i + 1,
+            actionType: steps[i].actionType,
+            params: steps[i].params || {},
+          });
+          await executeDesktopAction(steps[i].actionType, {
+            ...steps[i].params,
+            parameter: steps[i].parameter,
+            coordinates: steps[i].coordinates,
+            estimatedDurationMs: steps[i].estimatedDurationMs,
+            coordinateSpace: steps[i].params?.coordinateSpace,
           });
 
           // Web navigation/search is followed immediately by a visual scan so
           // ma9icAI starts with a live understanding of the page it just opened.
-          if (["NAVIGATE_URL", "SEARCH_WEB"].includes(String(plan.steps[i].actionType).toUpperCase())) {
+          if (["NAVIGATE_URL", "SEARCH_WEB"].includes(String(steps[i].actionType).toUpperCase())) {
             await new Promise((resolve) => setTimeout(resolve, 700));
             await captureScreenRef.current?.();
           }
