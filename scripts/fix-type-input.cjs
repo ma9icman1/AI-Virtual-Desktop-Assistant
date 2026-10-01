@@ -6,12 +6,7 @@ if (!fs.existsSync(electronFile)) throw new Error("[desktop-input] electron/main
 
 let text = fs.readFileSync(electronFile, "utf8");
 
-const typeStart = text.indexOf("'TYPE_TEXT'");
-const nextActionAfterType = typeStart >= 0
-  ? text.slice(typeStart + 1).search(/\n\s*'[A-Z_]+(?:'|\s*\{)/)
-  : -1;
-
-const typeHandler = `'TYPE_TEXT' {
+const typeHandler = `  'TYPE_TEXT' {
     Add-Type -AssemblyName System.Windows.Forms
     $value = [string]$scriptArgs[1]
     if ([string]::IsNullOrEmpty($value)) { break }
@@ -27,13 +22,16 @@ const typeHandler = `'TYPE_TEXT' {
     }
   }`;
 
-if (typeStart >= 0 && nextActionAfterType > 0) {
-  const end = typeStart + 1 + nextActionAfterType;
-  text = text.slice(0, typeStart) + typeHandler + text.slice(end);
-} else if (typeStart < 0) {
-  const scrollStart = text.indexOf("'SCROLL'");
-  if (scrollStart < 0) throw new Error("[desktop-input] Could not find a desktop action insertion point in electron/main.cjs");
-  text = text.slice(0, scrollStart) + typeHandler + "\n  " + text.slice(scrollStart);
+const switchCase = /  'TYPE_TEXT'\s*\{[\s\S]*?\n  \}(?=\s*\n\s*'[A-Z_]+')/;
+if (switchCase.test(text)) {
+  text = text.replace(switchCase, typeHandler);
+} else {
+  const keyPressMarker = "  'KEY_PRESS' {";
+  const markerIndex = text.indexOf(keyPressMarker);
+  if (markerIndex < 0) {
+    throw new Error("[desktop-input] Could not find the KEY_PRESS insertion point in electron/main.cjs");
+  }
+  text = text.slice(0, markerIndex) + typeHandler + "\n" + text.slice(markerIndex);
 }
 
 fs.writeFileSync(electronFile, text, "utf8");
