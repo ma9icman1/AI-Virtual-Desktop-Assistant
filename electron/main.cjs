@@ -987,29 +987,58 @@ try {
     }
 
     const expectedHost = normalizedHostname(url);
-    const webpage = await detectWebpage({ timeoutMs: 15000, intervalMs: 350, expectedHost });
-    if (!webpage.detected) {
-      throw new Error(`Navigation was launched, but no active browser window could be verified for ${url}.`);
+
+    // Navigation is the handoff point into the live desktop observer. Windows
+    // UI Automation can occasionally fail to expose the browser address bar
+    // even though the browser has already opened the requested site. Do not
+    // abort the user's multi-step task in that case: the next step performs a
+    // fresh desktop screenshot and vision scan against the actual visible page.
+    let webpage = {
+      ok: true,
+      detected: false,
+      browser: "",
+      title: "",
+      url: "",
+      expectedHost,
+      elapsedMs: 0,
+    };
+    try {
+      webpage = await detectWebpage({ timeoutMs: 15000, intervalMs: 350, expectedHost });
+    } catch (verificationError) {
+      console.warn("[WEB NAV] Browser verification was unavailable after launch; continuing to desktop vision.", verificationError);
     }
 
     const observedBrowser = normalizeProcessName(webpage.browser);
-    if (targetBrowser && targetBrowser !== "browser" && observedBrowser !== targetBrowser) {
-      throw new Error(`Navigation opened ${observedBrowser || "another browser"} instead of ${targetBrowser}.`);
-    }
-
     const observedHost = normalizedHostname(webpage.url);
-    if (!observedHost || observedHost !== expectedHost) {
-      throw new Error(`Navigation did not reach ${expectedHost}. Browser reported: ${webpage.url || "no readable URL"}.`);
+    const browserMatches = !targetBrowser || targetBrowser === "browser" || !observedBrowser || observedBrowser === targetBrowser;
+    const hostMatches = !observedHost || observedHost === expectedHost;
+
+    if (!webpage.detected || !browserMatches || !hostMatches) {
+      console.warn("[WEB NAV] Soft verification: navigation was launched, but UI verification was incomplete.", {
+        requestedUrl: url,
+        expectedHost,
+        targetBrowser: targetBrowser || "default-browser",
+        detected: Boolean(webpage.detected),
+        observedBrowser: observedBrowser || null,
+        observedUrl: webpage.url || null,
+      });
     }
 
     if (desktopPermission === "one_action") desktopPermission = "none";
     return {
       ok: true,
-      verified: true,
+      verified: Boolean(webpage.detected && browserMatches && hostMatches),
+      launched: true,
       url,
       browser: targetBrowser || "default-browser",
       webpage,
-      verification: { expectedHost, observedHost, observedBrowser },
+      verification: {
+        expectedHost,
+        observedHost,
+        observedBrowser,
+        browserMatches,
+        hostMatches,
+      },
     };
   }
   if (action === "SEARCH_WEB") {
