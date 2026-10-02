@@ -1324,9 +1324,35 @@ ipcMain.on("desktop-control-permission", (event, level) => {
 ipcMain.handle("desktop-control-action", async (event, action, params) => {
   assertTrustedRenderer(event);
   console.log(`[DEBUG IPC] desktop-control-action action=${JSON.stringify(action)} params=${JSON.stringify(params)}`);
-  const result = await executeDesktopAction(action, params);
-  console.log(`[DEBUG IPC] desktop-control-action result=${JSON.stringify(result)}`);
-  return result;
+
+  // Vision coordinates describe the desktop while this Electron window is
+  // hidden for capture. Hide it again for the physical click so the window
+  // stack at click time matches the screenshot that vision analyzed.
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const hideForVisionClick =
+    senderWindow &&
+    !senderWindow.isDestroyed() &&
+    params &&
+    params.coordinateSpace === "vision" &&
+    ["CLICK", "DOUBLE_CLICK", "RIGHT_CLICK"].includes(String(action));
+
+  const wasVisible = Boolean(hideForVisionClick && senderWindow.isVisible());
+  if (hideForVisionClick && wasVisible) {
+    senderWindow.hide();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+
+  try {
+    const result = await executeDesktopAction(action, params);
+    console.log(`[DEBUG IPC] desktop-control-action result=${JSON.stringify(result)}`);
+    return result;
+  } finally {
+    if (hideForVisionClick && wasVisible && senderWindow && !senderWindow.isDestroyed()) {
+      // Restore the UI without taking focus away from the application that
+      // received the physical desktop click.
+      senderWindow.showInactive();
+    }
+  }
 });
 ipcMain.handle("desktop-capture-screen", async (event) => {
   assertTrustedRenderer(event);
