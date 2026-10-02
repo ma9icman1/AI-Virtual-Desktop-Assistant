@@ -310,6 +310,9 @@ export default function App() {
           sourceHeight: frame.sourceHeight,
           visionWidth: frame.visionWidth,
           visionHeight: frame.visionHeight,
+          coordinateSpace: "vision",
+          coordMap: frame.coordMap,
+          coordMapString: frame.coordMapString,
           prompt: "Identify the exact visible clickable control matching the target in the CURRENT SCREENSHOT. Return detectedElements with label, type, boundingBox, and center coordinates in the ACTUAL SCREENSHOT PIXEL COORDINATE SYSTEM. If the target is a search bar, return only the site/page search input, not the browser toolbar, address bar, logo, menu, or arbitrary text. Do not return normalized 0-1 or 0-1000 coordinates. Do not guess coordinates. Never use a point near the top-left corner such as (0,0) unless the target is visibly there."
         }),
       });
