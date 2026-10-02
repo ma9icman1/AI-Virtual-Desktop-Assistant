@@ -365,7 +365,7 @@ export default function App() {
         String(value || "")
           .toLowerCase()
           .replace(/[\\/_-]+/g, " ")
-          .replace(/\\s+/g, " ")
+          .replace(/\s+/g, " ")
           .trim();
       const controlMatches = (element: any) => {
         const label = normalizeControlText(element?.label);
@@ -374,12 +374,12 @@ export default function App() {
         const haystack = [label, type, text].filter(Boolean).join(" ");
         if (!haystack) return false;
 
-        if (/sign\\s*in|log\\s*in|login/.test(targetIntent)) {
-          return /sign\\s*in|log\\s*in|login/.test(haystack) &&
+        if (/sign\s*in|log\s*in|login/.test(targetIntent)) {
+          return /sign\s*in|log\s*in|login/.test(haystack) &&
             /button|link|submit|sign|login/.test(haystack);
         }
-        if (/username|user\\s+name|email/.test(targetIntent)) {
-          return /username|user\\s+name|email|phone/.test(haystack) &&
+        if (/username|user\s+name|email/.test(targetIntent)) {
+          return /username|user\s+name|email|phone/.test(haystack) &&
             /input|text|field|textbox|email|username|phone/.test(haystack);
         }
         if (targetIntent === "password") {
@@ -447,7 +447,7 @@ export default function App() {
       // correctly identify the control but occasionally return a bad Y
       // coordinate; UI Automation invokes the actual accessible webpage
       // control without depending on the model's pixel estimate.
-      if (/sign\\s*in|log\\s*in|login/i.test(targetIntent)) {
+      if (/sign\s*in|log\s*in|login/i.test(targetIntent)) {
         try {
           const activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
             timeoutMs: 2500,
@@ -456,7 +456,7 @@ export default function App() {
           const browserProcess = String(activePage?.browser || activePage?.process || "")
             .trim()
             .toLowerCase()
-            .replace(/\\.exe$/i, "");
+            .replace(/\.exe$/i, "");
 
           if (browserProcess) {
             console.log("[VISION CLICK TARGET] attempting semantic browser click", {
@@ -499,7 +499,7 @@ export default function App() {
       // web interaction. Verify the browser actually left the current page.
       // Roblox can occasionally ignore the synthetic click while its page is
       // still settling, so keep a deterministic fallback for its Sign In control.
-      if (/sign\\s*in|log\\s*in|login/i.test(targetIntent)) {
+      if (/sign\s*in|log\s*in|login/i.test(targetIntent)) {
         await new Promise((resolve) => setTimeout(resolve, 1200));
 
         let webpage: any = null;
@@ -515,7 +515,7 @@ export default function App() {
         const observedUrl = String(webpage?.url || "").trim();
         const observedHost = (() => {
           try {
-            return new URL(observedUrl).hostname.toLowerCase().replace(/^www\\./, "");
+            return new URL(observedUrl).hostname.toLowerCase().replace(/^www\./, "");
           } catch {
             return "";
           }
