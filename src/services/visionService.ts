@@ -6,6 +6,17 @@ export interface VisionScreenFrame {
   sourceHeight: number;
   visionWidth: number;
   visionHeight: number;
+  coordinateSpace?: "vision";
+  coordMap?: {
+    version?: number;
+    captureX: number;
+    captureY: number;
+    captureWidth: number;
+    captureHeight: number;
+    imageWidth: number;
+    imageHeight: number;
+  };
+  coordMapString?: string;
 }
 
 export class VisionService {
@@ -20,6 +31,9 @@ export class VisionService {
           sourceHeight: Number(frame.sourceHeight) || 0,
           visionWidth: Number(frame.visionWidth),
           visionHeight: Number(frame.visionHeight),
+          coordinateSpace: "vision",
+          coordMap: frame.coordMap,
+          coordMapString: typeof frame.coordMapString === "string" ? frame.coordMapString : undefined,
         };
       }
     }
@@ -32,6 +46,7 @@ export class VisionService {
       sourceHeight: dimensions.height,
       visionWidth: dimensions.width,
       visionHeight: dimensions.height,
+      coordinateSpace: "vision",
     };
   }
 
