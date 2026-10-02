@@ -431,7 +431,8 @@ export default function App() {
       const identifiedLabel = String(target?.label || params.targetLabel || "the requested control").trim();
       await VoiceEngine.speak("I found " + identifiedLabel + ".");
       if (!(window as any).magicDesktop?.execute) throw new Error("Desktop control is unavailable in this app window.");
-      return await (window as any).magicDesktop.execute("CLICK", {
+
+      const clickParams = {
         x: point.x,
         y: point.y,
         coordinateSpace: "vision",
@@ -439,7 +440,25 @@ export default function App() {
         visionHeight: Number(vision?.visionHeight) || frame.visionHeight,
         coordMap: vision?.coordMap || frame.coordMap,
         coordMapString: vision?.coordMapString || frame.coordMapString,
+      };
+
+      // Make the physical pointer movement an explicit step before the click.
+      // This makes the automation observable and gives us a clean log point
+      // when diagnosing DPI/fullscreen coordinate errors.
+      const moveResult = await (window as any).magicDesktop.execute("MOVE_MOUSE", clickParams);
+      console.log("[VISION CLICK TARGET] mouse moved to identified control", {
+        identifiedLabel,
+        visionPoint: { x: point.x, y: point.y },
+        moveResult,
       });
+
+      const clickResult = await (window as any).magicDesktop.execute("CLICK", clickParams);
+      console.log("[VISION CLICK TARGET] click completed", {
+        identifiedLabel,
+        visionPoint: { x: point.x, y: point.y },
+        clickResult,
+      });
+      return clickResult;
     }
     const mapped = actions[normalizedType];
     if (!mapped) throw new Error(`Unsupported desktop action: ${actionType}`);
