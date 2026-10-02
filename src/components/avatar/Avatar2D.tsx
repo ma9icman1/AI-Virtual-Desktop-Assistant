@@ -182,7 +182,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950/60 select-none ${className}`}
+      className={`relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent select-none ${className}`}
       style={{ perspective: "1000px" }}
     >
       {/* Background Ambient Glow Ring */}
