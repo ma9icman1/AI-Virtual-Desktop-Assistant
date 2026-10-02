@@ -142,17 +142,50 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     /\b(?:in|using|with)\s+(edge|chrome|brave|firefox|opera|vivaldi)\b[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+and\s+(?:press|hit)\s+enter)?\s*$/i
   );
 
-  // Deterministic combined browser workflow: preserve every requested operation
-  // instead of falling through to a launch-only fallback when the LLM parser
-  // does not emit a complete executable plan.
+  // Deterministic browser routing is deliberately placed before the generic
+  // launch fallback. Browser commands must stay multi-step even when MiniCPM
+  // returns only a partial "launch edge" action.
+  const browserNavigationCommandMatch = commandText.match(
+    /^(?:please\s+)?open\s+(edge|chrome|brave|firefox|opera|vivaldi)(?:\s+browser)?\s+(?:and\s+)?(?:go\s+to|navigate\s+to|visit|load)\s+(https?:\/\/)?((?:www\.)?[a-z0-9-]+(?:\.[a-z]{2,}|\s+(?:com|net|org|io|co|tv|gg|dev|app|ai|me|us|uk|ca|de|fr|jp|info|biz))(?:\/[^\s,]+)?)\s*$/i
+  );
+  if (browserNavigationCommandMatch) {
+    const browser = browserNavigationCommandMatch[1].toLowerCase();
+    const protocol = browserNavigationCommandMatch[2] || "https://";
+    const hostAndPath = normalizeSpokenUrl(browserNavigationCommandMatch[3]);
+    const url = protocol + hostAndPath;
+    return {
+      ...parsed,
+      spokenResponse: "Opening " + browser + " and navigating to " + url + ".",
+      spokenReply: "Opening " + browser + " and navigating to " + url + ".",
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: "Open browser and navigate to " + url,
+        multiStepPlan: {
+          planTitle: "Browser navigation",
+          spokenIntro: "I will open the browser and navigate to " + url + ".",
+          steps: [
+            { stepNumber: 1, description: "Open " + browser, actionType: "LAUNCH_APP", params: { app: browser, parameter: browser }, status: "pending", estimatedDurationMs: 800 },
+            { stepNumber: 2, description: "Navigate to " + url, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 }
+          ],
+          spokenCompletion: url + " is open.",
+          currentStepIndex: 0,
+          status: "idle"
+        }
+      }
+    };
+  }
+
+  // Deterministic combined browser workflow: preserve every requested operation.
+  // Accept both "roblox.com" and Whisper's "roblox com".
   const combinedBrowserCommandMatch = commandText.match(
-    /^(?:please\s+)?open\s+(edge|chrome|brave|firefox|opera|vivaldi)(?:\s+browser)?\s+(?:and\s+)?(?:go\s+to|navigate\s+to|visit|load)\s+(?:https?:\/\/)?(www\.)?([a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s,]+)?)\s*(?:,|\s+and\s+)?\s*(?:click|press|select|hit)\s+(?:on\s+)?(?:the\s+)?(.+?)\s*$/i
+    /^(?:please\s+)?open\s+(edge|chrome|brave|firefox|opera|vivaldi)(?:\s+browser)?\s+(?:and\s+)?(?:go\s+to|navigate\s+to|visit|load)\s+(https?:\/\/)?((?:www\.)?[a-z0-9-]+(?:\.[a-z]{2,}|\s+(?:com|net|org|io|co|tv|gg|dev|app|ai|me|us|uk|ca|de|fr|jp|info|biz))(?:\/[^\s,]+)?)\s*(?:,|\s+and\s+)?\s*(?:click|press|select|hit)\s+(?:on\s+)?(?:the\s+)?(.+?)\s*$/i
   );
   if (combinedBrowserCommandMatch) {
     const browser = combinedBrowserCommandMatch[1].toLowerCase();
-    const hostAndPath = String(combinedBrowserCommandMatch[3] || "").trim();
+    const protocol = combinedBrowserCommandMatch[2] || "https://";
+    const hostAndPath = normalizeSpokenUrl(combinedBrowserCommandMatch[3]);
     const targetLabel = String(combinedBrowserCommandMatch[4] || "").replace(/[.!?]+$/g, "").trim();
-    const url = "https://" + (combinedBrowserCommandMatch[2] ? "www." : "") + hostAndPath;
+    const url = protocol + hostAndPath;
     return {
       ...parsed,
       spokenResponse: "Opening " + browser + ", navigating to " + url + ", then clicking " + targetLabel + ".",
