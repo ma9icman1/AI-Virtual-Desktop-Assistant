@@ -185,6 +185,54 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     };
   }
 
+  // Deterministic generic website workflow: preserve commands such as
+  // "Open roblox.com, click the username box and select Magic Man 1."
+  // These commands must never fall through to LAUNCH_APP with the whole
+  // sentence as params.app. The browser itself is selected by Windows.
+  const genericBrowserCommandMatch = commandText.match(
+    /^(?:please\\s+)?(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to|goto)\\s+(https?:\\/\\/)?((?:www\\.)?[a-z0-9-]+(?:\\.[a-z]{2,}|\\s+(?:com|net|org|io|co|tv|gg|dev|app|ai|me|us|uk|ca|de|fr|jp|info|biz))(?:\\/[^\\s,]+)?)\\s*(?:,|\\s+and)?\\s+(.+)$/i
+  );
+  if (genericBrowserCommandMatch) {
+    const protocol = genericBrowserCommandMatch[1] || "https://";
+    const hostAndPath = normalizeSpokenUrl(genericBrowserCommandMatch[2]);
+    const actionText = String(genericBrowserCommandMatch[3] || "").trim();
+    const actionMatch = actionText.match(
+      /^(click|press|select|hit)\\s+(?:on\\s+)?(?:the\\s+)?(.+?)(?:\\s+and\\s+(select|click|press|hit)\\s+(?:on\\s+)?(?:the\\s+)?(.+))?$/i
+    );
+
+    if (actionMatch) {
+      const url = protocol + hostAndPath;
+      const firstTarget = String(actionMatch[2] || "").replace(/[.!?]+$/g, "").trim();
+      const secondTarget = String(actionMatch[4] || "").replace(/[.!?]+$/g, "").trim();
+      if (firstTarget) {
+        const steps = [
+          { stepNumber: 1, description: "Open " + url, actionType: "NAVIGATE_URL", params: { url }, status: "pending", estimatedDurationMs: 1200 },
+          { stepNumber: 2, description: "Find and click " + firstTarget, actionType: "VISION_CLICK_TARGET", params: { targetLabel: firstTarget }, status: "pending", estimatedDurationMs: 900 },
+        ];
+        if (secondTarget) {
+          steps.push({ stepNumber: 3, description: "Find and click " + secondTarget, actionType: "VISION_CLICK_TARGET", params: { targetLabel: secondTarget }, status: "pending", estimatedDurationMs: 900 });
+        }
+        return {
+          ...parsed,
+          spokenResponse: "Opening " + url + " and carrying out the requested browser actions.",
+          spokenReply: "Opening " + url + " and carrying out the requested browser actions.",
+          action: {
+            type: "MULTI_STEP_PLAN",
+            description: "Open website and perform requested browser actions",
+            multiStepPlan: {
+              planTitle: "Website interaction",
+              spokenIntro: "I will open the website, inspect the live page, and perform the requested actions.",
+              steps,
+              spokenCompletion: "The requested browser actions are complete.",
+              currentStepIndex: 0,
+              status: "idle",
+            },
+          },
+        };
+      }
+    }
+  }
+
   // Deterministic combined browser workflow: preserve every requested operation.
   // Accept both "roblox.com" and Whisper's "roblox com".
   const combinedBrowserCommandMatch = commandText.match(
