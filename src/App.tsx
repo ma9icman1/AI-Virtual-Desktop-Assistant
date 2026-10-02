@@ -622,8 +622,15 @@ export default function App() {
 
           // Web navigation/search is followed immediately by a visual scan so
           // ma9icAI starts with a live understanding of the page it just opened.
-          if (["NAVIGATE_URL", "SEARCH_WEB"].includes(String(steps[i].actionType).toUpperCase())) {
+          const completedActionType = String(steps[i].actionType).toUpperCase();
+          if (["NAVIGATE_URL", "SEARCH_WEB"].includes(completedActionType)) {
             await new Promise((resolve) => setTimeout(resolve, 700));
+            await captureScreenRef.current?.();
+          } else if (completedActionType === "VISION_CLICK_TARGET") {
+            // Observe again after a vision-driven click. This gives the assistant
+            // a fresh page state for the next command instead of carrying stale
+            // coordinates from the previous screenshot.
+            await new Promise((resolve) => setTimeout(resolve, 500));
             await captureScreenRef.current?.();
           }
 
