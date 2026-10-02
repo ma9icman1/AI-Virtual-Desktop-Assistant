@@ -22,3 +22,15 @@ win-unpacked/
 fix-*.ps1
 auto-fix-*.cjs
 
+
+# Large binaries - skip to keep pushes fast (use LFS or host separately)
+*.glb
+*.rar
+*.zip
+*.asar
+
+# Backup server files
+server.ts.backup-*
+server.ts.before-*
+server.ts.planner-*
+server-test.ts.before-*
