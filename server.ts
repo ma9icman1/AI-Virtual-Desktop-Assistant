@@ -136,6 +136,42 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     }
   }
   const asksToOpen = /\b(open|launch|start|load|run)\b/.test(request);
+
+  // Roblox is available as both a Windows application and a website. When the
+  // user says the bare site name ("open Roblox") without explicitly saying
+  // "app", treat it as the website so browser workflows stay deterministic.
+  const bareRobloxWebsiteMatch = commandText.match(
+    /^(?:please\s+)?(?:open|go\s+to|visit|load|browse\s+to)\s+roblox(?:\s+website)?$/i
+  );
+  if (bareRobloxWebsiteMatch) {
+    const url = "https://roblox.com";
+    return {
+      ...parsed,
+      spokenResponse: "Opening Roblox.com in your default browser.",
+      spokenReply: "Opening Roblox.com in your default browser.",
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: "Open Roblox.com in the default browser",
+        multiStepPlan: {
+          planTitle: "Open Roblox.com",
+          spokenIntro: "I will open Roblox.com in your default browser.",
+          steps: [
+            {
+              stepNumber: 1,
+              description: "Open " + url,
+              actionType: "NAVIGATE_URL",
+              params: { url },
+              status: "pending",
+              estimatedDurationMs: 1500,
+            },
+          ],
+          spokenCompletion: "Roblox.com is open.",
+          currentStepIndex: 0,
+          status: "idle",
+        },
+      },
+    };
+  }
   const websiteUrlMatch = commandText.match(
     /\b(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s*(https?:\/\/)?((?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/[^\s]*)?)(?:\s+in|\s+using|\s+with)?\s*$/i
   );
