@@ -1384,7 +1384,7 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
     console.log("[VISION CAPTURE] display=%dx%d scale=%s vision=%dx%d coordMap=%s", display.size.width, display.size.height, display.scaleFactor, visionSize.width, visionSize.height, formatCoordinateMap(coordMap));
     return `data:image/jpeg;base64,${normalized.toJPEG(60).toString("base64")}`;
   } finally {
-    if (wasVisible && window && !window.isDestroyed()) window.show();
+    if (wasVisible && window && !window.isDestroyed()) window.showInactive();
   }
 });
 ipcMain.handle("desktop-capture-screen-info", async (event) => {
