@@ -442,6 +442,42 @@ export default function App() {
         coordMapString: vision?.coordMapString || frame.coordMapString,
       };
 
+      // For named browser controls such as "Sign in", prefer Windows UI
+      // Automation when the browser exposes the webpage element. MiniCPM can
+      // correctly identify the control but occasionally return a bad Y
+      // coordinate; UI Automation invokes the actual accessible webpage
+      // control without depending on the model's pixel estimate.
+      if (/sign\\s*in|log\\s*in|login/i.test(targetIntent)) {
+        try {
+          const activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
+            timeoutMs: 2500,
+            intervalMs: 250,
+          });
+          const browserProcess = String(activePage?.browser || activePage?.process || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\\.exe$/i, "");
+
+          if (browserProcess) {
+            console.log("[VISION CLICK TARGET] attempting semantic browser click", {
+              identifiedLabel,
+              browserProcess,
+              observedUrl: activePage?.url || "",
+            });
+
+            const semanticClick = await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+              name: "Sign in",
+              process: browserProcess,
+            });
+
+            console.log("[VISION CLICK TARGET] semantic browser click completed", semanticClick);
+            return semanticClick;
+          }
+        } catch (semanticError) {
+          console.warn("[VISION CLICK TARGET] semantic browser click unavailable; falling back to vision coordinates", semanticError);
+        }
+      }
+
       // Make the physical pointer movement an explicit step before the click.
       // This makes the automation observable and gives us a clean log point
       // when diagnosing DPI/fullscreen coordinate errors.
