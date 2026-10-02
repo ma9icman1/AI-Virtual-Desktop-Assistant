@@ -20,11 +20,10 @@ if (!gotSingleInstanceLock) {
 }
 
 const port = Number(process.env.MAGIC_PORT || 3210);
-// Vision uses a fixed 16:9 canvas so AI coordinates preserve the same geometry
-// as the real Windows display. The primary display is captured at native size
-// and resized proportionally to this canvas before being sent to the vision model.
+// Vision uses a bounded canvas whose aspect ratio follows the current primary
+// display. The coordinate map then carries the exact screenshot-to-physical-
+ // screen transform used by every pointer action.
 const AI_SCREEN_WIDTH = 1280;
-const AI_SCREEN_HEIGHT = 720;
 let desktopPermission = "none";
 let desktopKilled = false;
 let speechProcess = null;
