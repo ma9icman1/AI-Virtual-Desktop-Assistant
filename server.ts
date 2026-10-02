@@ -89,7 +89,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
       .trim()
       .replace(new RegExp("\\b(www)\\s+([a-z0-9-]+)\\s+(" + tldPattern + ")\\b", "gi"), "$1.$2.$3")
       .replace(new RegExp("\\b([a-z0-9-]+)\\s+(" + tldPattern + ")\\b", "gi"), "$1.$2")
-      .replace(/\\s+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
   };
   // Speech recognition often adds sentence punctuation to a spoken URL.
