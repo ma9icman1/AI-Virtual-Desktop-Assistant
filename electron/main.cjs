@@ -613,6 +613,54 @@ foreach ($el in $elements) {
   return { ok: true, detected: false, browser: "", title: "", url: "", elapsedMs: Date.now() - started };
 }
 
+function resolveBrowserExecutable(browser) {
+  const normalized = String(browser || "").trim().toLowerCase();
+  const candidates = {
+    edge: [
+      "msedge.exe",
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+      process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Microsoft", "Edge", "Application", "msedge.exe"),
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Microsoft", "Edge", "Application", "msedge.exe"),
+    ],
+    chrome: [
+      "chrome.exe",
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Google", "Chrome", "Application", "chrome.exe"),
+      process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Google", "Chrome", "Application", "chrome.exe"),
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
+    ],
+    brave: [
+      "brave.exe",
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+      process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+    ],
+    firefox: [
+      "firefox.exe",
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Mozilla Firefox", "firefox.exe"),
+      process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Mozilla Firefox", "firefox.exe"),
+    ],
+    opera: [
+      "opera.exe",
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Opera", "opera.exe"),
+    ],
+    vivaldi: [
+      "vivaldi.exe",
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Vivaldi", "Application", "vivaldi.exe"),
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Vivaldi", "Application", "vivaldi.exe"),
+    ],
+  };
+  const list = (candidates[normalized] || []).filter(Boolean);
+  return list.find((candidate) => fs.existsSync(candidate)) || list.find((candidate) => !path.isAbsolute(candidate)) || null;
+}
+
+function normalizedHostname(value) {
+  try {
+    return new URL(String(value || "")).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
 async function executeDesktopAction(action, params = {}) {
   console.log(`[DEBUG ACTION] action=${JSON.stringify(action)} params=${JSON.stringify(params)}`);
   if (desktopKilled || !["one_action", "one_session", "always"].includes(desktopPermission)) {
@@ -847,29 +895,21 @@ try {
       throw new Error("Navigation requires a valid http or https URL.");
     }
 
-    const requestedBrowser = String(params.browser || "").trim().toLowerCase();
-    const browserExecutables = {
-      edge: "msedge.exe",
-      "microsoft edge": "msedge.exe",
-      chrome: "chrome.exe",
-      "google chrome": "chrome.exe",
-      brave: "brave.exe",
-      "brave browser": "brave.exe",
-      firefox: "firefox.exe",
-      "mozilla firefox": "firefox.exe",
-      opera: "opera.exe",
-      "opera browser": "opera.exe",
-      vivaldi: "vivaldi.exe",
-      "vivaldi browser": "vivaldi.exe",
-    };
+    const requestedBrowser = String(params.browser || "").trim().toLowerCase().replace(/\s+browser$/i, "");
+    const targetBrowser = requestedBrowser === "microsoft edge" ? "edge"
+      : requestedBrowser === "google chrome" ? "chrome"
+      : requestedBrowser === "brave browser" ? "brave"
+      : requestedBrowser === "mozilla firefox" ? "firefox"
+      : requestedBrowser === "opera browser" ? "opera"
+      : requestedBrowser === "vivaldi browser" ? "vivaldi"
+      : requestedBrowser;
 
-    if (requestedBrowser === "edge" || requestedBrowser === "microsoft edge") {
-      const errorMessage = await shell.openExternal("microsoft-edge:" + url);
-      if (errorMessage) throw new Error(`Could not open URL in Microsoft Edge: ${errorMessage}`);
-    } else if (browserExecutables[requestedBrowser]) {
-      const child = spawn(browserExecutables[requestedBrowser], [url], { detached: true, stdio: "ignore", windowsHide: false });
+    if (targetBrowser && targetBrowser !== "browser") {
+      const executable = resolveBrowserExecutable(targetBrowser);
+      if (!executable) throw new Error(`Could not find the requested browser: ${requestedBrowser}.`);
+      const child = spawn(executable, [url], { detached: true, stdio: "ignore", windowsHide: false });
       await new Promise((resolve, reject) => {
-        child.once("error", (error) => reject(new Error(`Windows could not navigate ${requestedBrowser}: ${error.message}`)));
+        child.once("error", (error) => reject(new Error(`Windows could not navigate ${targetBrowser}: ${error.message}`)));
         child.once("spawn", resolve);
       });
       child.unref();
@@ -878,9 +918,31 @@ try {
       if (errorMessage) throw new Error(`Could not open URL: ${errorMessage}`);
     }
 
-    const webpage = await detectWebpage({ timeoutMs: 5000 });
+    const webpage = await detectWebpage({ timeoutMs: 8000, intervalMs: 250 });
+    if (!webpage.detected) {
+      throw new Error(`Navigation was launched, but no active browser window could be verified for ${url}.`);
+    }
+
+    const observedBrowser = normalizeProcessName(webpage.browser);
+    if (targetBrowser && targetBrowser !== "browser" && observedBrowser !== targetBrowser) {
+      throw new Error(`Navigation opened ${observedBrowser || "another browser"} instead of ${targetBrowser}.`);
+    }
+
+    const expectedHost = normalizedHostname(url);
+    const observedHost = normalizedHostname(webpage.url);
+    if (!observedHost || observedHost !== expectedHost) {
+      throw new Error(`Navigation did not reach ${expectedHost}. Browser reported: ${webpage.url || "no readable URL"}.`);
+    }
+
     if (desktopPermission === "one_action") desktopPermission = "none";
-    return { ok: true, verified: true, url, browser: requestedBrowser || "default-browser", webpage };
+    return {
+      ok: true,
+      verified: true,
+      url,
+      browser: targetBrowser || "default-browser",
+      webpage,
+      verification: { expectedHost, observedHost, observedBrowser },
+    };
   }
   if (action === "SEARCH_WEB") {
     const query = String(params.query || params.text || "").trim();
