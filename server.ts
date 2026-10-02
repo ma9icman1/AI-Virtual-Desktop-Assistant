@@ -164,8 +164,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
           planTitle: "Browser navigation",
           spokenIntro: "I will open the browser and navigate to " + url + ".",
           steps: [
-            { stepNumber: 1, description: "Open " + browser, actionType: "LAUNCH_APP", params: { app: browser, parameter: browser }, status: "pending", estimatedDurationMs: 800 },
-            { stepNumber: 2, description: "Navigate to " + url, actionType: "NAVIGATE_URL", params: { url, browser }, status: "pending", estimatedDurationMs: 1200 }
+            { stepNumber: 1, description: "Open " + browser + " at " + url, actionType: "NAVIGATE_URL", params: { url, browser }, status: "pending", estimatedDurationMs: 1200 }
           ],
           spokenCompletion: url + " is open.",
           currentStepIndex: 0,
@@ -197,9 +196,8 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
           planTitle: "Browser navigation and click",
           spokenIntro: "I will open the browser, navigate to the requested site, inspect the live page, and click the requested target.",
           steps: [
-            { stepNumber: 1, description: "Open " + browser, actionType: "LAUNCH_APP", params: { app: browser, parameter: browser }, status: "pending", estimatedDurationMs: 800 },
-            { stepNumber: 2, description: "Navigate to " + url, actionType: "NAVIGATE_URL", params: { url, browser }, status: "pending", estimatedDurationMs: 1200 },
-            { stepNumber: 3, description: "Find and click " + targetLabel, actionType: "VISION_CLICK_TARGET", params: { targetLabel }, status: "pending", estimatedDurationMs: 900 }
+            { stepNumber: 1, description: "Open " + browser + " at " + url, actionType: "NAVIGATE_URL", params: { url, browser }, status: "pending", estimatedDurationMs: 1200 },
+            { stepNumber: 2, description: "Find and click " + targetLabel, actionType: "VISION_CLICK_TARGET", params: { targetLabel }, status: "pending", estimatedDurationMs: 900 }
           ],
           spokenCompletion: "The requested page navigation and click are complete.",
           currentStepIndex: 0,
