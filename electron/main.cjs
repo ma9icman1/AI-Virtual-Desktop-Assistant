@@ -1707,11 +1707,13 @@ async function createWindow() {
     minWidth: 920,
     minHeight: 630,
     center: true,
-    transparent: false,
+    // Transparent frameless window lets the 2.5D avatar overlay reveal the
+    // real Windows desktop. Full mode still paints its own opaque UI via CSS.
+    transparent: true,
     frame: false,
     hasShadow: false,
     alwaysOnTop: true,
-    backgroundColor: "#020611",
+    backgroundColor: "#00000000",
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
