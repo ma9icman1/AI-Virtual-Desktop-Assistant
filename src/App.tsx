@@ -286,7 +286,7 @@ export default function App() {
       READ_UI_ELEMENT: { action: "READ_UI_ELEMENT", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process } },
       SET_UI_VALUE: { action: "SET_UI_VALUE", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process, value: params.value ?? params.text ?? "" } },
       WAIT_FOR_UI_ELEMENT: { action: "WAIT_FOR_UI_ELEMENT", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process, timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
-      NAVIGATE_URL: { action: "NAVIGATE_URL", params: { url: params.url || params.parameter || "" } },
+      NAVIGATE_URL: { action: "NAVIGATE_URL", params: { url: params.url || params.parameter || "", browser: params.browser || params.browserName || "" } },
       SEARCH_WEB: { action: "SEARCH_WEB", params: { query: params.query || params.text || params.parameter || "" } },
       DETECT_WEBPAGE: { action: "DETECT_WEBPAGE", params: { timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
       OPEN_FILE: { action: "OPEN_FILE", params: { path: params.path || params.parameter || "" } },
@@ -344,6 +344,9 @@ export default function App() {
         coordinateSpace: "vision",
         visionWidth: Number(vision?.visionWidth) || frame.visionWidth,
         visionHeight: Number(vision?.visionHeight) || frame.visionHeight,
+        coordinateSpace: "vision",
+        coordMap: vision?.coordMap || frame.coordMap,
+        coordMapString: vision?.coordMapString || frame.coordMapString,
       });
     }
     const mapped = actions[normalizedType];
@@ -392,6 +395,9 @@ export default function App() {
         coordinateSpace: "vision",
         visionWidth: activeVision?.visionWidth,
         visionHeight: activeVision?.visionHeight,
+        coordinateSpace: "vision",
+        coordMap: activeVision?.coordMap,
+        coordMapString: activeVision?.coordMapString,
       },
         status: "pending",
         estimatedDurationMs: 500,
