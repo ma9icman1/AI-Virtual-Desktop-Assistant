@@ -1226,12 +1226,27 @@ app.post("/api/vision/analyze", async (req, res) => {
     const visionHeight = Math.max(1, Math.round(Number(req.body.visionHeight) || 720));
     const sourceWidth = Math.max(1, Math.round(Number(req.body.sourceWidth) || visionWidth));
     const sourceHeight = Math.max(1, Math.round(Number(req.body.sourceHeight) || visionHeight));
+    const rawCoordMap = req.body.coordMap;
+    const coordMap = rawCoordMap && typeof rawCoordMap === "object"
+      ? {
+          version: Number(rawCoordMap.version) || 1,
+          captureX: Number(rawCoordMap.captureX) || 0,
+          captureY: Number(rawCoordMap.captureY) || 0,
+          captureWidth: Math.max(1, Number(rawCoordMap.captureWidth) || sourceWidth),
+          captureHeight: Math.max(1, Number(rawCoordMap.captureHeight) || sourceHeight),
+          imageWidth: Math.max(1, Number(rawCoordMap.imageWidth) || visionWidth),
+          imageHeight: Math.max(1, Number(rawCoordMap.imageHeight) || visionHeight),
+        }
+      : undefined;
+    const coordMapString = typeof req.body.coordMapString === "string" ? req.body.coordMapString : undefined;
     const coordinateMetadata = {
       coordinateSpace: "vision",
       visionWidth,
       visionHeight,
       sourceWidth,
       sourceHeight,
+      coordMap,
+      coordMapString,
     };
     const visionSystemPrompt = `You are a fast desktop UI detector.
 Return ONLY valid JSON, with no markdown.
