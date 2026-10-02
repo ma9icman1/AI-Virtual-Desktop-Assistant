@@ -834,17 +834,48 @@ try {
   if (action === "NAVIGATE_URL") {
     const url = String(params.url || "").trim();
     if (!/^https?:\/\//i.test(url)) throw new Error("Navigation requires an http or https URL.");
+    if (/undefined|null|NaN/i.test(url)) throw new Error("Navigation received a malformed URL.");
     try {
       const parsed = new URL(url);
-      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+      if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname || !parsed.hostname.includes(".")) throw new Error();
     } catch {
       throw new Error("Navigation requires a valid http or https URL.");
     }
-    const errorMessage = await shell.openExternal(url);
-    if (errorMessage) throw new Error(`Could not open URL: ${errorMessage}`);
+
+    const requestedBrowser = String(params.browser || "").trim().toLowerCase();
+    const browserExecutables = {
+      edge: "msedge.exe",
+      "microsoft edge": "msedge.exe",
+      chrome: "chrome.exe",
+      "google chrome": "chrome.exe",
+      brave: "brave.exe",
+      "brave browser": "brave.exe",
+      firefox: "firefox.exe",
+      "mozilla firefox": "firefox.exe",
+      opera: "opera.exe",
+      "opera browser": "opera.exe",
+      vivaldi: "vivaldi.exe",
+      "vivaldi browser": "vivaldi.exe",
+    };
+
+    if (requestedBrowser === "edge" || requestedBrowser === "microsoft edge") {
+      const errorMessage = await shell.openExternal("microsoft-edge:" + url);
+      if (errorMessage) throw new Error(`Could not open URL in Microsoft Edge: ${errorMessage}`);
+    } else if (browserExecutables[requestedBrowser]) {
+      const child = spawn(browserExecutables[requestedBrowser], [url], { detached: true, stdio: "ignore", windowsHide: false });
+      await new Promise((resolve, reject) => {
+        child.once("error", (error) => reject(new Error(`Windows could not navigate ${requestedBrowser}: ${error.message}`)));
+        child.once("spawn", resolve);
+      });
+      child.unref();
+    } else {
+      const errorMessage = await shell.openExternal(url);
+      if (errorMessage) throw new Error(`Could not open URL: ${errorMessage}`);
+    }
+
     const webpage = await detectWebpage({ timeoutMs: 5000 });
     if (desktopPermission === "one_action") desktopPermission = "none";
-    return { ok: true, verified: true, url, webpage };
+    return { ok: true, verified: true, url, browser: requestedBrowser || "default-browser", webpage };
   }
   if (action === "SEARCH_WEB") {
     const query = String(params.query || params.text || "").trim();
