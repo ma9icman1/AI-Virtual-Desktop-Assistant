@@ -148,6 +148,7 @@ export class VoiceEngine {
   private nativeSpeechActive = false;
   private nativeSpeechCleanup: (() => void) | null = null;
   private nativeFallbackAttempted = false;
+  private suppressNativeTranscripts = false;
   private settings: VoiceSettings;
   private callbacks: VoiceEngineCallbacks;
   private availableVoices: SpeechSynthesisVoice[] = [];
@@ -498,6 +499,7 @@ export class VoiceEngine {
 
   public async startListening() {
     if (this.isListening) return;
+    this.suppressNativeTranscripts = false;
     this.isListening = true;
     this.nativeFallbackAttempted = false;
 
@@ -533,6 +535,10 @@ export class VoiceEngine {
   }
 
   public stopListening() {
+    // The current user turn has already been delivered. Ignore Whisper's
+    // trailing STOP flush so the assistant cannot process its own TTS or a
+    // duplicated tail of the user's sentence as another command.
+    this.suppressNativeTranscripts = true;
     this.isListening = false;
     this.stopNativeSpeechFallback();
     if (this.recognitionRestartTimer !== null) {
@@ -582,7 +588,11 @@ export class VoiceEngine {
       // the transcript listener immediately would discard that final result.
       if (!this.nativeSpeechCleanup) {
         const nativeTranscriptCleanup = window.magicVoice.onTranscript(({ text, confidence }) => {
-          if (this.isSpeaking) return;
+          // Never feed Whisper transcripts back into the assistant while a
+          // command is being stopped or while the assistant is speaking.
+          // This prevents TTS loopback such as the assistant saying
+          // "Why did the tomato..." and then treating that as a new user turn.
+          if (this.isSpeaking || this.suppressNativeTranscripts || !this.isListening) return;
           console.debug("[ma9icAI voice] Whisper transcript:", text, confidence);
           this.processRecognizedText(text, true, confidence);
         });
