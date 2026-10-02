@@ -85,6 +85,16 @@ export interface VisionDetection {
   sourceWidth?: number;
   sourceHeight?: number;
   coordinateSpace?: "vision";
+  coordMap?: {
+    version?: number;
+    captureX: number;
+    captureY: number;
+    captureWidth: number;
+    captureHeight: number;
+    imageWidth: number;
+    imageHeight: number;
+  };
+  coordMapString?: string;
   summary: string;
   openWindows: string[];
   activeApplication: string;
