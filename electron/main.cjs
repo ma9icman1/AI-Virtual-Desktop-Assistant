@@ -1427,7 +1427,7 @@ ipcMain.handle("desktop-capture-screen-info", async (event) => {
       coordMapString,
     };
   } finally {
-    if (wasVisible && window && !window.isDestroyed()) window.show();
+    if (wasVisible && window && !window.isDestroyed()) window.showInactive();
   }
 });
 
