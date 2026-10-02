@@ -638,6 +638,23 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     } }
   });
 
+  const desktopVoiceShellMatch = message.match(/\b(?:run\s+(?:command|cmd|shell|terminal|powershell|script)|execute\s+(?:command|shell)|terminal\s+run)\s+["']?(.+?)["']?\s*$/i);
+  if (desktopVoiceShellMatch) {
+    const cmd = desktopVoiceShellMatch[1].trim();
+    return makePlan("Execute " + cmd, "I will run " + cmd + " in PowerShell.", [
+      { stepNumber: 1, description: "Run " + cmd, actionType: "EXECUTE_SHELL", params: { command: cmd }, status: "pending", estimatedDurationMs: 1500 }
+    ], "Command completed.");
+  }
+
+  const desktopVoiceFetchMatch = message.match(/\b(?:fetch\s+(?:webpage|website|url|page)|silent\s+search|background\s+search)\s+["']?(.+?)["']?\s*$/i);
+  if (desktopVoiceFetchMatch) {
+    const queryOrUrl = desktopVoiceFetchMatch[1].trim();
+    const isUrl = /^https?:\/\//i.test(queryOrUrl);
+    return makePlan("Retrieve " + queryOrUrl, "I will retrieve the web content in the background.", [
+      { stepNumber: 1, description: "Fetch " + queryOrUrl, actionType: "FETCH_WEB_CONTENT", params: { url: isUrl ? queryOrUrl : "", query: isUrl ? "" : queryOrUrl }, status: "pending", estimatedDurationMs: 1500 }
+    ], "Content retrieved.");
+  }
+
   // Handle the common combined command as one deterministic plan. This must
   // run before the generic open/type handlers so "notepad and type hello"
   // isn't interpreted as an application literally named "notepad and type hello".
@@ -1070,7 +1087,7 @@ Possible action types:
 - "OPEN_FILE": { "path": string }
 - "REMEMBER": { "key": string, "value": string, "category": string }
 - "FORGET": { "key": string }
-- "MULTI_STEP_PLAN": { "planTitle": string, "spokenIntro": string, "steps": Array<{ "stepNumber": number, "description": string, "actionType": "LAUNCH_APP" | "MOVE_MOUSE" | "CLICK_BUTTON" | "DOUBLE_CLICK" | "RIGHT_CLICK" | "DRAG" | "SCROLL" | "TYPE_INPUT" | "KEY_PRESS" | "WAIT", "params": { "app"?: string, "x"?: number, "y"?: number, "endX"?: number, "endY"?: number, "coordinateSpace"?: "vision", "text"?: string, "key"?: string, "ms"?: number } }>, "spokenCompletion": string }
+- "MULTI_STEP_PLAN": { "planTitle": string, "spokenIntro": string, "steps": Array<{ "stepNumber": number, "description": string, "actionType": "LAUNCH_APP" | "MOVE_MOUSE" | "CLICK_BUTTON" | "DOUBLE_CLICK" | "RIGHT_CLICK" | "DRAG" | "SCROLL" | "TYPE_INPUT" | "KEY_PRESS" | "WAIT" | "EXECUTE_SHELL" | "FETCH_WEB_CONTENT" | "VERIFY_STATE", "params": { "app"?: string, "command"?: string, "url"?: string, "query"?: string, "x"?: number, "y"?: number, "endX"?: number, "endY"?: number, "coordinateSpace"?: "vision", "text"?: string, "key"?: string, "ms"?: number } }>, "spokenCompletion": string }
 - "NONE": null
 
 Return ONLY valid JSON matching this structure:
@@ -1394,6 +1411,9 @@ ${visionSystemPrompt}`,
 
 // Multi-Step Task Planner Endpoint
 const PLANNER_ACTION_TYPES = new Set([
+  "EXECUTE_SHELL",
+  "FETCH_WEB_CONTENT",
+  "VERIFY_STATE",
   "LAUNCH_APP",
   "SEARCH_WEB",
   "DETECT_WEBPAGE",

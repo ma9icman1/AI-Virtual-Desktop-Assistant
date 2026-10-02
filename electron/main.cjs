@@ -1113,6 +1113,7 @@ public static class MagicPasteInput {
 
 
 
+
   'KEY_PRESS' {
     $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
     $vk = switch ($key) {
@@ -1356,6 +1357,11 @@ ipcMain.on("desktop-control-kill", (event) => {
   assertTrustedRenderer(event);
   desktopKilled = true;
   desktopPermission = "none";
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send("desktop-control-killed", { reason: "Emergency stop triggered by user." });
+    }
+  });
 });
 
 ipcMain.on("magic-window-close", (event) => {
@@ -1680,9 +1686,16 @@ async function createWindow() {
     throw error;
   }
 
+  
+
   globalShortcut.register("CommandOrControl+Alt+Escape", () => {
     desktopKilled = true;
     desktopPermission = "none";
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("desktop-control-killed", { reason: "Emergency stop key (Ctrl+Alt+Esc) pressed." });
+      }
+    });
   });
 
   const window = new BrowserWindow({

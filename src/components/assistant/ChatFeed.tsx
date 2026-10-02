@@ -13,6 +13,8 @@ import {
   ListTodo,
   Copy,
   Check,
+  Terminal,
+  Globe,
 } from "lucide-react";
 import { ChatMessage, VisionDetection } from "../../types";
 
@@ -198,25 +200,51 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                     {msg.action.multiStepPlan.steps.map((step, sIdx) => (
                       <div
                         key={sIdx}
-                        className="flex items-start gap-2.5 text-xs text-slate-300 bg-slate-900/60 p-2 rounded-lg border border-slate-800"
+                        className="flex flex-col gap-1 text-xs text-slate-300 bg-slate-900/60 p-2 rounded-lg border border-slate-800"
                       >
-                        <div className="mt-0.5 shrink-0">
-                          {step.status === "completed" ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          ) : step.status === "running" ? (
-                            <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
-                          ) : (
-                            <Circle className="w-3.5 h-3.5 text-slate-600" />
-                          )}
+                        <div className="flex items-start gap-2.5">
+                          <div className="mt-0.5 shrink-0">
+                            {step.status === "completed" ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : step.status === "running" ? (
+                              <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                            ) : (
+                              <Circle className="w-3.5 h-3.5 text-slate-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-slate-200">{step.description}</p>
+                            {step.parameter && (
+                              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                                Param: {step.parameter}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-200">{step.description}</p>
-                          {step.parameter && (
-                            <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
-                              Param: {step.parameter}
+
+                        {step.stdout && (
+                          <div className="mt-1.5 rounded-md bg-slate-950 p-2 border border-emerald-500/25">
+                            <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono mb-1">
+                              <Terminal className="w-3 h-3" />
+                              <span>Command Output</span>
+                            </div>
+                            <pre className="text-[10px] text-emerald-300 font-mono whitespace-pre-wrap max-h-36 overflow-y-auto">
+                              {step.stdout}
+                            </pre>
+                          </div>
+                        )}
+
+                        {step.webContent && (
+                          <div className="mt-1.5 rounded-md bg-slate-950/90 p-2 border border-cyan-500/25">
+                            <div className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono mb-1">
+                              <Globe className="w-3 h-3" />
+                              <span>Web Content Retrieved</span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 max-h-36 overflow-y-auto leading-relaxed">
+                              {step.webContent}
                             </p>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -250,7 +278,7 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                         <button
                           key={`chat-target-${msg.id}-${elementIndex}`}
                           type="button"
-                          className="absolute z-10 cursor-crosshair rounded-sm border border-cyan-300/90 bg-cyan-300/[0.08] shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_12px_rgba(34,211,238,0.2)] hover:bg-cyan-300/[0.16]"
+                          className="absolute z-10 cursor-crosshair rounded-sm border border-cyan-300/90 bg-cyan-300/[0.08] shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_12px_rgba(34,211,238,0.2)] hover:bg-cyan-300/[0.22] transition-colors"
                           style={{
                             left: `${(box.x / (Number(msg.vision?.visionWidth) || 1280)) * 100}%`,
                             top: `${(box.y / (Number(msg.vision?.visionHeight) || 720)) * 100}%`,

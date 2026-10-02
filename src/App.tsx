@@ -252,6 +252,28 @@ export default function App() {
   }, [assistantName]);
 
   useEffect(() => {
+    const cleanup = (window as any).magicDesktop?.onEmergencyStop?.((payload: any) => {
+      console.warn("[EMERGENCY STOP TRIGGERED]", payload);
+      stopExecutionRef.current = true;
+      setAssistantState("idle");
+      setShowActivityPanel(false);
+      VoiceEngine.stopListening();
+      setVoiceNotice("Emergency stop activated. All actions halted.");
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-kill-${Date.now()}`,
+          role: "system",
+          content: `⚠️ **Emergency Stop Triggered**: ${payload?.reason || "Desktop automation was halted."}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+      VoiceEngine.speak("Emergency stop activated. All actions halted.");
+    });
+    return () => cleanup?.();
+  }, []);
+
+  useEffect(() => {
     takeControlOpenRef.current = isTakeControlOpen;
   }, [isTakeControlOpen]);
 
@@ -297,6 +319,9 @@ export default function App() {
       SEARCH_WEB: { action: "SEARCH_WEB", params: { query: params.query || params.text || params.parameter || "" } },
       DETECT_WEBPAGE: { action: "DETECT_WEBPAGE", params: { timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
       OPEN_FILE: { action: "OPEN_FILE", params: { path: params.path || params.parameter || "" } },
+      EXECUTE_SHELL: { action: "EXECUTE_SHELL", params: { command: params.command || params.cmd || params.parameter || "" } },
+      FETCH_WEB_CONTENT: { action: "FETCH_WEB_CONTENT", params: { url: params.url || "", query: params.query || params.parameter || "" } },
+      VERIFY_STATE: { action: "VERIFY_STATE", params: { app: params.app || params.process || params.parameter || "" } },
       WAIT: { action: "WAIT", params: { ms: params.ms || params.estimatedDurationMs || 500 } },
     };
     if (normalizedType === "VISION_CLICK_TARGET") {
@@ -508,7 +533,7 @@ export default function App() {
             actionType: steps[i].actionType,
             params: steps[i].params || {},
           });
-          await executeDesktopAction(steps[i].actionType, {
+          const actionResult = await executeDesktopAction(steps[i].actionType, {
             ...steps[i].params,
             parameter: steps[i].parameter,
             coordinates: steps[i].coordinates,
@@ -524,6 +549,30 @@ export default function App() {
             await new Promise((resolve) => setTimeout(resolve, 700));
             await captureScreenRef.current?.();
           }
+
+          const stepStdout = typeof actionResult?.stdout === "string" ? actionResult.stdout : undefined;
+          const stepWebContent = typeof actionResult?.content === "string" ? actionResult.content : undefined;
+
+          // Mark step completed with output
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.action?.multiStepPlan) {
+                return {
+                  ...msg,
+                  action: {
+                    ...msg.action,
+                    multiStepPlan: {
+                      ...msg.action.multiStepPlan,
+                      steps: msg.action.multiStepPlan.steps.map((s, idx) =>
+                        idx === i ? { ...s, status: "completed", stdout: stepStdout, webContent: stepWebContent, result: actionResult } : s
+                      ),
+                    },
+                  },
+                };
+              }
+              return msg;
+            })
+          );
         } catch (error) {
           const rawReason = describeError(error, "The desktop action did not complete.");
           const reason = rawReason.length > 180 ? "Windows rejected the desktop action. Check the target app and permissions." : rawReason;
@@ -540,26 +589,7 @@ export default function App() {
           return;
         }
 
-        // Mark step completed
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.action?.multiStepPlan) {
-              return {
-                ...msg,
-                action: {
-                  ...msg.action,
-                  multiStepPlan: {
-                    ...msg.action.multiStepPlan,
-                    steps: msg.action.multiStepPlan.steps.map((s, idx) =>
-                      idx === i ? { ...s, status: "completed" } : s
-                    ),
-                  },
-                },
-              };
-            }
-            return msg;
-          })
-        );
+// Step completed
       }
 
       setAssistantState("speaking");
@@ -1252,10 +1282,11 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleStopDesktopControl}
-                className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-200 hover:bg-rose-500/25"
-                title="Stop desktop control"
+                className="flex items-center gap-1.5 rounded-lg border border-rose-400/40 bg-rose-500/20 px-2.5 py-1 text-[10px] font-semibold text-rose-200 hover:bg-rose-500/35 transition"
+                title="Stop desktop control (Ctrl+Alt+Esc)"
               >
-                Stop
+                <span>Stop</span>
+                <kbd className="rounded border border-rose-500/30 bg-rose-950/80 px-1 py-0.5 text-[8px] font-mono text-rose-300">Ctrl+Alt+Esc</kbd>
               </button>
             </div>
           </div>

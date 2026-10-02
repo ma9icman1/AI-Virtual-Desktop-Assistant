@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("magicDesktop", {
   captureScreen: () => ipcRenderer.invoke("desktop-capture-screen"),
   captureScreenInfo: () => ipcRenderer.invoke("desktop-capture-screen-info"),
   emergencyStop: () => ipcRenderer.send("desktop-control-kill"),
+  onEmergencyStop: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("desktop-control-killed", listener);
+    return () => ipcRenderer.removeListener("desktop-control-killed", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("magicVoice", {

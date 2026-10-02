@@ -48,6 +48,9 @@ export interface AgentStep {
   params?: Record<string, any>;
   status: "pending" | "running" | "completed" | "failed";
   estimatedDurationMs?: number;
+  stdout?: string;
+  webContent?: string;
+  result?: any;
 }
 
 export interface MultiStepPlan {
@@ -72,6 +75,9 @@ export interface ChatMessage {
     parameter?: any;
     params?: any;
     multiStepPlan?: MultiStepPlan;
+    stdout?: string;
+    webContent?: string;
+    result?: any;
   };
   visionThumbnail?: string;
   vision?: VisionDetection;
