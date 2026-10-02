@@ -83,7 +83,9 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   }
   // Speech recognition often adds sentence punctuation to a spoken URL.
   // Strip only terminal punctuation for intent matching; keep the original message elsewhere.
-  const commandText = message.trim().replace(/[.!?]+$/g, "");
+  // All deterministic intent matching must use the normalized request so Whisper
+  // variants such as "goto roblox.com" reach the same browser workflow as "go to roblox.com".
+  const commandText = request.trim().replace(/[.!?]+$/g, "");
   const appAliases: Array<[RegExp, string]> = [
     [/\b(browser|web browser|internet browser)\b/, "browser"],
     [/\b(brave|brave browser)\b/, "brave"],
