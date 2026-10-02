@@ -115,8 +115,12 @@ export default function App() {
 
   useEffect(() => {
     document.body.classList.toggle("desktop-shell", isDesktopShell);
-    return () => document.body.classList.remove("desktop-shell");
-  }, [isDesktopShell]);
+    document.body.classList.toggle("avatar-overlay", experienceMode === "model");
+    return () => {
+      document.body.classList.remove("desktop-shell");
+      document.body.classList.remove("avatar-overlay");
+    };
+  }, [isDesktopShell, experienceMode]);
 
   useEffect(() => {
     (window as any).magicWindow?.setOverlayMode(experienceMode === "model");
@@ -842,6 +846,13 @@ export default function App() {
         return;
       }
 
+      const resumeVoiceAfterResponse = isListening;
+      if (resumeVoiceAfterResponse) {
+        VoiceEngine.stopListening();
+        setIsListening(false);
+        setAudioLevel(0);
+      }
+
       const userMsg: ChatMessage = {
         id: `msg-user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         role: "user",
@@ -892,8 +903,24 @@ export default function App() {
         setMessages((prev) => [...prev, assistantMsg]);
         setAssistantState("speaking");
 
-        VoiceEngine.speak(spokenText, () => {
-          setAssistantState("idle");
+        void VoiceEngine.speak(spokenText, () => {
+          if (!resumeVoiceAfterResponse) {
+            setAssistantState("idle");
+            return;
+          }
+
+          VoiceEngine.startListening()
+            .then(() => {
+              setIsListening(true);
+              setAudioLevel(0);
+              setVoiceNotice(null);
+              setAssistantState("listening");
+            })
+            .catch((error) => {
+              setIsListening(false);
+              setAssistantState("idle");
+              setVoiceNotice(describeError(error, "Microphone access is unavailable."));
+            });
         });
 
           // Handle specific actions if present
@@ -946,7 +973,7 @@ export default function App() {
         setTimeout(() => setAssistantState("idle"), 3000);
       }
     },
-    [messages, activeVision, assistantName, executePlanSequence, handleCaptureScreen, permissionLevel, triggerMagicGreeting]
+    [messages, activeVision, assistantName, executePlanSequence, handleCaptureScreen, isListening, permissionLevel, triggerMagicGreeting]
   );
 
   const handlePermissionGrant = useCallback((level: PermissionLevel) => {
@@ -1110,6 +1137,12 @@ export default function App() {
         VoiceEngine.stopListening();
         return;
       }
+      // A voice turn is single-shot: stop Whisper before sending the request so
+      // it cannot hear the assistant's own TTS reply. handleSendMessage() will
+      // restart listening after the reply finishes.
+      VoiceEngine.stopListening();
+      setIsListening(false);
+      setAudioLevel(0);
       setAssistantState("processing");
       handleSendMessage(transcript);
     });
