@@ -3,6 +3,7 @@ const {execFile, spawn} = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const { getVisionCanvasSize, createCoordinateMap, parseCoordinateMap, formatCoordinateMap, mapPointFromCoordinateMap } = require("./computer-control.cjs");
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -619,21 +620,25 @@ async function executeDesktopAction(action, params = {}) {
   }
 
   const display = screen.getPrimaryDisplay();
-  const scalePoint = (value, axisSize, aiSize) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return 0;
+  const defaultVisionSize = getVisionCanvasSize(display, AI_SCREEN_WIDTH);
+  const visionWidth = Number(params.visionWidth) > 0 ? Number(params.visionWidth) : defaultVisionSize.width;
+  const visionHeight = Number(params.visionHeight) > 0 ? Number(params.visionHeight) : defaultVisionSize.height;
+  const coordinateMap = params.coordinateMap
+    ? parseCoordinateMap(params.coordinateMap)
+    : createCoordinateMap(display, screen, visionWidth, visionHeight);
+  const mapCoordinate = (valueX, valueY) => {
     if (params.coordinateSpace === "vision") {
-      // Vision coordinates come from the 16:9 vision canvas. Allow callers to
-      // provide the exact canvas dimensions used for the current screenshot.
-      const clamped = Math.max(0, Math.min(aiSize - 1, Math.round(numeric)));
-      return Math.round(clamped * axisSize / aiSize);
+      if (!coordinateMap) throw new Error("Vision input is missing a valid coordinate map.");
+      return mapPointFromCoordinateMap(valueX, valueY, coordinateMap);
     }
-    return Math.round(numeric);
+    const numericX = Number(valueX);
+    const numericY = Number(valueY);
+    if (!Number.isFinite(numericX) || !Number.isFinite(numericY)) return { x: 0, y: 0 };
+    return { x: Math.round(numericX), y: Math.round(numericY) };
   };
-  const visionWidth = Number(params.visionWidth) > 0 ? Number(params.visionWidth) : AI_SCREEN_WIDTH;
-  const visionHeight = Number(params.visionHeight) > 0 ? Number(params.visionHeight) : AI_SCREEN_HEIGHT;
-  const x = scalePoint(params.x, display.size.width, visionWidth);
-  const y = scalePoint(params.y, display.size.height, visionHeight);
+  const mappedPoint = mapCoordinate(params.x, params.y);
+  const x = mappedPoint.x;
+  const y = mappedPoint.y;
   if (action === "LAUNCH_APP") {
     const requested = String(params.app || "").trim().toLowerCase();
     const browserAliases = new Set(["browser", "web browser", "internet", "internet browser", "edge", "microsoft edge", "chrome", "google chrome", "firefox", "mozilla firefox", "brave", "brave browser", "opera", "opera browser", "vivaldi", "vivaldi browser"]);
@@ -936,13 +941,17 @@ try {
   };
 
   if (["MOVE_MOUSE", "CLICK", "RIGHT_CLICK", "DOUBLE_CLICK", "DRAG", "SCROLL"].includes(action)) {
-    // x/y are already converted into physical primary-display pixels above.
-    boundedInteger(x, 0, display.size.width - 1, "X coordinate");
-    boundedInteger(y, 0, display.size.height - 1, "Y coordinate");
+    // x/y are canonical physical-screen pixels after coord-map conversion.
+    const physicalDisplay = createCoordinateMap(display, screen, visionWidth, visionHeight);
+    const maxX = physicalDisplay.captureX + physicalDisplay.captureWidth - 1;
+    const maxY = physicalDisplay.captureY + physicalDisplay.captureHeight - 1;
+    boundedInteger(x, physicalDisplay.captureX, maxX, "X coordinate");
+    boundedInteger(y, physicalDisplay.captureY, maxY, "Y coordinate");
   }
   if (action === "DRAG") {
-    const endX = scalePoint(params.endX, display.size.width, AI_SCREEN_WIDTH);
-    const endY = scalePoint(params.endY, display.size.height, AI_SCREEN_HEIGHT);
+    const endPoint = mapCoordinate(params.endX, params.endY);
+    const endX = endPoint.x;
+    const endY = endPoint.y;
     boundedInteger(endX, 0, display.size.width - 1, "End X coordinate");
     boundedInteger(endY, 0, display.size.height - 1, "End Y coordinate");
   }
@@ -1129,6 +1138,7 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
 
   try {
     const display = screen.getPrimaryDisplay();
+    const visionSize = getVisionCanvasSize(display, AI_SCREEN_WIDTH);
     const sources = await desktopCapturer.getSources({
       types: ["screen"],
       thumbnailSize: { width: display.size.width, height: display.size.height },
@@ -1139,11 +1149,12 @@ ipcMain.handle("desktop-capture-screen", async (event) => {
       throw new Error("Windows did not return a desktop screenshot.");
     }
     const normalized = source.thumbnail.resize({
-      width: AI_SCREEN_WIDTH,
-      height: AI_SCREEN_HEIGHT,
+      width: visionSize.width,
+      height: visionSize.height,
       quality: "good",
     });
-    console.log("[VISION CAPTURE] source=%dx%d vision=%dx%d", display.size.width, display.size.height, AI_SCREEN_WIDTH, AI_SCREEN_HEIGHT);
+    const coordMap = createCoordinateMap(display, screen, visionSize.width, visionSize.height);
+    console.log("[VISION CAPTURE] display=%dx%d scale=%s vision=%dx%d coordMap=%s", display.size.width, display.size.height, display.scaleFactor, visionSize.width, visionSize.height, formatCoordinateMap(coordMap));
     return `data:image/jpeg;base64,${normalized.toJPEG(60).toString("base64")}`;
   } finally {
     if (wasVisible && window && !window.isDestroyed()) window.show();
@@ -1169,17 +1180,24 @@ ipcMain.handle("desktop-capture-screen-info", async (event) => {
     if (!source || source.thumbnail.isEmpty()) {
       throw new Error("Windows did not return a desktop screenshot.");
     }
+    const visionSize = getVisionCanvasSize(display, AI_SCREEN_WIDTH);
     const normalized = source.thumbnail.resize({
-      width: AI_SCREEN_WIDTH,
-      height: AI_SCREEN_HEIGHT,
+      width: visionSize.width,
+      height: visionSize.height,
       quality: "good",
     });
+    const coordMap = createCoordinateMap(display, screen, visionSize.width, visionSize.height);
+    const coordMapString = formatCoordinateMap(coordMap);
     return {
       image: `data:image/jpeg;base64,${normalized.toJPEG(60).toString("base64")}`,
       sourceWidth: display.size.width,
       sourceHeight: display.size.height,
-      visionWidth: AI_SCREEN_WIDTH,
-      visionHeight: AI_SCREEN_HEIGHT,
+      sourceScaleFactor: Number(display.scaleFactor) || 1,
+      visionWidth: visionSize.width,
+      visionHeight: visionSize.height,
+      coordinateSpace: "vision",
+      coordMap,
+      coordMapString,
     };
   } finally {
     if (wasVisible && window && !window.isDestroyed()) window.show();
