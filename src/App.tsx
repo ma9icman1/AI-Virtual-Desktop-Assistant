@@ -354,7 +354,6 @@ export default function App() {
         coordinateSpace: "vision",
         visionWidth: Number(vision?.visionWidth) || frame.visionWidth,
         visionHeight: Number(vision?.visionHeight) || frame.visionHeight,
-        coordinateSpace: "vision",
         coordMap: vision?.coordMap || frame.coordMap,
         coordMapString: vision?.coordMapString || frame.coordMapString,
       });
