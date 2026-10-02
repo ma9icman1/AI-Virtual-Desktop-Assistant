@@ -561,64 +561,124 @@ public static class MagicMaximize {
 }
 
 async function detectWebpage(params = {}) {
-  const timeoutMs = Math.min(10000, Math.max(500, Number(params.timeoutMs) || 5000));
+  const timeoutMs = Math.min(15000, Math.max(750, Number(params.timeoutMs) || 5000));
   const intervalMs = Math.min(1000, Math.max(150, Number(params.intervalMs) || 300));
+  const expectedHost = normalizedHostname(params.expectedHost || "");
   const browserProcesses = new Set(["msedge", "chrome", "brave", "firefox", "opera", "vivaldi"]);
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
     const info = await getActiveWindowInfo();
     const process = normalizeProcessName(info.process);
-    if (browserProcesses.has(process)) {
+
+    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
       await maximizeWindow(info.hwnd);
+
+      // Chromium/Firefox expose the address bar through UI Automation, but the
+      // address bar can briefly report an empty ValuePattern while a new tab is
+      // starting. Read the active browser window directly and try both
+      // ValuePattern and LegacyIAccessible, plus any URL-like element value.
+      // The old implementation only accepted Edit controls whose Name matched
+      // "address/search/omnibox"; that is too brittle across browser versions
+      // and localization.
       const script = `
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 $targetPid = [int]$scriptArgs[0]
-$root = [System.Windows.Automation.AutomationElement]::RootElement
-$elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+$targetHwnd = [IntPtr]::new([int64]$scriptArgs[1])
+$root = $null
+try { $root = [System.Windows.Automation.AutomationElement]::FromHandle($targetHwnd) } catch {}
+if (-not $root) { $root = [System.Windows.Automation.AutomationElement]::RootElement }
+
+$elements = $root.FindAll(
+  [System.Windows.Automation.TreeScope]::Descendants,
+  [System.Windows.Automation.Condition]::TrueCondition
+)
+
 $url = ""
 foreach ($el in $elements) {
   try {
     if ($el.Current.ProcessId -ne $targetPid) { continue }
+
     $name = [string]$el.Current.Name
-    $type = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', '')
-    if ($type -ne 'Edit') { continue }
-    if ($name -notmatch '(?i)(address|search|omnibox|web address|location)') { continue }
+    $type = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '')
+    $value = ""
+
     try {
       $vp = $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
       $value = [string]$vp.Current.Value
-      if ($value -match '(?i)^(https?|file)://') { $url = $value; break }
     } catch {}
+
+    if (-not $value) {
+      try {
+        $legacy = $el.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern)
+        $value = [string]$legacy.Current.Value
+      } catch {}
+    }
+
+    $candidates = @($value, $name)
+    foreach ($candidate in $candidates) {
+      $candidateText = [string]$candidate
+      if ($candidateText -match '(?i)^(https?|file)://[^\s]+') {
+        $url = $candidateText.Trim()
+        break
+      }
+    }
+
+    if ($url) { break }
   } catch {}
 }
-[pscustomobject]@{ url=$url } | ConvertTo-Json -Compress
+
+[pscustomobject]@{ url=$url; hwnd=[int64]$targetHwnd; pid=$targetPid } | ConvertTo-Json -Compress
 `;
-      const raw = await runPowerShell(script, [String(info.pid || 0)]).catch(() => "{}");
+
+      const raw = await runPowerShell(script, [String(info.pid || 0), String(info.hwnd || 0)]).catch(() => "{}");
       let url = "";
       try { url = String(JSON.parse(raw || "{}").url || ""); } catch {}
 
-      // A browser process can be foregrounded before its new tab/address bar
-      // has finished updating. Do not treat a blank URL as verified navigation;
-      // keep polling until the address bar exposes the actual page URL.
-      if (!url) {
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
-        continue;
-      }
+      if (url) {
+        const observedHost = normalizedHostname(url);
 
-      return {
-        ok: true,
-        detected: true,
-        browser: process,
-        title: String(info.title || "").trim(),
-        url,
-        elapsedMs: Date.now() - started,
-      };
+        // When NAVIGATE_URL supplies an expected host, do not accept an old
+        // tab/window from the same browser process. Keep polling until the
+        // browser exposes the requested destination.
+        if (expectedHost && observedHost !== expectedHost) {
+          await new Promise((resolve) => setTimeout(resolve, intervalMs));
+          continue;
+        }
+
+        console.log("[WEB DETECT] verified browser page", {
+          browser: process,
+          pid: info.pid,
+          hwnd: info.hwnd,
+          url,
+          expectedHost: expectedHost || null,
+          elapsedMs: Date.now() - started,
+        });
+
+        return {
+          ok: true,
+          detected: true,
+          browser: process,
+          title: String(info.title || "").trim(),
+          url,
+          elapsedMs: Date.now() - started,
+        };
+      }
     }
+
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  return { ok: true, detected: false, browser: "", title: "", url: "", elapsedMs: Date.now() - started };
+  return {
+    ok: true,
+    detected: false,
+    browser: "",
+    title: "",
+    url: "",
+    expectedHost: expectedHost || "",
+    elapsedMs: Date.now() - started,
+  };
 }
 
 function resolveBrowserExecutable(browser) {
@@ -926,7 +986,8 @@ try {
       if (errorMessage) throw new Error(`Could not open URL: ${errorMessage}`);
     }
 
-    const webpage = await detectWebpage({ timeoutMs: 8000, intervalMs: 250 });
+    const expectedHost = normalizedHostname(url);
+    const webpage = await detectWebpage({ timeoutMs: 15000, intervalMs: 350, expectedHost });
     if (!webpage.detected) {
       throw new Error(`Navigation was launched, but no active browser window could be verified for ${url}.`);
     }
@@ -936,7 +997,6 @@ try {
       throw new Error(`Navigation opened ${observedBrowser || "another browser"} instead of ${targetBrowser}.`);
     }
 
-    const expectedHost = normalizedHostname(url);
     const observedHost = normalizedHostname(webpage.url);
     if (!observedHost || observedHost !== expectedHost) {
       throw new Error(`Navigation did not reach ${expectedHost}. Browser reported: ${webpage.url || "no readable URL"}.`);
