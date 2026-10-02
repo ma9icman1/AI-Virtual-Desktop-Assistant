@@ -263,13 +263,20 @@ export default function App() {
   const executeDesktopAction = useCallback(async (actionType: string, params: Record<string, any> = {}) => {
     const coordinates = params.coordinates || {};
     const normalizedType = actionType.toUpperCase();
+    const coordinateMetadata = {
+      coordinateSpace: params.coordinateSpace,
+      visionWidth: params.visionWidth ?? activeVision?.visionWidth,
+      visionHeight: params.visionHeight ?? activeVision?.visionHeight,
+      coordMap: params.coordMap ?? activeVision?.coordMap,
+      coordMapString: params.coordMapString ?? activeVision?.coordMapString,
+    };
     const actions: Record<string, { action: string; params: Record<string, any> }> = {
-      MOVE_MOUSE: { action: "MOVE_MOUSE", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace, visionWidth: params.visionWidth, visionHeight: params.visionHeight } },
-      CLICK_BUTTON: { action: "CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace, visionWidth: params.visionWidth, visionHeight: params.visionHeight } },
-      DOUBLE_CLICK: { action: "DOUBLE_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
-      RIGHT_CLICK: { action: "RIGHT_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, coordinateSpace: params.coordinateSpace } },
-      DRAG: { action: "DRAG", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, endX: params.endX, endY: params.endY, coordinateSpace: params.coordinateSpace } },
-      SCROLL: { action: "SCROLL", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, key: params.key || "{PAGEDOWN}", coordinateSpace: params.coordinateSpace } },
+      MOVE_MOUSE: { action: "MOVE_MOUSE", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, ...coordinateMetadata } },
+      CLICK_BUTTON: { action: "CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, ...coordinateMetadata } },
+      DOUBLE_CLICK: { action: "DOUBLE_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, ...coordinateMetadata } },
+      RIGHT_CLICK: { action: "RIGHT_CLICK", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, ...coordinateMetadata } },
+      DRAG: { action: "DRAG", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, endX: params.endX, endY: params.endY, ...coordinateMetadata } },
+      SCROLL: { action: "SCROLL", params: { x: params.x ?? coordinates.x, y: params.y ?? coordinates.y, key: params.key || "{PAGEDOWN}", ...coordinateMetadata } },
       TYPE_INPUT: { action: "TYPE_TEXT", params: { text: params.text || params.parameter || "" } },
       KEY_PRESS: { action: "KEY_PRESS", params: { key: params.key || params.key_combination || params.parameter || "" } },
       LAUNCH_APP: { action: "LAUNCH_APP", params: { app: params.app || params.parameter || "notepad" } },
@@ -372,7 +379,7 @@ export default function App() {
       }
     }
     return await (window as any).magicDesktop.execute(mapped.action, mapped.params);
-  }, []);
+  }, [activeVision]);
 
   const handleXRayTargetClick = useCallback(async (element: VisionDetection["detectedElements"][number]) => {
     const point = element.center || (element.boundingBox
