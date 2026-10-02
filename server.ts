@@ -306,6 +306,56 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     };
   }
 
+  // Current-page browser controls: after a site has been opened, commands such as
+  // "sign in", "login", "username", "password", or "search" must trigger a
+  // fresh vision scan instead of falling through to the general language model.
+  const currentPageTargetMatch = commandText.match(
+    /^(?:please\s+)?(?:click\s+|press\s+|select\s+|hit\s+|open\s+|use\s+|go\s+to\s+)?(?:the\s+)?(sign\s*[- ]?in|log\s*[- ]?in|login|username|user\s+name|email(?:\s+address)?|password|search(?:\s+(?:bar|box|field))?)\s*(?:button|field|box|bar)?[.!?]*$/i
+  );
+  if (currentPageTargetMatch) {
+    const spokenTarget = String(currentPageTargetMatch[1]).trim();
+    const lowerTarget = spokenTarget.toLowerCase();
+    let targetLabel = spokenTarget;
+
+    if (/^(sign\s*[- ]?in|log\s*[- ]?in|login)$/.test(lowerTarget)) {
+      targetLabel = "sign in / log in";
+    } else if (/^(username|user\s+name|email|email\s+address)$/.test(lowerTarget)) {
+      targetLabel = "username / email";
+    } else if (lowerTarget === "password") {
+      targetLabel = "password";
+    } else if (/^search/.test(lowerTarget)) {
+      targetLabel = "search";
+    }
+
+    const spoken = "I will scan the current webpage for " + spokenTarget + ", identify the control, and click it.";
+    return {
+      ...parsed,
+      spokenResponse: spoken,
+      spokenReply: spoken,
+      action: {
+        type: "MULTI_STEP_PLAN",
+        description: "Scan the current webpage and click " + spokenTarget,
+        multiStepPlan: {
+          planTitle: "Find " + spokenTarget,
+          spokenIntro: spoken,
+          steps: [
+            {
+              stepNumber: 1,
+              description: "Scan the current webpage for " + spokenTarget,
+              actionType: "VISION_CLICK_TARGET",
+              params: { targetLabel, targetIntent: lowerTarget },
+              status: "pending",
+              estimatedDurationMs: 1800,
+            }
+          ],
+          spokenCompletion: "I identified and clicked " + spokenTarget + ".",
+          currentStepIndex: 0,
+          status: "idle",
+        },
+      },
+    };
+  }
+
   const visibleElements = Array.isArray(visionContext?.detectedElements) ? visionContext.detectedElements : [];
   const targetElement = visibleElements.find((element: any) => {
     const label = String(element.label || "").toLowerCase();
