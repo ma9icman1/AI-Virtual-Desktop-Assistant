@@ -597,6 +597,15 @@ foreach ($el in $elements) {
       const raw = await runPowerShell(script, [String(info.pid || 0)]).catch(() => "{}");
       let url = "";
       try { url = String(JSON.parse(raw || "{}").url || ""); } catch {}
+
+      // A browser process can be foregrounded before its new tab/address bar
+      // has finished updating. Do not treat a blank URL as verified navigation;
+      // keep polling until the address bar exposes the actual page URL.
+      if (!url) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        continue;
+      }
+
       return {
         ok: true,
         detected: true,
