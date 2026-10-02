@@ -2,6 +2,8 @@
 
 html, body, #root { width:100%; height:100%; margin:0; }
 body { background:#020611; color:#eef7ff; overflow:hidden; }
+body.avatar-overlay, body.avatar-overlay #root { background:transparent !important; }
+body.avatar-overlay .ma9ic-shell { background:transparent !important; }
 body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 .desktop-shell header, .ma9ic-header { -webkit-app-region:drag; }
 .desktop-shell button, .desktop-shell input, .desktop-shell textarea, .desktop-shell label,
