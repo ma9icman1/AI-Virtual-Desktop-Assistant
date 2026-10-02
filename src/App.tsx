@@ -359,15 +359,54 @@ export default function App() {
       const elements = Array.isArray(vision?.detectedElements)
         ? vision.detectedElements
         : (Array.isArray(vision?.elements) ? vision.elements : []);
-      const targetLabel = String(params.targetLabel || "search").toLowerCase();
-      const targetWords = targetLabel.split(/[^a-z0-9]+/).filter(Boolean);
-      const target = elements.find((element: any) => {
-        const label = String(element?.label || "").toLowerCase();
-        const type = String(element?.type || "").toLowerCase();
-        if (!label && !type) return false;
-        if (targetWords.includes("search") && /search|query|find/.test(label + " " + type)) return true;
-        return targetWords.some((word) => label.includes(word) || type.includes(word));
-      });
+      const targetLabel = String(params.targetLabel || "search").toLowerCase().trim();
+      const targetIntent = String(params.targetIntent || targetLabel).toLowerCase().trim();
+      const normalizeControlText = (value: unknown) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[\\/_-]+/g, " ")
+          .replace(/\\s+/g, " ")
+          .trim();
+      const controlMatches = (element: any) => {
+        const label = normalizeControlText(element?.label);
+        const type = normalizeControlText(element?.type);
+        const text = normalizeControlText(element?.text || element?.name);
+        const haystack = [label, type, text].filter(Boolean).join(" ");
+        if (!haystack) return false;
+
+        if (/sign\\s*in|log\\s*in|login/.test(targetIntent)) {
+          return /sign\\s*in|log\\s*in|login/.test(haystack) &&
+            /button|link|submit|sign|login/.test(haystack);
+        }
+        if (/username|user\\s+name|email/.test(targetIntent)) {
+          return /username|user\\s+name|email|phone/.test(haystack) &&
+            /input|text|field|textbox|email|username|phone/.test(haystack);
+        }
+        if (targetIntent === "password") {
+          return /password|passcode/.test(haystack) &&
+            /input|text|field|textbox|password/.test(haystack);
+        }
+        if (/search/.test(targetIntent)) {
+          return /search|query|find/.test(haystack) &&
+            /input|text|field|textbox|search|button/.test(haystack);
+        }
+
+        const targetWords = targetLabel.split(/[^a-z0-9]+/).filter(Boolean);
+        return targetWords.length > 0 && targetWords.some((word) => haystack.includes(word));
+      };
+
+      // Prefer an exact semantic match over a loose word match. This prevents
+      // "sign in" from accidentally selecting an unrelated element that merely
+      // contains one common word.
+      const target = [...elements]
+        .filter(controlMatches)
+        .sort((a: any, b: any) => {
+          const aText = normalizeControlText(a?.label || a?.text || a?.name);
+          const bText = normalizeControlText(b?.label || b?.text || b?.name);
+          const aExact = aText.includes(normalizeControlText(targetLabel)) ? 1 : 0;
+          const bExact = bText.includes(normalizeControlText(targetLabel)) ? 1 : 0;
+          return bExact - aExact;
+        })[0];
       const point = target?.center || (target?.boundingBox
         ? {
             x: target.boundingBox.x + target.boundingBox.width / 2,
@@ -377,7 +416,20 @@ export default function App() {
       if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
         throw new Error(`Vision could not find the visible ${params.targetLabel || "target control"}.`);
       }
-      console.log("[VISION CLICK TARGET] matched", { label: target?.label, type: target?.type, point });
+      console.log("[VISION CLICK TARGET] identified control", {
+        requestedTarget: params.targetLabel,
+        identifiedLabel: target?.label,
+        identifiedType: target?.type,
+        point,
+        visionSize: [vision?.visionWidth || frame.visionWidth, vision?.visionHeight || frame.visionHeight],
+        coordMap: vision?.coordMapString || frame.coordMapString,
+      });
+
+      // Tell the user exactly what vision identified before the physical click.
+      // Listening is already stopped for the active command, so this announcement
+      // cannot become another voice command.
+      const identifiedLabel = String(target?.label || params.targetLabel || "the requested control").trim();
+      await VoiceEngine.speak("I found " + identifiedLabel + ".");
       if (!(window as any).magicDesktop?.execute) throw new Error("Desktop control is unavailable in this app window.");
       return await (window as any).magicDesktop.execute("CLICK", {
         x: point.x,
