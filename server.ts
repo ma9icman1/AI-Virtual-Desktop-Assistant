@@ -269,6 +269,39 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     }
   }
 
+  // Hard override for combined website commands. MiniCPM can occasionally return
+  // LAUNCH_APP with the URL/action sentence as params.app. Never allow that model
+  // output to override an explicit website + click request from the user's message.
+  const explicitWebsiteClickMatch = commandText.match(
+    /^(?:please\\s+)?(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to|goto)\\s+(?:https?:\\/\\/)?((?:www\\.)?[a-z0-9-]+\\.[a-z]{2,}(?:\\/[^\\s,]+)?)\\s*(?:,|\\s+and)?\\s+(?:click|press|select|hit)\\s+(?:on\\s+)?(?:the\\s+)?(.+?)$/i
+  );
+  if (explicitWebsiteClickMatch) {
+    const explicitUrl = "https://" + normalizeSpokenUrl(explicitWebsiteClickMatch[1]);
+    const explicitTarget = String(explicitWebsiteClickMatch[2] || "").replace(/[.!?]+$/g, "").trim();
+    if (explicitTarget) {
+      return {
+        ...parsed,
+        spokenResponse: "Opening " + explicitUrl + " and clicking " + explicitTarget + ".",
+        spokenReply: "Opening " + explicitUrl + " and clicking " + explicitTarget + ".",
+        action: {
+          type: "MULTI_STEP_PLAN",
+          description: "Open website and click requested control",
+          multiStepPlan: {
+            planTitle: "Website interaction",
+            spokenIntro: "I will open the website, inspect the live page, and click the requested control.",
+            steps: [
+              { stepNumber: 1, description: "Open " + explicitUrl, actionType: "NAVIGATE_URL", params: { url: explicitUrl }, status: "pending", estimatedDurationMs: 1500 },
+              { stepNumber: 2, description: "Find and click " + explicitTarget, actionType: "VISION_CLICK_TARGET", params: { targetLabel: explicitTarget }, status: "pending", estimatedDurationMs: 900 },
+            ],
+            spokenCompletion: "The requested website action is complete.",
+            currentStepIndex: 0,
+            status: "idle",
+          },
+        },
+      };
+    }
+  }
+
   // Deterministic combined browser workflow: preserve every requested operation.
   // Accept both "roblox.com" and Whisper's "roblox com".
   const combinedBrowserCommandMatch = commandText.match(
