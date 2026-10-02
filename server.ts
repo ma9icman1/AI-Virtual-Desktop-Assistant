@@ -81,11 +81,20 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     }
     parsed = { ...parsed, action };
   }
+  // Whisper can split a spoken domain into separate words, such as "roblox com".
+  // Normalize that boundary before any browser intent is handed to the model/fallbacks.
+  const normalizeSpokenUrl = (value: string) => {
+    const tldPattern = "com|net|org|io|co|tv|gg|dev|app|ai|me|us|uk|ca|de|fr|jp|info|biz";
+    return String(value || "")
+      .trim()
+      .replace(new RegExp("\\b(www)\\s+([a-z0-9-]+)\\s+(" + tldPattern + ")\\b", "gi"), "$1.$2.$3")
+      .replace(new RegExp("\\b([a-z0-9-]+)\\s+(" + tldPattern + ")\\b", "gi"), "$1.$2")
+      .replace(/\\s+/g, " ")
+      .trim();
+  };
   // Speech recognition often adds sentence punctuation to a spoken URL.
   // Strip only terminal punctuation for intent matching; keep the original message elsewhere.
-  // All deterministic intent matching must use the normalized request so Whisper
-  // variants such as "goto roblox.com" reach the same browser workflow as "go to roblox.com".
-  const commandText = request.trim().replace(/[.!?]+$/g, "");
+  const commandText = normalizeSpokenUrl(request.trim().replace(/[.!?]+$/g, ""));
   const appAliases: Array<[RegExp, string]> = [
     [/\b(browser|web browser|internet browser)\b/, "browser"],
     [/\b(brave|brave browser)\b/, "brave"],
