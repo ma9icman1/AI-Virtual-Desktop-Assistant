@@ -226,14 +226,14 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   // These commands must never fall through to LAUNCH_APP with the whole
   // sentence as params.app. The browser itself is selected by Windows.
   const genericBrowserCommandMatch = commandText.match(
-    /^(?:please\\s+)?(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to|goto)\\s+(https?:\\/\\/)?((?:www\\.)?[a-z0-9-]+(?:\\.[a-z]{2,}|\\s+(?:com|net|org|io|co|tv|gg|dev|app|ai|me|us|uk|ca|de|fr|jp|info|biz))(?:\\/[^\\s,]+)?)\\s*(?:,|\\s+and)?\\s+(.+)$/i
+    /^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s+(https?:\/\/)?((?:www\.)?[a-z0-9-]+(?:\.[a-z]{2,}|\s+(?:com|net|org|io|co|tv|gg|dev|app|ai|me|us|uk|ca|de|fr|jp|info|biz))(?:\/[^\s,]+)?)\s*(?:,|\s+and)?\s+(.+)$/i
   );
   if (genericBrowserCommandMatch) {
     const protocol = genericBrowserCommandMatch[1] || "https://";
     const hostAndPath = normalizeSpokenUrl(genericBrowserCommandMatch[2]);
     const actionText = String(genericBrowserCommandMatch[3] || "").trim();
     const actionMatch = actionText.match(
-      /^(click|press|select|hit)\\s+(?:on\\s+)?(?:the\\s+)?(.+?)(?:\\s+and\\s+(select|click|press|hit)\\s+(?:on\\s+)?(?:the\\s+)?(.+))?$/i
+      /^(click|press|select|hit)\s+(?:on\s+)?(?:the\s+)?(.+?)(?:\s+and\s+(select|click|press|hit)\s+(?:on\s+)?(?:the\s+)?(.+))?$/i
     );
 
     if (actionMatch) {
