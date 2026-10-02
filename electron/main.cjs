@@ -22,7 +22,7 @@ if (!gotSingleInstanceLock) {
 const port = Number(process.env.MAGIC_PORT || 3210);
 // Vision uses a bounded canvas whose aspect ratio follows the current primary
 // display. The coordinate map then carries the exact screenshot-to-physical-
- // screen transform used by every pointer action.
+// screen transform used by every pointer action.
 const AI_SCREEN_WIDTH = 1280;
 let desktopPermission = "none";
 let desktopKilled = false;
