@@ -1013,8 +1013,19 @@ try {
     const endPoint = mapCoordinate(params.endX, params.endY);
     const endX = endPoint.x;
     const endY = endPoint.y;
-    boundedInteger(endX, 0, display.size.width - 1, "End X coordinate");
-    boundedInteger(endY, 0, display.size.height - 1, "End Y coordinate");
+    const physicalDisplay = createCoordinateMap(display, screen, visionWidth, visionHeight);
+    boundedInteger(
+      endX,
+      physicalDisplay.captureX,
+      physicalDisplay.captureX + physicalDisplay.captureWidth - 1,
+      "End X coordinate",
+    );
+    boundedInteger(
+      endY,
+      physicalDisplay.captureY,
+      physicalDisplay.captureY + physicalDisplay.captureHeight - 1,
+      "End Y coordinate",
+    );
   }
   if (action === "SCROLL") {
     boundedInteger(params.amount, -10000, 10000, "Scroll amount");
@@ -1162,8 +1173,9 @@ public static class MagicKeyInput {
   }
   }`;
 
-  const endX = scalePoint(params.endX, display.size.width, visionWidth);
-  const endY = scalePoint(params.endY, display.size.height, visionHeight);
+  const endPoint = action === "DRAG" ? mapCoordinate(params.endX, params.endY) : { x: 0, y: 0 };
+  const endX = endPoint.x;
+  const endY = endPoint.y;
   const actionArgs = [action, String(x), String(y), String(params.text ?? params.key ?? params.app ?? params.ms ?? ""), String(endX), String(endY)];
   console.log(`[DEBUG INPUT] actionArgs=${JSON.stringify(actionArgs)} textParam=${JSON.stringify(params.text)} keyParam=${JSON.stringify(params.key)}`);
   const result = await runPowerShell(script, actionArgs);
