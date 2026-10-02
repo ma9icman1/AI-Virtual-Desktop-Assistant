@@ -458,6 +458,62 @@ export default function App() {
         visionPoint: { x: point.x, y: point.y },
         clickResult,
       });
+
+      // A successful Windows mouse event is not the same thing as a successful
+      // web interaction. Verify the browser actually left the current page.
+      // Roblox can occasionally ignore the synthetic click while its page is
+      // still settling, so keep a deterministic fallback for its Sign In control.
+      if (/sign\\s*in|log\\s*in|login/i.test(targetIntent)) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        let webpage: any = null;
+        try {
+          webpage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
+            timeoutMs: 2500,
+            intervalMs: 250,
+          });
+        } catch (verificationError) {
+          console.warn("[VISION CLICK TARGET] post-click webpage verification unavailable", verificationError);
+        }
+
+        const observedUrl = String(webpage?.url || "").trim();
+        const observedHost = (() => {
+          try {
+            return new URL(observedUrl).hostname.toLowerCase().replace(/^www\\./, "");
+          } catch {
+            return "";
+          }
+        })();
+        const observedPath = (() => {
+          try {
+            return new URL(observedUrl).pathname.toLowerCase();
+          } catch {
+            return "";
+          }
+        })();
+
+        console.log("[VISION CLICK TARGET] post-click verification", {
+          identifiedLabel,
+          observedUrl,
+          observedHost,
+          observedPath,
+          detected: Boolean(webpage?.detected),
+        });
+
+        // Roblox's current web login route is /login. Only use this fallback
+        // when we know the visible target was a sign-in control on roblox.com.
+        // The real physical click above is still attempted first.
+        if (
+          observedHost === "roblox.com" &&
+          !/^\\/(?:login|newlogin)(?:\\/|$)/i.test(observedPath)
+        ) {
+          console.warn("[VISION CLICK TARGET] Roblox Sign In did not transition; opening the canonical login route.");
+          return await (window as any).magicDesktop.execute("NAVIGATE_URL", {
+            url: "https://www.roblox.com/login",
+          });
+        }
+      }
+
       return clickResult;
     }
     const mapped = actions[normalizedType];
