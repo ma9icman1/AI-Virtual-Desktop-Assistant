@@ -404,7 +404,6 @@ export default function App() {
         coordinateSpace: "vision",
         visionWidth: activeVision?.visionWidth,
         visionHeight: activeVision?.visionHeight,
-        coordinateSpace: "vision",
         coordMap: activeVision?.coordMap,
         coordMapString: activeVision?.coordMapString,
       },
@@ -953,63 +952,6 @@ export default function App() {
       setAudioLevel(0);
       setVoiceNotice(null);
     } else {
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
-      VoiceEngine.setWakeWordMode(false);
       VoiceEngine.setWakeWordMode(false);
       setIsListening(true);
       setAssistantState("listening");

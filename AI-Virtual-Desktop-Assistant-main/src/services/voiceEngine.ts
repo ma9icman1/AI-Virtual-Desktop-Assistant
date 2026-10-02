@@ -10,6 +10,7 @@ declare global {
       onTranscript: (callback: (payload: { text: string; confidence: number }) => void) => () => void;
       onError: (callback: (message: string) => void) => () => void;
       onLevel?: (callback: (level: number) => void) => () => void;
+      onDevice?: (callback: (device: string) => void) => () => void;
     };
   }
 }

@@ -319,7 +319,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   const desktopVoiceFolderMatch = message.match(/\b(?:open|go\s+to)\s+(?:the\s+)?folder\s+["']?(.+?)["']?\s*$/i);
   const desktopVoiceFileMatch = message.match(/\b(?:open|load)\s+(?:the\s+)?file\s+["']?(.+?)["']?\s*$/i);
 
-  const makePlan = (title, description, steps, completion) => ({
+  const makePlan = (title: string, description: string, steps: any[], completion: string) => ({
     ...parsed,
     action: { type: "MULTI_STEP_PLAN", description, multiStepPlan: {
       planTitle: title, spokenIntro: description, steps, spokenCompletion: completion, currentStepIndex: 0, status: "idle"
@@ -363,6 +363,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
 
   if (desktopVoiceMinMatch || desktopVoiceMaxMatch || desktopVoiceRestoreMatch) {
     const match = desktopVoiceMinMatch || desktopVoiceMaxMatch || desktopVoiceRestoreMatch;
+    if (!match) return parsed;
     const actionType = desktopVoiceMinMatch ? "MINIMIZE_APP" : desktopVoiceMaxMatch ? "MAXIMIZE_APP" : "RESTORE_APP";
     const app = match[1].trim();
     const verb = actionType === "MINIMIZE_APP" ? "minimize" : actionType === "MAXIMIZE_APP" ? "maximize" : "restore";

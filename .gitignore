@@ -17,4 +17,8 @@ release/
 release-*/
 *.tmp/
 win-unpacked/
+*.before-*
+*.before-*/*
+fix-*.ps1
+auto-fix-*.cjs
 

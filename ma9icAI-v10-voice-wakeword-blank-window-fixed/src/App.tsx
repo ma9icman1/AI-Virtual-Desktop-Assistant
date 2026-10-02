@@ -52,6 +52,7 @@ import {
   Globe2,
   Lightbulb,
   ChevronRight,
+  FolderOpen,
 } from "lucide-react";
 
 function describeError(error: unknown, fallback: string): string {

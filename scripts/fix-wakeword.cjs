@@ -26,7 +26,7 @@ if (fs.existsSync(appFile)) {
     text = text.replace(startupPattern, '\n  // Microphone starts OFF. User enables voice by clicking the round mic button.');
     console.log('[voice] Disabled automatic microphone startup.');
   }
-  const manualStartPattern = /setIsListening\(true\);\s*setAssistantState\("listening"\);\s*setVoiceNotice\("Starting microphone…"\);\s*VoiceEngine\.startListening\(\)\.then\(\(\)\s*=>\s*\{\s*setVoiceNotice\("Microphone active — speak now\."\);/m;
+  const manualStartPattern = /(?:VoiceEngine\.setWakeWordMode\(false\);\s*)?setIsListening\(true\);\s*setAssistantState\("listening"\);\s*setVoiceNotice\("Starting microphone…"\);\s*VoiceEngine\.startListening\(\)\.then\(\(\)\s*=>\s*\{\s*setVoiceNotice\("Microphone active — speak now\."\);/m;
   const manualStartReplacement = `VoiceEngine.setWakeWordMode(false);
       setIsListening(true);
       setAssistantState("listening");

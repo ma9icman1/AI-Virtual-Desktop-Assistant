@@ -1211,6 +1211,13 @@ Return ONLY valid JSON matching this structure:
 
 // Computer Vision: Screen & Desktop Reading Endpoint
 app.post("/api/vision/analyze", async (req, res) => {
+  let coordinateMetadata: Record<string, any> = {
+    coordinateSpace: "vision",
+    visionWidth: 1280,
+    visionHeight: 720,
+    sourceWidth: 1280,
+    sourceHeight: 720,
+  };
   try {
     const rawImage = req.body.imageBase64 || req.body.imageData;
     const prompt =
@@ -1239,7 +1246,7 @@ app.post("/api/vision/analyze", async (req, res) => {
         }
       : undefined;
     const coordMapString = typeof req.body.coordMapString === "string" ? req.body.coordMapString : undefined;
-    const coordinateMetadata = {
+    coordinateMetadata = {
       coordinateSpace: "vision",
       visionWidth,
       visionHeight,
