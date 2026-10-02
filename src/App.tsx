@@ -624,7 +624,8 @@ export default function App() {
           // ma9icAI starts with a live understanding of the page it just opened.
           const completedActionType = String(steps[i].actionType).toUpperCase();
           if (["NAVIGATE_URL", "SEARCH_WEB"].includes(completedActionType)) {
-            await new Promise((resolve) => setTimeout(resolve, 700));
+            // Give the live webpage time to finish painting before the first vision scan.
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             await captureScreenRef.current?.();
           } else if (completedActionType === "VISION_CLICK_TARGET") {
             // Observe again after a vision-driven click. This gives the assistant
