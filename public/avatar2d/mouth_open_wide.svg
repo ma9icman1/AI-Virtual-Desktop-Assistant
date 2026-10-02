@@ -1,131 +1,80 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="100%" height="100%">
   <defs>
-    <linearGradient id="upperLipW" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#e85b7a"/>
-      <stop offset="35%"  stop-color="#d44d6a"/>
-      <stop offset="100%" stop-color="#b03055"/>
+    <linearGradient id="upperLipWide" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0627c"/>
+      <stop offset="50%" stop-color="#cb4864"/>
+      <stop offset="100%" stop-color="#9f2842"/>
     </linearGradient>
-    <linearGradient id="lowerLipW" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#e8506c"/>
-      <stop offset="50%"  stop-color="#d44060"/>
-      <stop offset="100%" stop-color="#aa2e50"/>
+
+    <linearGradient id="lowerLipWide" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f46e88"/>
+      <stop offset="40%" stop-color="#e2506e"/>
+      <stop offset="85%" stop-color="#c43354"/>
+      <stop offset="100%" stop-color="#931d37"/>
     </linearGradient>
-    <radialGradient id="lipWetW" cx="50%" cy="22%" r="55%">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.62"/>
-      <stop offset="55%"  stop-color="#ffffff" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="upperWetW" cx="50%" cy="40%" r="50%">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
+
     <!-- Deep oral cavity -->
-    <radialGradient id="oralCavityW" cx="50%" cy="40%" r="55%">
-      <stop offset="0%"   stop-color="#3d0018"/>
-      <stop offset="55%"  stop-color="#2a000e"/>
-      <stop offset="100%" stop-color="#0f0008"/>
+    <radialGradient id="oralDepthWide" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#3b0512"/>
+      <stop offset="65%" stop-color="#1c0107"/>
+      <stop offset="100%" stop-color="#080002"/>
     </radialGradient>
-    <!-- Tongue: fleshy pink -->
-    <radialGradient id="tongueW" cx="50%" cy="40%" r="55%">
-      <stop offset="0%"   stop-color="#f08080"/>
-      <stop offset="50%"  stop-color="#e05050"/>
-      <stop offset="100%" stop-color="#c03040"/>
+
+    <!-- Tongue -->
+    <radialGradient id="tongueGrad" cx="50%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#fb7185"/>
+      <stop offset="55%" stop-color="#e11d48"/>
+      <stop offset="100%" stop-color="#9f1239"/>
     </radialGradient>
-    <!-- Teeth gradient -->
-    <linearGradient id="teethW" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#f9fafb"/>
-      <stop offset="100%" stop-color="#e2e8f0"/>
-    </linearGradient>
-    <radialGradient id="cornerW" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#7f1d3f" stop-opacity="0.68"/>
-      <stop offset="100%" stop-color="#7f1d3f" stop-opacity="0"/>
+
+    <radialGradient id="lipGlossWide" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="85%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
-    <filter id="lipSoftW" x="-10%" y="-10%" width="120%" height="120%">
-      <feGaussianBlur stdDeviation="0.5" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <filter id="tongueSoft" x="-15%" y="-15%" width="130%" height="130%">
-      <feGaussianBlur stdDeviation="0.7" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
   </defs>
 
-  <g id="mouthOpenWide">
-    <!-- Deep oral cavity -->
-    <path d="M 185 258 C 193 255, 207 255, 215 258 C 214 275, 186 275, 185 258 Z"
-          fill="url(#oralCavityW)"/>
+  <!-- Shadow under lower lip -->
+  <ellipse cx="200" cy="309" rx="20" ry="4" fill="#883b1d" opacity="0.38"/>
 
-    <!-- Tongue (fleshy, resting low) -->
-    <path d="M 189 268 C 192 262, 208 262, 211 268
-             C 209 274, 191 274, 189 268 Z"
-          fill="url(#tongueW)" filter="url(#tongueSoft)" opacity="0.9"/>
-    <!-- Tongue center groove -->
-    <path d="M 200 263 L 200 272" stroke="#c03040" stroke-width="0.9" opacity="0.35"
-          stroke-linecap="round"/>
-    <!-- Tongue wet highlight -->
-    <ellipse cx="200" cy="266" rx="5.5" ry="2" fill="#ffffff" opacity="0.25"/>
+  <!-- Deep Oral Cavity Opening -->
+  <path d="M 176 286 C 185 281, 215 281, 224 286
+           C 222 301, 178 301, 176 286 Z"
+        fill="url(#oralDepthWide)"/>
 
-    <!-- Upper teeth (prominent) -->
-    <path d="M 187 258 C 192 256, 208 256, 213 258
-             C 212 263, 188 263, 187 258 Z"
-          fill="url(#teethW)"/>
-    <!-- Tooth dividers - upper -->
-    <line x1="193" y1="257" x2="193" y2="263" stroke="#d1d5db" stroke-width="0.8" opacity="0.5"/>
-    <line x1="200" y1="257" x2="200" y2="263" stroke="#d1d5db" stroke-width="0.8" opacity="0.5"/>
-    <line x1="207" y1="257" x2="207" y2="263" stroke="#d1d5db" stroke-width="0.8" opacity="0.5"/>
-    <!-- Tooth shadow (gum line) -->
-    <path d="M 188 257.5 C 194 256, 206 256, 212 257.5"
-          stroke="#e2aabe" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.45"/>
+  <!-- Tongue in Lower Cavity -->
+  <path d="M 183 297 C 190 293, 210 293, 217 297
+           C 213 301, 187 301, 183 297 Z"
+        fill="url(#tongueGrad)"/>
 
-    <!-- Lower teeth (smaller strip) -->
-    <path d="M 189 264 C 193 263, 207 263, 211 264
-             C 210 267, 190 267, 189 264 Z"
-          fill="url(#teethW)" opacity="0.85"/>
-    <!-- Lower tooth dividers -->
-    <line x1="196" y1="263.5" x2="196" y2="267" stroke="#d1d5db" stroke-width="0.7" opacity="0.4"/>
-    <line x1="204" y1="263.5" x2="204" y2="267" stroke="#d1d5db" stroke-width="0.7" opacity="0.4"/>
+  <!-- Upper Teeth Arc -->
+  <path d="M 182 284 C 190 285.5, 210 285.5, 218 284
+           C 217 290, 183 290, 182 284 Z"
+        fill="#f8fafc"/>
+  <line x1="200" y1="285" x2="200" y2="290" stroke="#cbd5e1" stroke-width="0.8"/>
+  <line x1="193" y1="285" x2="193" y2="289" stroke="#e2e8f0" stroke-width="0.6"/>
+  <line x1="207" y1="285" x2="207" y2="289" stroke="#e2e8f0" stroke-width="0.6"/>
 
-    <!-- Upper lip (cupid's bow) -->
-    <path d="M 184 258
-             C 187 255, 191 253, 195 254
-             C 197.5 252, 200 251.5, 202.5 252
-             C 207 253, 211 255, 216 258
-             C 210 256.5, 200 257.5, 190 256.5
-             Z"
-          fill="url(#upperLipW)" filter="url(#lipSoftW)"/>
+  <!-- Lower Lip Pulled Down -->
+  <path d="M 175 288 C 182 306, 218 306, 225 288
+           C 220 306, 212 308, 200 308
+           C 188 308, 180 306, 175 288 Z"
+        fill="url(#lowerLipWide)"/>
 
-    <!-- Upper lip sheen -->
-    <ellipse cx="200" cy="255.5" rx="10.5" ry="1.8" fill="url(#upperWetW)" opacity="0.88"/>
+  <!-- Gloss on Lower Lip -->
+  <ellipse cx="200" cy="300" rx="14" ry="4" fill="url(#lipGlossWide)"/>
+  <ellipse cx="200" cy="298" rx="8" ry="1.6" fill="#ffffff" opacity="0.6"/>
 
-    <!-- Vermilion border upper -->
-    <path d="M 183 258 C 187 255, 191 252.5, 195 253.5
-             C 197.5 251.5, 200 251, 202.5 251.5
-             C 207 252.5, 211 255, 216 258"
-          stroke="#9f1239" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.65"/>
+  <!-- Upper Lip -->
+  <path d="M 175 286 C 182 281, 189 276, 195 277
+           C 198 278, 200 280, 200 280
+           C 200 280, 202 278, 205 277
+           C 211 276, 218 281, 225 286
+           C 215 287, 205 285.5, 200 285
+           C 195 285.5, 185 287, 175 286 Z"
+        fill="url(#upperLipWide)"/>
 
-    <!-- Lower lip (wide open, curved down far) -->
-    <path d="M 184 264
-             C 186 271, 193 278, 200 278
-             C 207 278, 214 271, 216 264
-             C 210 265.5, 190 265.5, 184 264 Z"
-          fill="url(#lowerLipW)" filter="url(#lipSoftW)"/>
-
-    <!-- Lower lip wet highlight -->
-    <ellipse cx="200" cy="271" rx="10" ry="3.2" fill="url(#lipWetW)" opacity="0.88"/>
-    <ellipse cx="197" cy="270" rx="4" ry="1.5" fill="#ffffff" opacity="0.4"/>
-
-    <!-- Corner shadows -->
-    <ellipse cx="184" cy="261" rx="3" ry="2.5" fill="url(#cornerW)"/>
-    <ellipse cx="216" cy="261" rx="3" ry="2.5" fill="url(#cornerW)"/>
-
-    <!-- Sub-labial chin shadow -->
-    <path d="M 191 280 C 195 282, 205 282, 209 280"
-          stroke="#c07858" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.4"/>
-  </g>
+  <!-- Highlights -->
+  <circle cx="195" cy="277" r="1.4" fill="#ffffff" opacity="0.75"/>
+  <circle cx="205" cy="277" r="1.4" fill="#ffffff" opacity="0.75"/>
 </svg>

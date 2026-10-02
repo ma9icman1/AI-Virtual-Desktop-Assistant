@@ -1,87 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="100%" height="100%">
   <defs>
-    <linearGradient id="upperLipO" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#e85b7a"/>
-      <stop offset="35%"  stop-color="#d44d6a"/>
-      <stop offset="100%" stop-color="#b03055"/>
-    </linearGradient>
-    <linearGradient id="lowerLipO" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#e8506c"/>
-      <stop offset="50%"  stop-color="#d44060"/>
-      <stop offset="100%" stop-color="#aa2e50"/>
-    </linearGradient>
-    <!-- Circular opening lip -->
-    <radialGradient id="lipWetO" cx="45%" cy="25%" r="50%">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.6"/>
-      <stop offset="55%"  stop-color="#ffffff" stop-opacity="0.18"/>
+    <!-- Radial Lip Shading for Pursed O Shape -->
+    <radialGradient id="pursedLipGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#cb4864"/>
+      <stop offset="60%" stop-color="#e0627c"/>
+      <stop offset="85%" stop-color="#f46e88"/>
+      <stop offset="100%" stop-color="#931d37"/>
+    </radialGradient>
+
+    <!-- Pursed Lip Gloss Ring -->
+    <radialGradient id="pursedGloss" cx="50%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.3"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
-    <!-- Oral cavity dark -->
-    <radialGradient id="oralCavityO" cx="50%" cy="45%" r="55%">
-      <stop offset="0%"   stop-color="#3d0018"/>
-      <stop offset="60%"  stop-color="#2a000e"/>
-      <stop offset="100%" stop-color="#160009"/>
+
+    <radialGradient id="pursedOralDepth" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#4a0818"/>
+      <stop offset="70%" stop-color="#24020a"/>
+      <stop offset="100%" stop-color="#0a0003"/>
     </radialGradient>
-    <!-- Teeth arc -->
-    <linearGradient id="teethO" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#f9fafb"/>
-      <stop offset="100%" stop-color="#e2e8f0"/>
-    </linearGradient>
-    <radialGradient id="cornerO" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#7f1d3f" stop-opacity="0.65"/>
-      <stop offset="100%" stop-color="#7f1d3f" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="lipSoftO" x="-15%" y="-15%" width="130%" height="130%">
-      <feGaussianBlur stdDeviation="0.6" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
   </defs>
 
-  <g id="mouthO">
-    <!-- Oral cavity opening (elliptical hole) -->
-    <ellipse cx="200" cy="263" rx="7.5" ry="9.5" fill="url(#oralCavityO)"/>
+  <!-- Shadow under pursed lip -->
+  <ellipse cx="200" cy="305" rx="16" ry="4" fill="#883b1d" opacity="0.35"/>
 
-    <!-- Teeth arc inside (upper) -->
-    <path d="M 193.5 260 C 195.5 258, 204.5 258, 206.5 260 C 204.5 262, 195.5 262, 193.5 260 Z"
-          fill="url(#teethO)" opacity="0.9"/>
+  <!-- Pursed Outer Lip Body -->
+  <ellipse cx="200" cy="289" rx="17" ry="14" fill="url(#pursedLipGrad)"/>
 
-    <!-- Upper lip (curved over top of opening) -->
-    <path d="M 190 258
-             C 193 255, 197 253, 200 253.5
-             C 203 253, 207 255, 210 258
-             C 207 256.5, 200 256, 193 256.5
-             C 196 254.8, 200 254.5, 204 254.8
-             Z"
-          fill="url(#upperLipO)" filter="url(#lipSoftO)"/>
+  <!-- Inner Dark Oral Hole -->
+  <ellipse cx="200" cy="289" rx="8" ry="7.5" fill="url(#pursedOralDepth)"/>
 
-    <!-- Upper lip sheen -->
-    <ellipse cx="200" cy="256.5" rx="7" ry="1.8" fill="#ffffff" opacity="0.35"/>
+  <!-- Subtle upper teeth visible at top rim of hole -->
+  <path d="M 194 286 C 196 287.5, 204 287.5, 206 286 Z" fill="#f8fafc"/>
 
-    <!-- Vermilion border upper -->
-    <path d="M 190 258 C 193 255, 197 252.8, 200 253 C 203 252.8, 207 255, 210 258"
-          stroke="#9f1239" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.68"/>
+  <!-- Specular Gloss on Lower Pursed Edge -->
+  <ellipse cx="200" cy="298" rx="8" ry="3" fill="url(#pursedGloss)"/>
+  <ellipse cx="200" cy="297" rx="4" ry="1.2" fill="#ffffff" opacity="0.75"/>
 
-    <!-- Lower lip (curved under opening) -->
-    <path d="M 190 264
-             C 192 269, 197 273, 200 273
-             C 203 273, 208 269, 210 264
-             C 207 265, 200 266, 193 265
-             Z"
-          fill="url(#lowerLipO)" filter="url(#lipSoftO)"/>
-
-    <!-- Lower lip wet highlight -->
-    <ellipse cx="200" cy="268" rx="6.5" ry="2.5" fill="url(#lipWetO)" opacity="0.85"/>
-    <ellipse cx="198" cy="267" rx="2.8" ry="1.2" fill="#ffffff" opacity="0.4"/>
-
-    <!-- Corners -->
-    <ellipse cx="190" cy="261" rx="2.8" ry="2.2" fill="url(#cornerO)"/>
-    <ellipse cx="210" cy="261" rx="2.8" ry="2.2" fill="url(#cornerO)"/>
-
-    <!-- Sub-labial shadow -->
-    <path d="M 194 275 C 197 277, 203 277, 206 275"
-          stroke="#c07858" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.38"/>
-  </g>
+  <!-- Specular Gloss on Upper Cupid's Ridge -->
+  <ellipse cx="200" cy="279" rx="5" ry="2" fill="url(#pursedGloss)"/>
+  <circle cx="197" cy="279" r="1.1" fill="#ffffff" opacity="0.7"/>
+  <circle cx="203" cy="279" r="1.1" fill="#ffffff" opacity="0.7"/>
 </svg>

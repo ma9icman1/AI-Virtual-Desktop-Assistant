@@ -19,6 +19,41 @@ interface Avatar2DProps {
   enableParallax?: boolean;
 }
 
+interface AvatarLayerImageProps {
+  name: string;
+  alt: string;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+const AvatarLayerImage: React.FC<AvatarLayerImageProps> = ({
+  name,
+  alt,
+  className = "absolute inset-0 w-full h-full object-contain",
+  style,
+}) => {
+  const [src, setSrc] = useState<string>(`/avatar2d/${name}.png`);
+
+  useEffect(() => {
+    setSrc(`/avatar2d/${name}.png`);
+  }, [name]);
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      className={className}
+      style={style}
+      onError={() => {
+        if (src.endsWith(".png")) {
+          setSrc(`/avatar2d/${name}.svg`);
+        }
+      }}
+    />
+  );
+};
+
 export const Avatar2D: React.FC<Avatar2DProps> = ({
   isSpeaking,
   isListening = false,
@@ -214,10 +249,9 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           }}
         >
           {/* Layer 1: Body, Torso, Hair, Face Base */}
-          <img
-            src="/avatar2d/body.svg"
+          <AvatarLayerImage
+            name="body"
             alt="Nova Avatar Base"
-            draggable={false}
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             style={{
               transform: "translateZ(0px)",
@@ -232,30 +266,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               transform: `translateZ(20px) translate3d(${parallax.x * 3}px, ${parallax.y * 3}px, 0)`,
             }}
           >
-            {eyeState === "open" && (
-              <img
-                src="/avatar2d/eyes_open.svg"
-                alt="Eyes Open"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-            {eyeState === "half" && (
-              <img
-                src="/avatar2d/eyes_half.svg"
-                alt="Eyes Half"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-            {eyeState === "closed" && (
-              <img
-                src="/avatar2d/eyes_closed.svg"
-                alt="Eyes Closed"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
+            <AvatarLayerImage
+              name={`eyes_${eyeState}`}
+              alt={`Eyes ${eyeState}`}
+              className="absolute inset-0 w-full h-full object-contain"
+            />
           </div>
 
           {/* Layer 3: Mouth (With forward depth parallax & viseme swap) */}
@@ -265,46 +280,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               transform: `translateZ(18px) translate3d(${parallax.x * 2.5}px, ${parallax.y * 2.5}px, 0)`,
             }}
           >
-            {mouthState === "closed" && (
-              <img
-                src="/avatar2d/mouth_closed.svg"
-                alt="Mouth Closed"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-            {mouthState === "smile" && (
-              <img
-                src="/avatar2d/mouth_smile.svg"
-                alt="Mouth Smile"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-            {mouthState === "open_small" && (
-              <img
-                src="/avatar2d/mouth_open_small.svg"
-                alt="Mouth Speaking Soft"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-            {mouthState === "open_wide" && (
-              <img
-                src="/avatar2d/mouth_open_wide.svg"
-                alt="Mouth Speaking Open"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-            {mouthState === "o" && (
-              <img
-                src="/avatar2d/mouth_o.svg"
-                alt="Mouth O"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
+            <AvatarLayerImage
+              name={`mouth_${mouthState}`}
+              alt={`Mouth ${mouthState}`}
+              className="absolute inset-0 w-full h-full object-contain"
+            />
           </div>
         </div>
       </div>
