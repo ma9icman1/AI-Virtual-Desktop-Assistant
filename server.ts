@@ -273,7 +273,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   // LAUNCH_APP with the URL/action sentence as params.app. Never allow that model
   // output to override an explicit website + click request from the user's message.
   const explicitWebsiteClickMatch = commandText.match(
-    /^(?:please\\s+)?(?:open|go\\s+to|navigate\\s+to|visit|load|browse\\s+to|goto)\\s+(?:https?:\\/\\/)?((?:www\\.)?[a-z0-9-]+\\.[a-z]{2,}(?:\\/[^\\s,]+)?)\\s*(?:,|\\s+and)?\\s+(?:click|press|select|hit)\\s+(?:on\\s+)?(?:the\\s+)?(.+?)$/i
+    /^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to|goto)\s+(?:https?:\/\/)?((?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/[^\s,]+)?)\s*(?:,|\s+and)?\s+(?:click|press|select|hit)\s+(?:on\s+)?(?:the\s+)?(.+?)$/i
   );
   if (explicitWebsiteClickMatch) {
     const explicitUrl = "https://" + normalizeSpokenUrl(explicitWebsiteClickMatch[1]);
