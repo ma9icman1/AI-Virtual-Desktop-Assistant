@@ -1,0 +1,34 @@
+PROJECT OBJECTIVES / IDEAS
+
+1. ROBLOX AI FORK
+- This is a separate fork off the main AI-Virtual-Desktop-Assistant project.
+- Focus on live Roblox game detection and interaction.
+- Load Roblox.
+- Detect when the actual game has loaded and is ready.
+- Do not depend on a fixed Roblox executable filename because the Roblox executable can change.
+- Use live AI vision to understand the game screen.
+- Detect items, objects, UI, prompts, NPCs, inventory, objectives, and other visible game elements.
+- Let the user perform tiny in-game tasks and mouse-clicker style actions.
+- Build toward a TinyTask-style interaction/recording system.
+- Core loop: Observe -> Understand -> Act -> Verify.
+- Initial milestone: launch Roblox -> load a game -> detect the game -> detect readiness -> continuously understand the visible game screen.
+
+2. WEB AUTOMATION / SIGNUP FORK
+- This is a separate fork off the main AI-Virtual-Desktop-Assistant project.
+- Focus on automatic website signup and form workflows.
+- Open websites and navigate signup flows.
+- Detect forms and fields dynamically rather than relying on fixed coordinates.
+- Fill forms using user-provided data.
+- Handle text fields, dropdowns, checkboxes, radio buttons, date fields, and similar controls.
+- Detect validation errors and correct/retry fields.
+- Navigate multi-page forms.
+- Handle email verification by handing control back to the user when needed.
+- Verify that signup/workflow steps actually completed.
+- Automate general website workflows where appropriate.
+- Core loop: Observe -> Identify -> Fill -> Submit -> Verify.
+- Long-term goal: an automatic system that can fill in data and automate an entire legitimate signup workflow.
+
+3. TEST-TAKING / FORM AUTOMATION IDEA
+- Explore automation for test-taking and form workflows.
+- Mechanical interaction, practice tests, demos, form testing, and accessibility workflows are intended uses.
+- Do not build the system to autonomously complete graded assessments on the user's behalf.
