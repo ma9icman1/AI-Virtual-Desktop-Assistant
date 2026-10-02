@@ -541,7 +541,7 @@ export default function App() {
         // The real physical click above is still attempted first.
         if (
           observedHost === "roblox.com" &&
-          !/^\\/(?:login|newlogin)(?:\\/|$)/i.test(observedPath)
+          !/^\/(?:login|newlogin)(?:\/|$)/i.test(observedPath)
         ) {
           console.warn("[VISION CLICK TARGET] Roblox Sign In did not transition; opening the canonical login route.");
           return await (window as any).magicDesktop.execute("NAVIGATE_URL", {
