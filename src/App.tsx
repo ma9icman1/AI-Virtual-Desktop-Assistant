@@ -15,6 +15,7 @@ import { MemoryService } from "./services/memoryService";
 
 import { VoiceOrb } from "./components/assistant/VoiceOrb";
 import { AvatarCanvas } from "./components/avatar/AvatarCanvas";
+import { Avatar2D } from "./components/avatar/Avatar2D";
 import { ChatFeed } from "./components/assistant/ChatFeed";
 import { InputBar } from "./components/assistant/InputBar";
 import { VoiceSettingsModal } from "./components/assistant/VoiceSettingsModal";
@@ -70,6 +71,7 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [visualMode, setVisualMode] = useState<"avatar" | "orb">("avatar");
+  const [avatarMode, setAvatarMode] = useState<"2d" | "3d">("2d");
   const [experienceMode, setExperienceMode] = useState<"full" | "model">("full");
   const [showVisualStage, setShowVisualStage] = useState(false);
   const [modelConnected, setModelConnected] = useState(false);
@@ -1162,24 +1164,39 @@ export default function App() {
   return (
     <div className={`ma9ic-shell w-screen h-screen overflow-hidden text-slate-100 flex flex-col font-sans select-none relative ${isDesktopShell ? "desktop-shell" : ""}`}>
       {experienceMode === "model" ? (
-        <AvatarCanvas
-          isSpeaking={assistantState === "speaking"}
-          isListening={isListening}
-          audioLevel={audioLevel}
-          modelOnly
-          onSpeakGreeting={triggerMagicGreeting}
-          onToggleListening={handleToggleListening}
-          onCaptureScreen={handleCaptureScreen}
-          onSendMessage={handleSendMessage}
-          status={assistantState}
-          voiceNotice={voiceNotice}
-          connectionProgress={connectionProgress}
-          onQuickAction={handleModelQuickAction}
-          onToggleFullView={() => setExperienceMode("full")}
-          onModelConnectionChange={setModelConnected}
-          loadOnMount
-          className="h-screen w-screen"
-        />
+        avatarMode === "2d" ? (
+          <Avatar2D
+            isSpeaking={assistantState === "speaking"}
+            isListening={isListening}
+            audioLevel={audioLevel}
+            onSpeakGreeting={triggerMagicGreeting}
+            onToggleListening={handleToggleListening}
+            onToggleFullView={() => setExperienceMode("full")}
+            onSwitchMode={(mode) => setAvatarMode(mode === "avatar" ? "3d" : "2d")}
+            status={assistantState}
+            voiceNotice={voiceNotice}
+            className="h-screen w-screen"
+          />
+        ) : (
+          <AvatarCanvas
+            isSpeaking={assistantState === "speaking"}
+            isListening={isListening}
+            audioLevel={audioLevel}
+            modelOnly
+            onSpeakGreeting={triggerMagicGreeting}
+            onToggleListening={handleToggleListening}
+            onCaptureScreen={handleCaptureScreen}
+            onSendMessage={handleSendMessage}
+            status={assistantState}
+            voiceNotice={voiceNotice}
+            connectionProgress={connectionProgress}
+            onQuickAction={handleModelQuickAction}
+            onToggleFullView={() => setExperienceMode("full")}
+            onModelConnectionChange={setModelConnected}
+            loadOnMount
+            className="h-screen w-screen"
+          />
+        )
       ) : (
         <>
           <header className="ma9ic-header shrink-0">
@@ -1191,6 +1208,18 @@ export default function App() {
             </button>
             <div className="ma9ic-header-tagline">✦ Your AI. Your Desktop. Your Control.</div>
             <div className="ma9ic-header-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setAvatarMode("2d");
+                  setExperienceMode("model");
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-cyan-500/40 bg-cyan-950/60 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/60 hover:border-cyan-300 transition cursor-pointer"
+                title="Open 2.5D Animated Avatar"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Avatar 2.5D</span>
+              </button>
               <span className={`ma9ic-online ${aiConnected ? "ready" : "offline"}`}><i />{aiConnected ? "Online" : "Offline"}</span>
               <button type="button" onClick={() => (window as any).magicWindow?.minimize?.()} className="ma9ic-window-btn" title="Minimize">—</button>
               <button type="button" onClick={() => (window as any).magicWindow?.toggleMaximize?.()} className="ma9ic-window-btn" title="Maximize">□</button>
@@ -1202,7 +1231,7 @@ export default function App() {
             <aside className="ma9ic-sidebar">
               <nav className="ma9ic-nav">
                 {[
-                  ['Home', <Home />], ['Chat', <MessageSquare />], ['Voice', <Mic2 />], ['Vision', <ScanEye />], ['Windows Control', <Monitor />], ['Apps & Tools', <Grid2X2 />], ['AI Models', <Cpu />], ['About', <Info />]
+                  ['Home', <Home />], ['Avatar 2.5D', <Sparkles />], ['Chat', <MessageSquare />], ['Voice', <Mic2 />], ['Vision', <ScanEye />], ['Windows Control', <Monitor />], ['Apps & Tools', <Grid2X2 />], ['AI Models', <Cpu />], ['About', <Info />]
                 ].map(([label, icon]) => (
                   <button key={String(label)} type="button" className={`ma9ic-nav-item ${activeSection === label ? "selected" : ""}`} onClick={() => {
                     setActiveSection(String(label));
@@ -1230,6 +1259,28 @@ export default function App() {
                       <ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} onVisionTargetClick={handleXRayTargetClick} />
                     </div>
                   </section>
+                </div>
+              ) : activeSection === 'Avatar 2.5D' ? (
+                <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-slate-950 flex flex-col items-center justify-center p-2">
+                  <Avatar2D
+                    isSpeaking={assistantState === "speaking"}
+                    isListening={isListening}
+                    audioLevel={audioLevel}
+                    onSpeakGreeting={triggerMagicGreeting}
+                    onToggleListening={handleToggleListening}
+                    onToggleFullView={() => {
+                      setAvatarMode("2d");
+                      setExperienceMode("model");
+                    }}
+                    onSwitchMode={(mode) => {
+                      if (mode === "avatar") {
+                        setAvatarMode("3d");
+                        setExperienceMode("model");
+                      }
+                    }}
+                    status={assistantState}
+                    voiceNotice={voiceNotice}
+                  />
                 </div>
               ) : activeSection === 'Chat' ? (
                 <div className="ma9ic-chat-page"><ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} onVisionTargetClick={handleXRayTargetClick} /></div>

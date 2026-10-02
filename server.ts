@@ -7,6 +7,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import fs from "fs";
+import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
+import { KokoroTTS } from "kokoro-js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -796,6 +798,239 @@ app.get("/api/models/nova.compressed.glb", async (_req, res) => {
     console.error("Error proxying avatar model:", error);
     if (!res.headersSent) res.status(502).send("Unable to download avatar model");
   }
+});
+
+// ==========================================
+// Neural TTS System: Option 1 (Edge TTS) + Option 3 (Kokoro TTS Offline) + SAPI Falloff
+// ==========================================
+let kokoroInstance: any = null;
+let kokoroLoadingPromise: Promise<any> | null = null;
+
+async function getKokoroTTS(): Promise<any> {
+  if (kokoroInstance) return kokoroInstance;
+  if (!kokoroLoadingPromise) {
+    kokoroLoadingPromise = (async () => {
+      try {
+        console.log("[TTS] Preloading Kokoro TTS (offline fallback model)...");
+        const instance = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+          dtype: "q8",
+          device: "cpu",
+        });
+        kokoroInstance = instance;
+        console.log("[TTS] Kokoro TTS initialized successfully for offline fallback.");
+        return instance;
+      } catch (err) {
+        console.warn("[TTS] Failed to initialize Kokoro TTS:", err);
+        kokoroLoadingPromise = null;
+        throw err;
+      }
+    })();
+  }
+  return kokoroLoadingPromise;
+}
+
+async function synthesizeWithEdge(
+  text: string,
+  voice: string = "en-GB-SoniaNeural",
+  rate: number = 1.0,
+  pitch: number = 1.0
+): Promise<Buffer> {
+  return new Promise(async (resolve, reject) => {
+    let finished = false;
+    let tts: MsEdgeTTS | null = null;
+    const timeout = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        try { tts?.close(); } catch {}
+        reject(new Error("Edge TTS request timed out"));
+      }
+    }, 8000);
+
+    try {
+      tts = new MsEdgeTTS();
+      await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+
+      const prosodyOptions: any = {};
+      if (rate !== 1.0) {
+        const ratePct = Math.round((rate - 1.0) * 100);
+        prosodyOptions.rate = ratePct >= 0 ? `+${ratePct}%` : `${ratePct}%`;
+      }
+      if (pitch !== 1.0) {
+        const pitchPct = Math.round((pitch - 1.0) * 100);
+        prosodyOptions.pitch = pitchPct >= 0 ? `+${pitchPct}%` : `${pitchPct}%`;
+      }
+
+      const { audioStream } = tts.toStream(text, Object.keys(prosodyOptions).length > 0 ? prosodyOptions : undefined);
+      const chunks: Buffer[] = [];
+
+      audioStream.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+      });
+
+      audioStream.on("error", (err: any) => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          try { tts?.close(); } catch {}
+          reject(err);
+        }
+      });
+
+      audioStream.on("close", () => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          try { tts?.close(); } catch {}
+          const fullBuffer = Buffer.concat(chunks);
+          if (fullBuffer.length > 0) {
+            resolve(fullBuffer);
+          } else {
+            reject(new Error("Edge TTS returned empty audio data"));
+          }
+        }
+      });
+    } catch (err) {
+      if (!finished) {
+        finished = true;
+        clearTimeout(timeout);
+        try { tts?.close(); } catch {}
+        reject(err);
+      }
+    }
+  });
+}
+
+async function synthesizeWithKokoro(
+  text: string,
+  voice: string = "bf_emma",
+  rate: number = 1.0
+): Promise<Buffer> {
+  const tts = await getKokoroTTS();
+  const speed = Math.max(0.5, Math.min(2.0, rate));
+  const audio = await tts.generate(text, { voice, speed });
+  const wavBuffer = audio.toWav();
+  return Buffer.from(wavBuffer);
+}
+
+app.post("/api/tts", async (req, res) => {
+  const { text, voice, engine, rate, pitch } = req.body || {};
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return res.status(400).json({ error: "Missing or invalid 'text' field" });
+  }
+
+  const cleanText = text.trim();
+  const requestedEngine = (engine || "auto").toLowerCase();
+  const edgeVoice = voice || "en-GB-SoniaNeural";
+  const kokoroVoice = "bf_emma"; // British female voice
+  const speechRate = typeof rate === "number" ? rate : 1.0;
+  const speechPitch = typeof pitch === "number" ? pitch : 1.0;
+
+  // 1. Primary: Edge Neural TTS (Option 1)
+  if (requestedEngine === "auto" || requestedEngine === "edge") {
+    try {
+      const audioBuffer = await synthesizeWithEdge(cleanText, edgeVoice, speechRate, speechPitch);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("X-TTS-Engine", "edge-tts");
+      res.setHeader("X-TTS-Voice", edgeVoice);
+      res.setHeader("Content-Length", audioBuffer.length);
+      return res.end(audioBuffer);
+    } catch (edgeErr: any) {
+      console.warn(`[TTS] Option 1 (Edge TTS) unavailable (${edgeErr?.message || edgeErr}). Falling back to Option 3 (Kokoro TTS)...`);
+      if (requestedEngine === "edge") {
+        return res.status(502).json({ error: "Edge TTS failed", message: edgeErr?.message });
+      }
+    }
+  }
+
+  // 2. Fallback: Kokoro Neural TTS (Option 3 - 100% offline)
+  if (requestedEngine === "auto" || requestedEngine === "kokoro") {
+    try {
+      console.log(`[TTS] Synthesizing with Kokoro TTS (offline fallback) for: "${cleanText.substring(0, 40)}..."`);
+      const audioBuffer = await synthesizeWithKokoro(cleanText, kokoroVoice, speechRate);
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("X-TTS-Engine", "kokoro-tts");
+      res.setHeader("X-TTS-Voice", kokoroVoice);
+      res.setHeader("Content-Length", audioBuffer.length);
+      return res.end(audioBuffer);
+    } catch (kokoroErr: any) {
+      console.warn(`[TTS] Option 3 (Kokoro TTS) failed: ${kokoroErr?.message || kokoroErr}`);
+      if (requestedEngine === "kokoro") {
+        return res.status(502).json({ error: "Kokoro TTS failed", message: kokoroErr?.message });
+      }
+    }
+  }
+
+  // 3. Falloff / Final Fallback: SAPI signal
+  return res.status(503).json({
+    error: "tts_unavailable",
+    message: "Both Edge and Kokoro TTS unavailable. Fall back to local SAPI.",
+    fallback: "sapi",
+  });
+});
+
+app.get("/api/tts", async (req, res) => {
+  const text = (req.query.text as string) || "";
+  const voice = (req.query.voice as string) || "en-GB-SoniaNeural";
+  const engine = (req.query.engine as string) || "auto";
+  const rate = req.query.rate ? parseFloat(req.query.rate as string) : 1.0;
+  const pitch = req.query.pitch ? parseFloat(req.query.pitch as string) : 1.0;
+
+  if (!text.trim()) {
+    return res.status(400).json({ error: "Missing or invalid 'text' query parameter" });
+  }
+
+  const requestedEngine = engine.toLowerCase();
+  const edgeVoice = voice;
+  const kokoroVoice = "bf_emma";
+
+  if (requestedEngine === "auto" || requestedEngine === "edge") {
+    try {
+      const audioBuffer = await synthesizeWithEdge(text.trim(), edgeVoice, rate, pitch);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("X-TTS-Engine", "edge-tts");
+      res.setHeader("X-TTS-Voice", edgeVoice);
+      res.setHeader("Content-Length", audioBuffer.length);
+      return res.end(audioBuffer);
+    } catch (edgeErr: any) {
+      console.warn(`[TTS] Edge Neural TTS GET unavailable (${edgeErr?.message || edgeErr}). Falling back to Kokoro...`);
+      if (requestedEngine === "edge") {
+        return res.status(502).json({ error: "Edge TTS failed", message: edgeErr?.message });
+      }
+    }
+  }
+
+  if (requestedEngine === "auto" || requestedEngine === "kokoro") {
+    try {
+      const audioBuffer = await synthesizeWithKokoro(text.trim(), kokoroVoice, rate);
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("X-TTS-Engine", "kokoro-tts");
+      res.setHeader("X-TTS-Voice", kokoroVoice);
+      res.setHeader("Content-Length", audioBuffer.length);
+      return res.end(audioBuffer);
+    } catch (kokoroErr: any) {
+      console.warn(`[TTS] Kokoro Neural TTS GET failed: ${kokoroErr?.message || kokoroErr}`);
+      if (requestedEngine === "kokoro") {
+        return res.status(502).json({ error: "Kokoro TTS failed", message: kokoroErr?.message });
+      }
+    }
+  }
+
+  return res.status(503).json({
+    error: "tts_unavailable",
+    message: "Both Edge and Kokoro TTS unavailable. Fall back to local SAPI.",
+    fallback: "sapi",
+  });
+});
+
+app.get("/api/tts/status", async (_req, res) => {
+  res.json({
+    primary: "edge-tts (Option 1: Microsoft Edge Neural TTS)",
+    fallback: "kokoro-tts (Option 3: Kokoro 82M ONNX local neural TTS)",
+    tertiary: "sapi (System SpeechSynthesis)",
+    defaultEdgeVoice: "en-GB-SoniaNeural",
+    defaultKokoroVoice: "bf_emma",
+    kokoroLoaded: kokoroInstance !== null,
+  });
 });
 
 // Helper: Query Ollama instance tags and status
@@ -1729,6 +1964,8 @@ async function start() {
   app.listen(PORT, "127.0.0.1", () => {
     console.log(`Magic Windows Assistant running on http://0.0.0.0:${PORT}`);
     console.log(`[AI Engine] Provider: ${activeProvider} | Ollama Host: ${OLLAMA_HOST} | Default Chat Model: ${activeOllamaModel}`);
+    console.log(`[TTS Engine] Option 1: Microsoft Edge Neural TTS | Option 3: Kokoro 82M Offline TTS`);
+    getKokoroTTS().catch(() => {});
   });
 }
 

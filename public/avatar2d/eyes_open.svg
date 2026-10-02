@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="100%" height="100%">
+  <defs>
+    <!-- Photorealistic Iris Base: deep sea-blue with warm amber flecks -->
+    <radialGradient id="irisBase" cx="42%" cy="36%" r="60%">
+      <stop offset="0%"   stop-color="#a8d8f0"/>
+      <stop offset="18%"  stop-color="#5bb8e8"/>
+      <stop offset="42%"  stop-color="#1e88c8"/>
+      <stop offset="68%"  stop-color="#0d5fa0"/>
+      <stop offset="88%"  stop-color="#083a70"/>
+      <stop offset="100%" stop-color="#020e1c"/>
+    </radialGradient>
+
+    <!-- Iris fiber texture overlay (radial streaks simulate collagen fibers) -->
+    <radialGradient id="irisFibers" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="55%"  stop-color="#7dd3fc" stop-opacity="0.12"/>
+      <stop offset="85%"  stop-color="#0ea5e9" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#0c4a6e" stop-opacity="0.18"/>
+    </radialGradient>
+
+    <!-- Limbal ring -->
+    <radialGradient id="limbal" cx="50%" cy="50%" r="50%">
+      <stop offset="78%"  stop-color="#000000" stop-opacity="0"/>
+      <stop offset="90%"  stop-color="#000000" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.75"/>
+    </radialGradient>
+
+    <!-- Amber/hazel fleck overlay -->
+    <radialGradient id="irisFleck" cx="60%" cy="55%" r="40%">
+      <stop offset="0%"   stop-color="#d97706" stop-opacity="0.22"/>
+      <stop offset="60%"  stop-color="#b45309" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#78350f" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Corneal wet highlight: big soft catch-light -->
+    <radialGradient id="catchLight" cx="35%" cy="28%" r="45%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="40%"  stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Secondary catch-light (rim light) -->
+    <radialGradient id="catchLight2" cx="70%" cy="72%" r="30%">
+      <stop offset="0%"   stop-color="#bfdbfe" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#bfdbfe" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Sclera gradient (white of eye, slightly veined/shadowed at top) -->
+    <linearGradient id="scleraGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#d1d5db"/>
+      <stop offset="30%"  stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+
+    <!-- Eyelid skin gradient for upper lid -->
+    <linearGradient id="lidSkin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#f0c8a4"/>
+      <stop offset="100%" stop-color="#e8aa82"/>
+    </linearGradient>
+
+    <!-- Eyeliner black -->
+    <linearGradient id="lashBlack" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#050505"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+
+    <!-- Eyeshadow: warm bronze/smoky -->
+    <linearGradient id="shadowBronze" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%"   stop-color="#7c3000" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#a0522d" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#c0845a" stop-opacity="0.42"/>
+    </linearGradient>
+
+    <!-- Lash glow filter -->
+    <filter id="lashGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="0.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Iris sparkle / depth filter -->
+    <filter id="irisDepth" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur stdDeviation="0.6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Clip paths for eye shapes -->
+    <clipPath id="leftEyeClip">
+      <path d="M 148 193 C 157 181, 180 180, 188 193 C 179 205, 157 205, 148 193 Z"/>
+    </clipPath>
+    <clipPath id="rightEyeClip">
+      <path d="M 212 193 C 221 181, 244 180, 252 193 C 243 205, 221 205, 212 193 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- ═══════════ LEFT EYE ═══════════ -->
+  <g id="leftEye">
+    <!-- Eyeshadow bruise / smoky bronze above eye -->
+    <path d="M 144 188 C 155 172, 183 172, 194 184 C 183 178, 155 178, 144 188 Z"
+          fill="url(#shadowBronze)" opacity="0.9"/>
+
+    <!-- Sclera (clipped to eye shape) -->
+    <path d="M 148 193 C 157 181, 180 180, 188 193 C 179 205, 157 205, 148 193 Z"
+          fill="url(#scleraGrad)"/>
+
+    <!-- Subtle pink inner corner tint -->
+    <ellipse cx="150" cy="194" rx="3" ry="2" fill="#fda4af" opacity="0.45"/>
+
+    <!-- Upper sclera shadow from lid -->
+    <path d="M 148 193 C 157 181, 180 180, 188 193 C 179 186, 157 186, 148 193 Z"
+          fill="#9ca3af" opacity="0.22"/>
+
+    <!-- Photorealistic iris group (clipped) -->
+    <g clip-path="url(#leftEyeClip)">
+      <!-- Iris base -->
+      <circle cx="168" cy="193" r="9.2" fill="url(#irisBase)" filter="url(#irisDepth)"/>
+
+      <!-- Radial fiber streaks (simulate collagen) - left iris -->
+      <line x1="168" y1="184" x2="168" y2="193" stroke="#0ea5e9" stroke-width="0.6" opacity="0.18"/>
+      <line x1="174" y1="185" x2="168" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+      <line x1="177" y1="190" x2="168" y2="193" stroke="#0284c7" stroke-width="0.5" opacity="0.12"/>
+      <line x1="174" y1="200" x2="168" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+      <line x1="168" y1="202" x2="168" y2="193" stroke="#0ea5e9" stroke-width="0.6" opacity="0.18"/>
+      <line x1="162" y1="200" x2="168" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+      <line x1="159" y1="193" x2="168" y2="193" stroke="#0284c7" stroke-width="0.5" opacity="0.12"/>
+      <line x1="162" y1="186" x2="168" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+
+      <!-- Amber fleck overlay -->
+      <circle cx="171" cy="195" r="6" fill="url(#irisFleck)"/>
+
+      <!-- Fiber texture radial overlay -->
+      <circle cx="168" cy="193" r="9.2" fill="url(#irisFibers)"/>
+
+      <!-- Limbal ring -->
+      <circle cx="168" cy="193" r="9.2" fill="url(#limbal)"/>
+
+      <!-- Pupil (deep black with subtle inner reflection) -->
+      <circle cx="168" cy="193" r="4.1" fill="#020617"/>
+      <circle cx="168" cy="193" r="3.0" fill="#000000"/>
+
+      <!-- Primary catch-light: large, soft, upper-left -->
+      <circle cx="164.5" cy="189.5" r="3.4" fill="url(#catchLight)" opacity="0.97"/>
+      <!-- Secondary mini highlight -->
+      <circle cx="172"   cy="196"   r="1.4" fill="url(#catchLight2)" opacity="0.85"/>
+      <!-- Tiny specular pin dot -->
+      <circle cx="163.8" cy="189"   r="0.9" fill="#ffffff" opacity="0.99"/>
+      <!-- Corneal reflection arc -->
+      <path d="M 161 191 C 163 188, 167 187.5, 170 189" stroke="#ffffff" stroke-width="0.7"
+            stroke-linecap="round" fill="none" opacity="0.55"/>
+    </g>
+
+    <!-- Upper eyelid / cat-eye liner -->
+    <path d="M 146 195 C 156 179, 181 179, 190 190 L 196 184"
+          stroke="url(#lashBlack)" stroke-width="3.4" stroke-linecap="round" fill="none"
+          filter="url(#lashGlow)"/>
+    <!-- Wing fill -->
+    <path d="M 190 190 L 197 183 C 194 187, 190 192, 188 193 Z" fill="#050505"/>
+
+    <!-- Individual fluttery upper lashes -->
+    <path d="M 181 181 L 186 174" stroke="#050505" stroke-width="1.9" stroke-linecap="round"/>
+    <path d="M 174 179 L 176 172" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 167 179 L 167 172" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 159 181 L 156 174" stroke="#050505" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 188 185 L 192 178" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+
+    <!-- Lower lash line (smudged liner) -->
+    <path d="M 152 197 C 162 204, 174 204, 184 197"
+          stroke="#3d1c02" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.6"/>
+
+    <!-- Lower lashes (sparse, fine) -->
+    <path d="M 158 200 L 157 205" stroke="#3d1c02" stroke-width="1.0" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 165 203 L 165 208" stroke="#3d1c02" stroke-width="0.9" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 172 202 L 173 207" stroke="#3d1c02" stroke-width="0.9" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 179 200 L 181 205" stroke="#3d1c02" stroke-width="1.0" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- Tear duct (inner canthus, pink) -->
+    <ellipse cx="148.5" cy="194" rx="1.5" ry="1.2" fill="#f87171" opacity="0.7"/>
+  </g>
+
+  <!-- ═══════════ RIGHT EYE ═══════════ -->
+  <g id="rightEye">
+    <!-- Eyeshadow -->
+    <path d="M 206 184 C 217 172, 245 172, 256 188 C 245 178, 217 178, 206 184 Z"
+          fill="url(#shadowBronze)" opacity="0.9"/>
+
+    <!-- Sclera -->
+    <path d="M 212 193 C 221 181, 244 180, 252 193 C 243 205, 221 205, 212 193 Z"
+          fill="url(#scleraGrad)"/>
+
+    <!-- Pink inner corner -->
+    <ellipse cx="251" cy="194" rx="3" ry="2" fill="#fda4af" opacity="0.45"/>
+
+    <!-- Upper sclera shadow -->
+    <path d="M 212 193 C 221 181, 244 180, 252 193 C 243 186, 221 186, 212 193 Z"
+          fill="#9ca3af" opacity="0.22"/>
+
+    <!-- Photorealistic iris group (clipped) -->
+    <g clip-path="url(#rightEyeClip)">
+      <circle cx="232" cy="193" r="9.2" fill="url(#irisBase)" filter="url(#irisDepth)"/>
+
+      <!-- Radial fiber streaks - right iris -->
+      <line x1="232" y1="184" x2="232" y2="193" stroke="#0ea5e9" stroke-width="0.6" opacity="0.18"/>
+      <line x1="238" y1="185" x2="232" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+      <line x1="241" y1="190" x2="232" y2="193" stroke="#0284c7" stroke-width="0.5" opacity="0.12"/>
+      <line x1="238" y1="200" x2="232" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+      <line x1="232" y1="202" x2="232" y2="193" stroke="#0ea5e9" stroke-width="0.6" opacity="0.18"/>
+      <line x1="226" y1="200" x2="232" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+      <line x1="223" y1="193" x2="232" y2="193" stroke="#0284c7" stroke-width="0.5" opacity="0.12"/>
+      <line x1="226" y1="186" x2="232" y2="193" stroke="#38bdf8" stroke-width="0.5" opacity="0.15"/>
+
+      <circle cx="235" cy="195" r="6" fill="url(#irisFleck)"/>
+      <circle cx="232" cy="193" r="9.2" fill="url(#irisFibers)"/>
+      <circle cx="232" cy="193" r="9.2" fill="url(#limbal)"/>
+
+      <circle cx="232" cy="193" r="4.1" fill="#020617"/>
+      <circle cx="232" cy="193" r="3.0" fill="#000000"/>
+
+      <circle cx="228.5" cy="189.5" r="3.4" fill="url(#catchLight)" opacity="0.97"/>
+      <circle cx="236"   cy="196"   r="1.4" fill="url(#catchLight2)" opacity="0.85"/>
+      <circle cx="227.8" cy="189"   r="0.9" fill="#ffffff" opacity="0.99"/>
+      <path d="M 225 191 C 227 188, 231 187.5, 234 189" stroke="#ffffff" stroke-width="0.7"
+            stroke-linecap="round" fill="none" opacity="0.55"/>
+    </g>
+
+    <!-- Upper eyelid liner, cat-eye -->
+    <path d="M 210 191 C 220 179, 245 179, 254 194 L 260 188"
+          stroke="url(#lashBlack)" stroke-width="3.4" stroke-linecap="round" fill="none"
+          filter="url(#lashGlow)"/>
+    <path d="M 210 191 L 204 184 C 206 188, 211 192, 213 193 Z" fill="#050505"/>
+
+    <!-- Upper lashes - right -->
+    <path d="M 219 181 L 214 174" stroke="#050505" stroke-width="1.9" stroke-linecap="round"/>
+    <path d="M 226 179 L 224 172" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 233 179 L 233 172" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 241 181 L 244 174" stroke="#050505" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 212 185 L 208 178" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+
+    <!-- Lower lash line -->
+    <path d="M 216 197 C 226 204, 238 204, 248 197"
+          stroke="#3d1c02" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.6"/>
+
+    <!-- Lower lashes - right -->
+    <path d="M 222 200 L 221 205" stroke="#3d1c02" stroke-width="1.0" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 229 203 L 229 208" stroke="#3d1c02" stroke-width="0.9" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 236 202 L 237 207" stroke="#3d1c02" stroke-width="0.9" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 243 200 L 245 205" stroke="#3d1c02" stroke-width="1.0" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- Tear duct -->
+    <ellipse cx="251.5" cy="194" rx="1.5" ry="1.2" fill="#f87171" opacity="0.7"/>
+  </g>
+</svg>

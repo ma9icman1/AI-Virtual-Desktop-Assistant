@@ -1,0 +1,342 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="100%" height="100%">
+  <defs>
+    <!-- ── SKIN GRADIENTS (photorealistic sub-surface scattering) ── -->
+    <linearGradient id="fairSkin" x1="0%" y1="0%" x2="10%" y2="100%">
+      <stop offset="0%"   stop-color="#fde8d2"/>
+      <stop offset="30%"  stop-color="#f8d0b0"/>
+      <stop offset="65%"  stop-color="#f0bc96"/>
+      <stop offset="100%" stop-color="#e8a87c"/>
+    </linearGradient>
+    <!-- Sub-surface scatter: warm pink/red under thin skin areas -->
+    <radialGradient id="sss" cx="50%" cy="30%" r="55%">
+      <stop offset="0%"   stop-color="#f87171" stop-opacity="0.18"/>
+      <stop offset="60%"  stop-color="#fb923c" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Skin contour / depth shading -->
+    <linearGradient id="skinContour" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#c8784a" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#a05828" stop-opacity="0.65"/>
+    </linearGradient>
+    <!-- Cheek blush (natural, photorealistic) -->
+    <radialGradient id="blush" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#f87171" stop-opacity="0.38"/>
+      <stop offset="60%"  stop-color="#fb7185" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#fb7185" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Forehead highlight (specular, skin sheen) -->
+    <radialGradient id="foreheadSheen" cx="48%" cy="20%" r="55%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="60%"  stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Nose bridge highlight -->
+    <linearGradient id="noseBridgeHL" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#ffffff" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- ── HAIR GRADIENTS (photo-real multi-tone blonde) ── -->
+    <!-- Base golden blonde -->
+    <linearGradient id="blondeBase" x1="5%" y1="0%" x2="95%" y2="100%">
+      <stop offset="0%"   stop-color="#fef3c7"/>
+      <stop offset="20%"  stop-color="#fde68a"/>
+      <stop offset="45%"  stop-color="#f59e0b"/>
+      <stop offset="72%"  stop-color="#d97706"/>
+      <stop offset="88%"  stop-color="#b45309"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+    <!-- Dark back layer (depth/shadow) -->
+    <linearGradient id="blondeBack" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#92400e"/>
+      <stop offset="50%"  stop-color="#6d2f08"/>
+      <stop offset="100%" stop-color="#451a03"/>
+    </linearGradient>
+    <!-- Sunlit strand highlights -->
+    <linearGradient id="blondeHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.82"/>
+      <stop offset="35%"  stop-color="#fefce8" stop-opacity="0.55"/>
+      <stop offset="75%"  stop-color="#fef08a" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#fef08a" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Mid-tone strand -->
+    <linearGradient id="blondeMid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#fcd34d"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+
+    <!-- ── OUTFIT ── -->
+    <linearGradient id="chicDress" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#27272a"/>
+      <stop offset="50%"  stop-color="#18181b"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <!-- Fabric sheen -->
+    <linearGradient id="fabricSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#52525b" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#52525b" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- ── GOLD JEWELRY ── -->
+    <linearGradient id="goldJewelry" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#fef9c3"/>
+      <stop offset="35%"  stop-color="#fcd34d"/>
+      <stop offset="70%"  stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+
+    <!-- ── FILTERS ── -->
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="hairSoft" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="skinFilter" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur stdDeviation="0.7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── WARM AMBIENT AURA ── -->
+  <circle cx="200" cy="205" r="185" fill="#fef3c7" opacity="0.10" filter="url(#softGlow)"/>
+  <circle cx="200" cy="200" r="145" fill="#f87171" opacity="0.06" filter="url(#softGlow)"/>
+
+  <!-- ══════════════════════════════════
+       BACK HAIR LAYER (voluminous, behind everything)
+       ══════════════════════════════════ -->
+  <path d="M 102 178 C 76 255, 72 355, 112 448
+           C 132 416, 158 384, 180 374
+           C 220 374, 248 416, 268 448
+           C 308 355, 304 255, 278 178 Z"
+        fill="url(#blondeBack)" filter="url(#hairSoft)"/>
+  <!-- Left flowing back volume -->
+  <path d="M 92 245 C 76 328, 92 408, 128 455
+           C 118 412, 103 352, 112 280 Z"
+        fill="url(#blondeBase)" opacity="0.65"/>
+  <!-- Right flowing back volume -->
+  <path d="M 288 280 C 297 352, 282 412, 272 455
+           C 308 408, 324 328, 308 245 Z"
+        fill="url(#blondeBase)" opacity="0.65"/>
+
+  <!-- ══════════════════════════════════
+       SHOULDERS & UPPER BODY
+       ══════════════════════════════════ -->
+  <!-- Bare skin shoulder base -->
+  <path d="M 82 500 L 82 438 C 93 392, 128 367, 164 357 L 236 357
+           C 272 367, 307 392, 318 438 L 318 500 Z"
+        fill="url(#fairSkin)" filter="url(#skinFilter)"/>
+  <!-- Sub-surface scatter on shoulders -->
+  <ellipse cx="115" cy="395" rx="35" ry="25" fill="#f87171" opacity="0.1"/>
+  <ellipse cx="285" cy="395" rx="35" ry="25" fill="#f87171" opacity="0.1"/>
+
+  <!-- Off-shoulder designer dress -->
+  <path d="M 82 500 L 82 443 C 108 427, 140 438, 175 448
+           C 200 453, 225 448, 260 433
+           C 292 427, 312 437, 318 443 L 318 500 Z"
+        fill="url(#chicDress)"/>
+  <!-- Fabric sheen highlight (satin/silk effect) -->
+  <path d="M 82 443 C 115 425, 168 445, 200 448
+           C 232 445, 285 425, 318 443"
+        fill="url(#fabricSheen)" opacity="0.7"/>
+  <!-- Dress neckline edge -->
+  <path d="M 82 443 C 122 424, 172 444, 200 447
+           C 228 444, 278 424, 318 443"
+        stroke="#3f3f46" stroke-width="1.5" fill="none" opacity="0.55"/>
+
+  <!-- ── Collarbone anatomy ── -->
+  <path d="M 158 368 C 178 378, 196 374, 199 372"
+        stroke="#c07858" stroke-width="2.0" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <path d="M 242 368 C 222 378, 204 374, 201 372"
+        stroke="#c07858" stroke-width="2.0" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <!-- Sternal notch indent -->
+  <ellipse cx="200" cy="363" rx="4" ry="3" fill="#c07858" opacity="0.2"/>
+
+  <!-- Delicate Gold Necklace -->
+  <path d="M 166 362 C 183 398, 217 398, 234 362"
+        stroke="url(#goldJewelry)" stroke-width="2.2" stroke-linecap="round" fill="none"
+        filter="url(#softGlow)"/>
+  <!-- Diamond pendant -->
+  <circle cx="200" cy="388" r="4.2" fill="url(#goldJewelry)" filter="url(#softGlow)"/>
+  <polygon points="200,391 196,399 200,407 204,399" fill="#7dd3fc" filter="url(#softGlow)"/>
+  <!-- Pendant chain links (subtle) -->
+  <circle cx="200" cy="387" r="1.8" fill="none" stroke="url(#goldJewelry)" stroke-width="1.2"/>
+
+  <!-- Gold hoop earrings -->
+  <ellipse cx="135" cy="222" rx="3.2" ry="5.8" fill="none"
+           stroke="url(#goldJewelry)" stroke-width="2.2" filter="url(#softGlow)"/>
+  <ellipse cx="265" cy="222" rx="3.2" ry="5.8" fill="none"
+           stroke="url(#goldJewelry)" stroke-width="2.2" filter="url(#softGlow)"/>
+
+  <!-- ══════════════════════════════════
+       NECK
+       ══════════════════════════════════ -->
+  <path d="M 181 297 L 181 368 C 191 374, 209 374, 219 368 L 219 297 Z"
+        fill="url(#fairSkin)" filter="url(#skinFilter)"/>
+  <!-- Neck shadow (submandibular) -->
+  <path d="M 181 297 L 181 330 C 192 342, 208 342, 219 330 L 219 297 Z"
+        fill="url(#skinContour)" opacity="0.45"/>
+  <!-- Sternocleidomastoid muscle hint (very subtle) -->
+  <path d="M 185 310 C 187 340, 188 360, 185 370"
+        stroke="#c07858" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.18"/>
+  <path d="M 215 310 C 213 340, 212 360, 215 370"
+        stroke="#c07858" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.18"/>
+
+  <!-- ══════════════════════════════════
+       FACE BASE — elegant V-line with high cheekbones
+       ══════════════════════════════════ -->
+  <path d="M 141 176 C 134 232, 152 290, 200 312
+           C 248 290, 266 232, 259 176
+           C 253 118, 147 118, 141 176 Z"
+        fill="url(#fairSkin)" filter="url(#skinFilter)"/>
+
+  <!-- Sub-surface scattering on face -->
+  <ellipse cx="200" cy="200" rx="70" ry="75" fill="url(#sss)" opacity="0.7"/>
+
+  <!-- Cheek SSS (subsurface scatter — translucency at cheeks) -->
+  <ellipse cx="155" cy="230" rx="30" ry="20" fill="#f87171" opacity="0.1"
+           transform="rotate(-8 155 230)"/>
+  <ellipse cx="245" cy="230" rx="30" ry="20" fill="#f87171" opacity="0.1"
+           transform="rotate(8 245 230)"/>
+
+  <!-- ── Cheekbone blush (natural rose) ── -->
+  <ellipse cx="157" cy="224" rx="24" ry="15" fill="url(#blush)"
+           transform="rotate(-12 157 224)"/>
+  <ellipse cx="243" cy="224" rx="24" ry="15" fill="url(#blush)"
+           transform="rotate(12 243 224)"/>
+  <!-- Specular highlight on cheekbone -->
+  <ellipse cx="158" cy="218" rx="9" ry="4.5" fill="#ffffff" opacity="0.22"
+           transform="rotate(-12 158 218)"/>
+  <ellipse cx="242" cy="218" rx="9" ry="4.5" fill="#ffffff" opacity="0.22"
+           transform="rotate(12 242 218)"/>
+
+  <!-- ── Forehead specular sheen ── -->
+  <ellipse cx="200" cy="158" rx="42" ry="28" fill="url(#foreheadSheen)" opacity="0.8"/>
+
+  <!-- ── Ears ── -->
+  <path d="M 142 193 C 132 197, 130 218, 142 228 Z"
+        fill="url(#fairSkin)" filter="url(#skinFilter)"/>
+  <path d="M 258 193 C 268 197, 270 218, 258 228 Z"
+        fill="url(#fairSkin)" filter="url(#skinFilter)"/>
+  <!-- Ear concha (inner ear shadow) -->
+  <path d="M 140 200 C 136 207, 137 216, 140 222"
+        stroke="#c07858" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+  <path d="M 260 200 C 264 207, 263 216, 260 222"
+        stroke="#c07858" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+
+  <!-- ── Photorealistic NOSE (soft, feminine, button) ── -->
+  <!-- Nose bridge shadow (slight indent) -->
+  <path d="M 196 175 C 196 195, 193 210, 192 220"
+        stroke="#c07858" stroke-width="1.0" stroke-linecap="round" fill="none" opacity="0.2"/>
+  <path d="M 204 175 C 204 195, 207 210, 208 220"
+        stroke="#c07858" stroke-width="1.0" stroke-linecap="round" fill="none" opacity="0.2"/>
+  <!-- Nose tip (soft ball) -->
+  <ellipse cx="200" cy="232" rx="7" ry="5" fill="url(#fairSkin)" filter="url(#skinFilter)"/>
+  <!-- Alar wings (nostrils) -->
+  <path d="M 193 232 C 190 235, 190 239, 193 240 C 194 238, 194 234, 193 232 Z"
+        fill="#d48060" opacity="0.4"/>
+  <path d="M 207 232 C 210 235, 210 239, 207 240 C 206 238, 206 234, 207 232 Z"
+        fill="#d48060" opacity="0.4"/>
+  <!-- Nostril openings (subtle dark) -->
+  <ellipse cx="193.5" cy="237" rx="2.2" ry="1.6" fill="#8b3a2a" opacity="0.3"
+           transform="rotate(-15 193.5 237)"/>
+  <ellipse cx="206.5" cy="237" rx="2.2" ry="1.6" fill="#8b3a2a" opacity="0.3"
+           transform="rotate(15 206.5 237)"/>
+  <!-- Nose tip highlight (specular) -->
+  <circle cx="200" cy="230" r="2.0" fill="#ffffff" opacity="0.52"/>
+  <!-- Subtle philtrum columns (above lip) -->
+  <path d="M 196 245 L 196 253" stroke="#c07858" stroke-width="1.1"
+        stroke-linecap="round" opacity="0.22"/>
+  <path d="M 204 245 L 204 253" stroke="#c07858" stroke-width="1.1"
+        stroke-linecap="round" opacity="0.22"/>
+
+  <!-- ── Elegant Arched Eyebrows (warm blonde, with hair-stroke detail) ── -->
+  <!-- Left brow -->
+  <path d="M 149 174 C 160 163, 179 163, 187 170"
+        stroke="#92400e" stroke-width="3.2" stroke-linecap="round" fill="none"/>
+  <path d="M 151 174 C 161 164, 178 164, 186 170"
+        stroke="#d97706" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <!-- Individual brow hair strokes left -->
+  <path d="M 153 173 C 155 168, 158 166, 161 166"
+        stroke="#92400e" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <path d="M 163 166 C 165 165, 168 164.5, 171 165"
+        stroke="#92400e" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <!-- Right brow -->
+  <path d="M 251 174 C 240 163, 221 163, 213 170"
+        stroke="#92400e" stroke-width="3.2" stroke-linecap="round" fill="none"/>
+  <path d="M 249 174 C 239 164, 222 164, 214 170"
+        stroke="#d97706" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <!-- Individual brow strokes right -->
+  <path d="M 247 173 C 245 168, 242 166, 239 166"
+        stroke="#92400e" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <path d="M 237 166 C 235 165, 232 164.5, 229 165"
+        stroke="#92400e" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.5"/>
+
+  <!-- ══════════════════════════════════
+       FRONT HAIR — Voluminous Golden Blonde
+       Layered: back mass → side waves → top crown → highlights
+       ══════════════════════════════════ -->
+  <!-- Top crown volume -->
+  <path d="M 128 176 C 120 124, 150 88, 200 88
+           C 250 88, 280 124, 272 176
+           C 285 222, 282 272, 274 318
+           C 267 287, 260 242, 256 212
+           C 244 189, 230 173, 222 165
+           C 206 171, 194 171, 178 163
+           C 164 186, 155 228, 140 290
+           C 133 252, 129 212, 128 176 Z"
+        fill="url(#blondeBase)" filter="url(#hairSoft)"/>
+
+  <!-- Left side wave sweep (cascading) -->
+  <path d="M 132 262 C 124 314, 136 374, 148 414
+           C 138 377, 128 332, 132 262 Z"
+        fill="url(#blondeBase)" opacity="0.75"/>
+  <!-- Right side wave sweep -->
+  <path d="M 268 262 C 276 314, 264 374, 252 414
+           C 262 377, 272 332, 268 262 Z"
+        fill="url(#blondeBase)" opacity="0.75"/>
+
+  <!-- Mid-tone wave strands layered over base (give texture) -->
+  <path d="M 138 185 C 132 228, 136 270, 138 300
+           C 130 268, 128 228, 134 192 Z"
+        fill="url(#blondeMid)" opacity="0.45"/>
+  <path d="M 262 185 C 268 228, 264 270, 262 300
+           C 270 268, 272 228, 266 192 Z"
+        fill="url(#blondeMid)" opacity="0.45"/>
+
+  <!-- Sunlit top highlight band -->
+  <path d="M 144 128 C 166 107, 234 107, 256 128
+           C 240 140, 216 137, 200 134
+           C 184 137, 160 140, 144 128 Z"
+        fill="url(#blondeHighlight)" opacity="0.85"/>
+
+  <!-- Fine strand highlight lines (simulate individual hair) -->
+  <path d="M 136 192 C 130 244, 140 284, 138 322"
+        stroke="#fef9c3" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.55"/>
+  <path d="M 142 188 C 136 235, 144 272, 142 305"
+        stroke="#fde68a" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <path d="M 264 192 C 270 244, 260 284, 262 322"
+        stroke="#fef9c3" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.55"/>
+  <path d="M 258 188 C 264 235, 256 272, 258 305"
+        stroke="#fde68a" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <!-- Crown sparkle strand -->
+  <path d="M 195 104 C 215 104, 242 114, 252 136"
+        stroke="#ffffff" stroke-width="2.0" stroke-linecap="round" fill="none" opacity="0.42"/>
+  <path d="M 200 100 C 188 103, 168 116, 158 138"
+        stroke="#fefce8" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.35"/>
+
+  <!-- Nose bridge subtle highlight -->
+  <ellipse cx="200" cy="205" rx="3" ry="18" fill="url(#noseBridgeHL)" opacity="0.6"/>
+</svg>

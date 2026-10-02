@@ -135,6 +135,9 @@ export interface VoiceSettings {
   wakeWordSensitivity: number; // 0.1 to 1.0
   continuousListening: boolean;
   localWakeWordEnabled: boolean;
+  ttsEngine?: "auto" | "edge" | "kokoro" | "sapi";
+  edgeVoice?: string;
+  kokoroVoice?: string;
 }
 
 export type AIProviderType = "ollama" | "gemini";

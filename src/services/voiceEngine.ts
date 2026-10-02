@@ -41,6 +41,9 @@ export class VoiceEngine {
           wakeWordSensitivity: 0.8,
           continuousListening: true,
           localWakeWordEnabled: true,
+          ttsEngine: "auto",
+          edgeVoice: "en-GB-SoniaNeural",
+          kokoroVoice: "bf_emma",
         },
         {
           onTranscript: (t, isFinal) => {
@@ -129,6 +132,9 @@ export class VoiceEngine {
   private recognition: any = null;
   private synth: SpeechSynthesis | null = null;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private currentAudio: HTMLAudioElement | null = null;
+  private currentAudioUrl: string | null = null;
+  private ttsAbortController: AbortController | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphoneStream: MediaStream | null = null;
@@ -669,6 +675,114 @@ export class VoiceEngine {
   }
 
   public speak(text: string, onDone?: () => void): Promise<void> {
+    this.stopSpeaking();
+
+    // Clean markdown tags or symbols from spoken voice
+    const cleanText = text
+      .replace(/[*_~`#[\]()]/g, "")
+      .replace(/https?:\/\/\S+/g, "a web link")
+      .trim();
+
+    if (!cleanText) {
+      onDone?.();
+      return Promise.resolve();
+    }
+
+    // If explicitly configured for system SAPI, skip neural
+    if (this.settings.ttsEngine === "sapi") {
+      return this.speakWithSapi(cleanText, onDone);
+    }
+
+    // Attempt Option 1 (Edge Neural TTS) -> Option 3 (Kokoro Offline TTS) -> SAPI
+    return this.speakWithNeural(cleanText, onDone);
+  }
+
+  private speakWithNeural(cleanText: string, onDone?: () => void): Promise<void> {
+    return new Promise(async (resolve) => {
+      this.ttsAbortController = new AbortController();
+      const signal = this.ttsAbortController.signal;
+
+      try {
+        const response = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: cleanText,
+            engine: this.settings.ttsEngine || "auto",
+            voice: this.settings.edgeVoice || "en-GB-SoniaNeural",
+            rate: this.settings.rate || 1.0,
+            pitch: this.settings.pitch || 1.0,
+          }),
+          signal,
+        });
+
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+
+        if (!response.ok) {
+          console.warn(`[VoiceEngine] /api/tts responded with ${response.status}. Falling back to browser SAPI.`);
+          return this.speakWithSapi(cleanText, onDone).then(resolve);
+        }
+
+        const engineUsed = response.headers.get("x-tts-engine") || "neural";
+        console.log(`[VoiceEngine] Speaking with ${engineUsed}: "${cleanText.substring(0, 35)}..."`);
+
+        const blob = await response.blob();
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+
+        const audioUrl = URL.createObjectURL(blob);
+        this.currentAudioUrl = audioUrl;
+
+        const audio = new Audio(audioUrl);
+        this.currentAudio = audio;
+        audio.volume = this.settings.volume ?? 1.0;
+        audio.playbackRate = this.settings.rate || 1.0;
+
+        audio.onplay = () => {
+          this.isSpeaking = true;
+          this.callbacks.onSpeakingStateChange(true);
+          LipSyncEngine.getInstance().onSpeechStart(cleanText);
+        };
+
+        audio.onended = () => {
+          this.cleanupCurrentAudio();
+          this.isSpeaking = false;
+          this.callbacks.onSpeakingStateChange(false);
+          LipSyncEngine.getInstance().onSpeechEnd();
+          onDone?.();
+          resolve();
+        };
+
+        audio.onerror = (err) => {
+          console.warn("[VoiceEngine] HTMLAudio playback failed:", err);
+          this.cleanupCurrentAudio();
+          this.speakWithSapi(cleanText, onDone).then(resolve);
+        };
+
+        await audio.play().catch((err) => {
+          if (!signal.aborted) {
+            console.warn("[VoiceEngine] Audio play() failed:", err);
+            this.cleanupCurrentAudio();
+            this.speakWithSapi(cleanText, onDone).then(resolve);
+          }
+        });
+      } catch (err: any) {
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+        console.warn("[VoiceEngine] Neural TTS request failed (offline / network error). Falling back to SAPI:", err?.message || err);
+        return this.speakWithSapi(cleanText, onDone).then(resolve);
+      }
+    });
+  }
+
+  private speakWithSapi(cleanText: string, onDone?: () => void): Promise<void> {
     return new Promise((resolve) => {
       if (!this.synth) {
         console.warn("Speech synthesis not supported");
@@ -680,18 +794,6 @@ export class VoiceEngine {
       // Cancel any ongoing speech
       this.synth.cancel();
       this.synth.resume();
-
-      // Clean markdown tags or symbols from spoken voice
-      const cleanText = text
-        .replace(/[*_~`#[\]()]/g, "")
-        .replace(/https?:\/\/\S+/g, "a web link")
-        .trim();
-
-      if (!cleanText) {
-        onDone?.();
-        resolve();
-        return;
-      }
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       this.currentUtterance = utterance;
@@ -738,7 +840,30 @@ export class VoiceEngine {
     });
   }
 
+  private cleanupCurrentAudio() {
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.removeAttribute("src");
+        this.currentAudio.load();
+      } catch {}
+      this.currentAudio = null;
+    }
+    if (this.currentAudioUrl) {
+      try {
+        URL.revokeObjectURL(this.currentAudioUrl);
+      } catch {}
+      this.currentAudioUrl = null;
+    }
+  }
+
   public stopSpeaking() {
+    if (this.ttsAbortController) {
+      this.ttsAbortController.abort();
+      this.ttsAbortController = null;
+    }
+    this.cleanupCurrentAudio();
+
     this.isSpeaking = false;
     LipSyncEngine.getInstance().onSpeechEnd();
     if (this.synth) {

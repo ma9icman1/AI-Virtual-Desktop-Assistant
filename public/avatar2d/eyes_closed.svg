@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="lashBlackCl" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#050505"/>
+      <stop offset="100%" stop-color="#1c1c1c"/>
+    </linearGradient>
+    <!-- Soft warm lid skin gradient when closed -->
+    <linearGradient id="closedLidSkin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#e8aa82"/>
+      <stop offset="100%" stop-color="#d4906a"/>
+    </linearGradient>
+    <!-- Bronze lid shadow crease -->
+    <linearGradient id="closedLidCrease" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#7c3000" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#7c3000" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="lashGlowCl" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="0.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ═══════════ LEFT EYE — CLOSED ═══════════ -->
+  <g id="leftEyeClosed">
+    <!-- Eyelid skin fill (closed lid shape) -->
+    <path d="M 149 194 C 158 183, 180 183, 189 193 C 180 199, 157 199, 149 194 Z"
+          fill="url(#closedLidSkin)"/>
+
+    <!-- Lid crease / eyeshadow remnant above lid -->
+    <path d="M 152 189 C 161 182, 178 182, 186 188 C 177 184, 162 184, 152 189 Z"
+          fill="url(#closedLidCrease)"/>
+
+    <!-- Subtle inner lid highlight (sheen) -->
+    <ellipse cx="169" cy="190" rx="10" ry="3" fill="#f5d0a9" opacity="0.22"/>
+
+    <!-- Main upper lash line (thick, soft) -->
+    <path d="M 148 194 C 158 183, 180 183, 190 193 L 196 188"
+          stroke="url(#lashBlackCl)" stroke-width="3.6" stroke-linecap="round" fill="none"
+          filter="url(#lashGlowCl)"/>
+    <!-- Cat-eye wing tip -->
+    <path d="M 190 193 L 197 187 C 194 191, 189 195, 187 195 Z" fill="#070707"/>
+
+    <!-- Individual fluttery upper lashes pointing down-outward -->
+    <path d="M 184 185 L 189 179" stroke="#050505" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M 177 183 L 180 177" stroke="#050505" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M 169 183 L 170 177" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 161 184 L 158 178" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 154 188 L 149 183" stroke="#050505" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 190 188 L 195 183" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+
+    <!-- Lower lash subtle smudge (closed eye has subtle lower fringe) -->
+    <path d="M 153 197 C 163 203, 175 203, 185 197"
+          stroke="#4a2000" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <!-- Lower lashes (pointing down, thin) -->
+    <path d="M 160 199 L 159 204" stroke="#4a2000" stroke-width="1.0" stroke-linecap="round" opacity="0.55"/>
+    <path d="M 168 200 L 168 205" stroke="#4a2000" stroke-width="0.9" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 176 199 L 177 204" stroke="#4a2000" stroke-width="0.9" stroke-linecap="round" opacity="0.5"/>
+
+    <!-- Eyelid fold crease line -->
+    <path d="M 153 188 C 163 183, 177 183, 184 188"
+          stroke="#b07850" stroke-width="1.0" stroke-linecap="round" fill="none" opacity="0.4"/>
+  </g>
+
+  <!-- ═══════════ RIGHT EYE — CLOSED ═══════════ -->
+  <g id="rightEyeClosed">
+    <!-- Eyelid skin -->
+    <path d="M 211 193 C 221 183, 243 183, 252 194 C 242 199, 220 199, 211 193 Z"
+          fill="url(#closedLidSkin)"/>
+
+    <!-- Lid crease shadow -->
+    <path d="M 214 188 C 223 182, 240 182, 249 188 C 240 184, 224 184, 214 188 Z"
+          fill="url(#closedLidCrease)"/>
+
+    <!-- Inner lid sheen -->
+    <ellipse cx="231" cy="190" rx="10" ry="3" fill="#f5d0a9" opacity="0.22"/>
+
+    <!-- Upper lash line -->
+    <path d="M 210 191 C 221 183, 243 183, 253 193 L 259 188"
+          stroke="url(#lashBlackCl)" stroke-width="3.6" stroke-linecap="round" fill="none"
+          filter="url(#lashGlowCl)"/>
+    <path d="M 210 191 L 203 185 C 205 189, 210 193, 213 194 Z" fill="#070707"/>
+
+    <!-- Individual upper lashes - right -->
+    <path d="M 216 185 L 211 179" stroke="#050505" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M 223 183 L 220 177" stroke="#050505" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M 231 183 L 230 177" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 239 184 L 242 178" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 246 188 L 251 183" stroke="#050505" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 210 188 L 205 183" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+
+    <!-- Lower lash smudge -->
+    <path d="M 215 197 C 225 203, 237 203, 247 197"
+          stroke="#4a2000" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <path d="M 222 199 L 221 204" stroke="#4a2000" stroke-width="1.0" stroke-linecap="round" opacity="0.55"/>
+    <path d="M 230 200 L 230 205" stroke="#4a2000" stroke-width="0.9" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 238 199 L 239 204" stroke="#4a2000" stroke-width="0.9" stroke-linecap="round" opacity="0.5"/>
+
+    <!-- Eyelid crease -->
+    <path d="M 216 188 C 225 183, 239 183, 247 188"
+          stroke="#b07850" stroke-width="1.0" stroke-linecap="round" fill="none" opacity="0.4"/>
+  </g>
+</svg>

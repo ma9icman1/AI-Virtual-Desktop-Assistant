@@ -66,10 +66,81 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
             <p className="mt-1 text-[11px] text-slate-500">This name is used throughout the assistant interface and voice prompts.</p>
           </div>
 
-          {/* Voice Selector */}
+          {/* TTS Engine Selector */}
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              Synthesis Voice
+              Speech Synthesis Engine
+            </label>
+            <select
+              value={settings.ttsEngine || "auto"}
+              onChange={(e) => {
+                onSettingsChange({ ttsEngine: e.target.value as any });
+              }}
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+            >
+              <option value="auto">Tier 1: Edge Neural + Tier 2: Kokoro Offline + Tier 3: SAPI (Recommended)</option>
+              <option value="edge">Option 1: Microsoft Edge Neural (Online High-Def)</option>
+              <option value="kokoro">Option 3: Kokoro Neural 82M (100% Offline)</option>
+              <option value="sapi">System SAPI (Built-in SpeechSynthesis)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {(settings.ttsEngine || "auto") === "auto" && "Uses Microsoft Edge Neural online; automatically falls back to offline Kokoro ONNX when disconnected."}
+              {settings.ttsEngine === "edge" && "Uses Microsoft Edge Neural TTS online stream."}
+              {settings.ttsEngine === "kokoro" && "Uses local Kokoro-82M ONNX model running entirely on your machine."}
+              {settings.ttsEngine === "sapi" && "Uses local Windows Speech API voices."}
+            </p>
+          </div>
+
+          {/* Neural British Voice Selector (Option 1) */}
+          {(settings.ttsEngine === undefined || settings.ttsEngine === "auto" || settings.ttsEngine === "edge") && (
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Neural British Voice (Option 1)
+              </label>
+              <select
+                value={settings.edgeVoice || "en-GB-SoniaNeural"}
+                onChange={(e) => {
+                  onSettingsChange({ edgeVoice: e.target.value });
+                }}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="en-GB-SoniaNeural">en-GB-SoniaNeural (British Female - Expressive)</option>
+                <option value="en-GB-LibbyNeural">en-GB-LibbyNeural (British Female - Natural)</option>
+                <option value="en-GB-MaisieNeural">en-GB-MaisieNeural (British Female - Young)</option>
+                <option value="en-GB-RyanNeural">en-GB-RyanNeural (British Male)</option>
+                <option value="en-US-JennyNeural">en-US-JennyNeural (US Female - Natural)</option>
+                <option value="en-US-AriaNeural">en-US-AriaNeural (US Female - Expressive)</option>
+              </select>
+            </div>
+          )}
+
+          {/* Offline Kokoro Voice (Option 3) */}
+          {(settings.ttsEngine === undefined || settings.ttsEngine === "auto" || settings.ttsEngine === "kokoro") && (
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Offline Kokoro Voice (Option 3)
+              </label>
+              <select
+                value={settings.kokoroVoice || "bf_emma"}
+                onChange={(e) => {
+                  onSettingsChange({ kokoroVoice: e.target.value });
+                }}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="bf_emma">bf_emma (British Female - High Quality)</option>
+                <option value="bf_isabella">bf_isabella (British Female)</option>
+                <option value="bf_alice">bf_alice (British Female)</option>
+                <option value="bf_lily">bf_lily (British Female)</option>
+                <option value="bm_george">bm_george (British Male)</option>
+                <option value="bm_lewis">bm_lewis (British Male)</option>
+              </select>
+            </div>
+          )}
+
+          {/* SAPI Voice Selector */}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              System SAPI Falloff Voice (Tier 3)
             </label>
             <select
               value={settings.voiceName}

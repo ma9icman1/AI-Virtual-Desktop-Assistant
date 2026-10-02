@@ -328,3 +328,12 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
     left:112.5px !important;
   }
 }
+
+@keyframes avatarBreathing {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.012);
+  }
+}

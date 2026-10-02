@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="100%" height="100%">
+  <defs>
+    <!-- Same photorealistic iris gradients reused for consistency -->
+    <radialGradient id="irisBaseH" cx="42%" cy="36%" r="60%">
+      <stop offset="0%"   stop-color="#a8d8f0"/>
+      <stop offset="18%"  stop-color="#5bb8e8"/>
+      <stop offset="42%"  stop-color="#1e88c8"/>
+      <stop offset="68%"  stop-color="#0d5fa0"/>
+      <stop offset="88%"  stop-color="#083a70"/>
+      <stop offset="100%" stop-color="#020e1c"/>
+    </radialGradient>
+    <radialGradient id="limbalH" cx="50%" cy="50%" r="50%">
+      <stop offset="78%"  stop-color="#000000" stop-opacity="0"/>
+      <stop offset="90%"  stop-color="#000000" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.75"/>
+    </radialGradient>
+    <radialGradient id="catchLightH" cx="35%" cy="28%" r="45%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="40%"  stop-color="#ffffff" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="scleraH" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#d1d5db"/>
+      <stop offset="30%"  stop-color="#f0f4f8"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="lashBlackH" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#050505"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <!-- Sultry drooping lid shadow -->
+    <linearGradient id="drowsyLid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#7c3000" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#7c3000" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="lashGlowH" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="0.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="irisDepthH" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur stdDeviation="0.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Clip to half-open almond shape -->
+    <clipPath id="leftHalfClip">
+      <path d="M 150 195 C 158 188, 180 188, 188 195 C 180 205, 158 205, 150 195 Z"/>
+    </clipPath>
+    <clipPath id="rightHalfClip">
+      <path d="M 213 195 C 222 188, 244 188, 252 195 C 244 205, 221 205, 213 195 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- ═══════════ LEFT EYE — HALF OPEN (sultry/drowsy) ═══════════ -->
+  <g id="leftEyeHalf">
+    <!-- Bronze eyeshadow gradient above -->
+    <path d="M 148 192 C 158 176, 182 176, 192 188 C 181 182, 158 182, 148 192 Z"
+          fill="url(#drowsyLid)" opacity="0.85"/>
+
+    <!-- Sclera — lower half visible -->
+    <path d="M 150 195 C 158 188, 180 188, 188 195 C 180 205, 158 205, 150 195 Z"
+          fill="url(#scleraH)"/>
+
+    <!-- Upper shadow from drooping lid -->
+    <path d="M 150 195 C 158 188, 180 188, 188 195 C 180 191, 158 191, 150 195 Z"
+          fill="#9ca3af" opacity="0.28"/>
+
+    <!-- Iris — only lower portion exposed (half lid) -->
+    <g clip-path="url(#leftHalfClip)">
+      <circle cx="168" cy="196" r="9.2" fill="url(#irisBaseH)" filter="url(#irisDepthH)"/>
+      <!-- Fiber lines -->
+      <line x1="168" y1="187" x2="168" y2="196" stroke="#38bdf8" stroke-width="0.6" opacity="0.15"/>
+      <line x1="175" y1="189" x2="168" y2="196" stroke="#38bdf8" stroke-width="0.5" opacity="0.12"/>
+      <line x1="177" y1="195" x2="168" y2="196" stroke="#0284c7" stroke-width="0.5" opacity="0.1"/>
+      <line x1="161" y1="195" x2="168" y2="196" stroke="#0284c7" stroke-width="0.5" opacity="0.1"/>
+      <line x1="161" y1="189" x2="168" y2="196" stroke="#38bdf8" stroke-width="0.5" opacity="0.12"/>
+      <circle cx="168" cy="196" r="9.2" fill="url(#limbalH)"/>
+      <!-- Pupil -->
+      <circle cx="168" cy="196" r="4.3" fill="#020617"/>
+      <circle cx="168" cy="196" r="3.2" fill="#000000"/>
+      <!-- Half catch-light -->
+      <circle cx="164.5" cy="193" r="2.8" fill="url(#catchLightH)" opacity="0.9"/>
+      <circle cx="163.8" cy="192.5" r="0.8" fill="#ffffff" opacity="0.99"/>
+    </g>
+
+    <!-- Heavy drooping upper lid line (thick, blurred eyeliner) -->
+    <path d="M 148 194 C 159 188, 181 188, 190 193 L 196 188"
+          stroke="url(#lashBlackH)" stroke-width="4.0" stroke-linecap="round" fill="none"
+          filter="url(#lashGlowH)"/>
+    <!-- Cat-eye wing -->
+    <path d="M 190 193 L 197 187 C 194 191, 189 194, 187 195 Z" fill="#050505"/>
+
+    <!-- Upper lashes — drooping down -->
+    <path d="M 183 190 L 187 183" stroke="#050505" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M 176 189 L 178 182" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 168 189 L 168 182" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 160 190 L 157 183" stroke="#050505" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Lower lash smudge -->
+    <path d="M 154 200 C 163 206, 175 206, 184 200"
+          stroke="#3d1c02" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.55"/>
+    <!-- Tear duct -->
+    <ellipse cx="149.5" cy="195" rx="1.5" ry="1.2" fill="#f87171" opacity="0.65"/>
+  </g>
+
+  <!-- ═══════════ RIGHT EYE — HALF OPEN ═══════════ -->
+  <g id="rightEyeHalf">
+    <path d="M 208 188 C 219 176, 245 176, 255 192 C 244 182, 219 182, 208 188 Z"
+          fill="url(#drowsyLid)" opacity="0.85"/>
+
+    <path d="M 213 195 C 222 188, 244 188, 252 195 C 244 205, 221 205, 213 195 Z"
+          fill="url(#scleraH)"/>
+
+    <path d="M 213 195 C 222 188, 244 188, 252 195 C 244 191, 221 191, 213 195 Z"
+          fill="#9ca3af" opacity="0.28"/>
+
+    <g clip-path="url(#rightHalfClip)">
+      <circle cx="232" cy="196" r="9.2" fill="url(#irisBaseH)" filter="url(#irisDepthH)"/>
+      <line x1="232" y1="187" x2="232" y2="196" stroke="#38bdf8" stroke-width="0.6" opacity="0.15"/>
+      <line x1="239" y1="189" x2="232" y2="196" stroke="#38bdf8" stroke-width="0.5" opacity="0.12"/>
+      <line x1="241" y1="195" x2="232" y2="196" stroke="#0284c7" stroke-width="0.5" opacity="0.1"/>
+      <line x1="225" y1="195" x2="232" y2="196" stroke="#0284c7" stroke-width="0.5" opacity="0.1"/>
+      <line x1="225" y1="189" x2="232" y2="196" stroke="#38bdf8" stroke-width="0.5" opacity="0.12"/>
+      <circle cx="232" cy="196" r="9.2" fill="url(#limbalH)"/>
+      <circle cx="232" cy="196" r="4.3" fill="#020617"/>
+      <circle cx="232" cy="196" r="3.2" fill="#000000"/>
+      <circle cx="228.5" cy="193" r="2.8" fill="url(#catchLightH)" opacity="0.9"/>
+      <circle cx="227.8" cy="192.5" r="0.8" fill="#ffffff" opacity="0.99"/>
+    </g>
+
+    <path d="M 211 193 C 222 188, 245 188, 254 193 L 260 188"
+          stroke="url(#lashBlackH)" stroke-width="4.0" stroke-linecap="round" fill="none"
+          filter="url(#lashGlowH)"/>
+    <path d="M 211 193 L 204 187 C 206 191, 211 194, 213 195 Z" fill="#050505"/>
+
+    <path d="M 217 190 L 213 183" stroke="#050505" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M 224 189 L 222 182" stroke="#050505" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 232 189 L 232 182" stroke="#050505" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 240 190 L 243 183" stroke="#050505" stroke-width="1.5" stroke-linecap="round"/>
+
+    <path d="M 216 200 C 226 206, 238 206, 248 200"
+          stroke="#3d1c02" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.55"/>
+    <ellipse cx="251.5" cy="195" rx="1.5" ry="1.2" fill="#f87171" opacity="0.65"/>
+  </g>
+</svg>
