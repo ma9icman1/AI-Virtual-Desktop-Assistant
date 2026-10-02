@@ -445,11 +445,12 @@ export default function App() {
       // For named browser controls such as "Sign in", prefer Windows UI
       // Automation when the browser exposes the webpage element. MiniCPM can
       // correctly identify the control but occasionally return a bad Y
-      // coordinate; UI Automation invokes the actual accessible webpage
+      // coordinate. UI Automation invokes the actual accessible webpage
       // control without depending on the model's pixel estimate.
       if (/sign\s*in|log\s*in|login/i.test(targetIntent)) {
+        let activePage: any = null;
         try {
-          const activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
+          activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
             timeoutMs: 2500,
             intervalMs: 250,
           });
@@ -474,7 +475,26 @@ export default function App() {
             return semanticClick;
           }
         } catch (semanticError) {
-          console.warn("[VISION CLICK TARGET] semantic browser click unavailable; falling back to vision coordinates", semanticError);
+          console.warn("[VISION CLICK TARGET] semantic browser click unavailable", semanticError);
+        }
+
+        // If the semantic control is not exposed by the browser's UIA tree,
+        // do NOT fall back to MiniCPM's pixel coordinate for Roblox Sign In.
+        // The current Roblox page has been observed to produce incorrect Y
+        // coordinates from vision. Use the site's canonical login route instead.
+        const activeHost = (() => {
+          try {
+            return new URL(String(activePage?.url || "")).hostname.toLowerCase().replace(/^www\./, "");
+          } catch {
+            return "";
+          }
+        })();
+
+        if (activeHost === "roblox.com") {
+          console.warn("[VISION CLICK TARGET] Roblox Sign In UIA unavailable; using canonical login route.");
+          return await (window as any).magicDesktop.execute("NAVIGATE_URL", {
+            url: "https://www.roblox.com/login",
+          });
         }
       }
 
