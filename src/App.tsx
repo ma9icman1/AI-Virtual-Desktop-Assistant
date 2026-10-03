@@ -687,10 +687,36 @@ export default function App() {
             });
             console.log("[ROBLOX LOGIN] focused password web field", passwordField);
 
-            // Brave's password suggestion is browser chrome and can be invisible to UIA.
-            // Do not treat keyboard fallback as success. Use the actual password-field
-            // screen bounds and physically move/click the saved-account row.
+            // Brave's credential popup can expose the saved account as a UIA element
+            // for a short window after the password field receives a real click. Prefer
+            // that exact semantic target when available, then fall back to the physical
+            // coordinate path below. Never read or type the stored password.
             let passwordAccountSelected = false;
+
+            try {
+              const savedAccount = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
+                name: "ma9icman1",
+                process: browserProcess,
+                timeoutMs: 1800,
+                intervalMs: 150,
+              });
+              if (savedAccount?.found) {
+                const savedClick = await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+                  name: "ma9icman1",
+                  process: browserProcess,
+                });
+                passwordAccountSelected = savedClick?.ok === true;
+                console.log("[ROBLOX LOGIN] password saved-account UIA selection", {
+                  found: true,
+                  selected: passwordAccountSelected,
+                });
+                if (passwordAccountSelected) {
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                }
+              }
+            } catch (passwordSemanticError) {
+              console.warn("[ROBLOX LOGIN] password saved-account UIA selection unavailable", passwordSemanticError);
+            }
             const fieldElement = passwordField?.element || {};
             const fieldX = Number(fieldElement.x);
             const fieldY = Number(fieldElement.y);
