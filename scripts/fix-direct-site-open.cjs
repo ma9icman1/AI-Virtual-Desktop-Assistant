@@ -1,10 +1,17 @@
 const fs = require("fs");
 
-function patch(file, marker, replacement, label) {
+function patchIfNeeded(file, marker, replacement, label) {
   const text = fs.readFileSync(file, "utf8");
-  if (text.includes("// [direct-site-open]")) return false;
-  if (!text.includes(marker)) throw new Error(`[direct-site-open] marker missing for ${label}`);
+  if (text.includes("// [direct-site-open]")) {
+    console.log(`[direct-site-open] ${label} already installed; skipped`);
+    return false;
+  }
+  if (!text.includes(marker)) {
+    console.log(`[direct-site-open] ${label} marker not present; skipped`);
+    return false;
+  }
   fs.writeFileSync(file, text.replace(marker, replacement + marker));
+  console.log(`[direct-site-open] ${label} installed`);
   return true;
 }
 
@@ -27,24 +34,6 @@ const serverPatch = String.raw`  // [direct-site-open]
 
 `;
 
-patch("server.ts", serverMarker, serverPatch, "server deterministic site routing");
+patchIfNeeded("server.ts", serverMarker, serverPatch, "server deterministic site routing");
 
-const electronMarker = '    // Browser requests delegate to Windows so the configured default browser is always used.\n';
-const electronPatch = String.raw`    // [direct-site-open]
-    // Hand the URL directly to Windows and verify the browser handoff.
-    if (browserAliases.has(requested)) {
-      const requestedUrl = String(params.url || params.site || "").trim();
-      const url = /^https?:\/\//i.test(requestedUrl) ? requestedUrl : "https://www.google.com/";
-      const errorMessage = await shell.openExternal(url);
-      if (errorMessage) throw new Error(\`Windows could not open the default browser: \${errorMessage}\`);
-      const expectedHost = normalizedHostname(url);
-      const webpage = await detectWebpage({ timeoutMs: 10000, intervalMs: 300, expectedHost }).catch(() => ({ detected: false, browser: "", title: "", url: "" }));
-      if (desktopPermission === "one_action") desktopPermission = "none";
-      return { ok: true, verified: Boolean(webpage.detected), launched: true, process: "default-browser", requested, url, webpage };
-    }
-
-`;
-
-patch("electron/main.cjs", electronMarker, electronPatch, "electron default browser launch");
-
-console.log("[direct-site-open] direct website launch routing is installed.");
+console.log("[direct-site-open] complete");
