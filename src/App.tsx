@@ -559,6 +559,15 @@ export default function App() {
               throw lastError || new Error(`Could not find Roblox ${label} control.`);
             };
 
+            // Put Magic AI into its small 2.5D desktop/overlay view before
+            // interacting with browser credentials. This keeps the assistant
+            // out of the browser's fields and saved-account popup so vision and
+            // native browser UI automation can see the real controls.
+            console.log("[ROBLOX LOGIN] switching Magic AI to 2.5D desktop view");
+            setAvatarMode("2d");
+            setExperienceMode("model");
+            await new Promise((resolve) => setTimeout(resolve, 600));
+
             // Chromium/Brave often exposes Roblox's HTML inputs as unnamed
             // UIA Edit controls rather than their visible labels. Target the
             // first page-level Edit control instead of relying on a label that
@@ -719,6 +728,13 @@ export default function App() {
             );
 
             console.log("[ROBLOX LOGIN] credential flow completed", { accountSelected });
+
+            // Restore the normal Magic AI window after the browser task has
+            // handed off to Roblox. The small 2.5D view is only an automation
+            // workspace, not a permanent UI change.
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            setExperienceMode("full");
+
             return { ok: true, verified: true, loginPage: true, accountSelected };
           } catch (loginError) {
             console.warn("[ROBLOX LOGIN] semantic credential flow failed", loginError);
