@@ -26,6 +26,8 @@ const port = Number(process.env.MAGIC_PORT || 3210);
 const AI_SCREEN_WIDTH = 1280;
 let desktopPermission = "none";
 let desktopKilled = false;
+let magicServerModule = null;
+let serverShutdownStarted = false;
 let speechProcess = null;
 let speechWindow = null;
 let speechStopRequested = false;
@@ -1941,7 +1943,7 @@ async function createWindow() {
   if (!fs.existsSync(serverPath)) {
     throw new Error(`Built server is missing: ${serverPath}. Run npm run build before starting ma9icAI.`);
   }
-  require(serverPath);
+  magicServerModule = require(serverPath);
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === "media" || permission === "notifications");
@@ -2044,8 +2046,15 @@ async function createWindow() {
   });
 }
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   terminateSpeechProcesses();
+  if (!serverShutdownStarted && magicServerModule?.shutdownServer) {
+    serverShutdownStarted = true;
+    event.preventDefault();
+    Promise.resolve(magicServerModule.shutdownServer())
+      .catch((error) => console.warn("[SHUTDOWN] Magic AI server close failed:", error?.message || error))
+      .finally(() => app.quit());
+  }
 });
 
 app.whenReady().then(createWindow).catch((error) => {
