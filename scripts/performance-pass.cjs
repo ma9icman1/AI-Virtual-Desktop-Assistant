@@ -19,8 +19,8 @@ text = text.replace(
 // Same optimization for browser web-field discovery, without changing its
 // physical click/focus timing.
 text = text.replace(
-  'const candidates = @()\n\nforeach ($el in $all) {',
-  'const candidates = @()\n$processCache = @{}\n\nforeach ($el in $all) {'
+  '$candidates = @()\n\nforeach ($el in $all) {',
+  '$candidates = @()\n$processCache = @{}\n\nforeach ($el in $all) {'
 );
 text = text.replace(
   '$pn = (Get-Process -Id $p -ErrorAction Stop).ProcessName.ToLowerInvariant()',
