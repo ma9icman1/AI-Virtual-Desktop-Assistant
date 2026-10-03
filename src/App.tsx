@@ -114,6 +114,9 @@ export default function App() {
   const [connectionProgress, setConnectionProgress] = useState<number | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const lastGreetingRef = useRef(-1);
+  // Keep the voice subscription bound to the latest send-message handler without
+  // restarting the subscription every time listening state changes.
+  const handleSendMessageRef = useRef<(text: string, visionOverride?: VisionDetection | null) => Promise<void>>(async () => {});
 
   useEffect(() => {
     document.body.classList.toggle("desktop-shell", isDesktopShell);
@@ -1414,6 +1417,10 @@ export default function App() {
     [messages, activeVision, assistantName, executePlanSequence, handleCaptureScreen, isListening, permissionLevel, triggerMagicGreeting]
   );
 
+  useEffect(() => {
+    handleSendMessageRef.current = handleSendMessage;
+  }, [handleSendMessage]);
+
   const handlePermissionGrant = useCallback((level: PermissionLevel) => {
     setDesktopPermission(level);
     setIsPermissionOpen(false);
@@ -1582,7 +1589,7 @@ export default function App() {
       setIsListening(false);
       setAudioLevel(0);
       setAssistantState("processing");
-      handleSendMessage(transcript);
+      void handleSendMessageRef.current(transcript);
     });
 
     // 4. Connect wake-word callback ("Magic")
@@ -1615,7 +1622,7 @@ export default function App() {
       unsubVoiceError();
       VoiceEngine.stopListening();
     };
-  }, [armWakeWord, handleSendMessage, triggerMagicGreeting]);
+  }, [armWakeWord, triggerMagicGreeting]);
   // Microphone starts OFF. User enables voice by clicking the round mic button.
 
   const dashboardPrompts = [
