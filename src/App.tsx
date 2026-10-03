@@ -689,101 +689,59 @@ export default function App() {
             });
             console.log("[ROBLOX LOGIN] focused password web field", passwordField);
 
-            // Brave can show the saved-account popup again when the password
-            // field receives focus. Select the SAME saved account (ma9icman1)
-            // again so the browser fills the password for that exact login.
+            // Brave's password suggestion is browser chrome and can be invisible to UIA.
+            // Do not treat keyboard fallback as success. Use the actual password-field
+            // screen bounds and physically move/click the saved-account row.
             let passwordAccountSelected = false;
-            try {
-              const passwordSuggestion = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
-                name: "ma9icman1",
-                process: browserProcess,
-                timeoutMs: 3500,
-                intervalMs: 200,
-              });
-              if (passwordSuggestion?.found) {
-                // On Brave's password-field credential popup, the saved
-                // username row needs a double-click to actually commit the
-                // stored credential/password. A single UIA click can only
-                // highlight the row without applying the password.
-                await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
-                  name: "ma9icman1",
-                  process: browserProcess,
-                });
-                await new Promise((resolve) => setTimeout(resolve, 120));
-                await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
-                  name: "ma9icman1",
-                  process: browserProcess,
-                });
-                passwordAccountSelected = true;
-                console.log("[ROBLOX LOGIN] double-clicked saved account ma9icman1 for password field");
-              }
-            } catch (passwordAccountError) {
-              console.warn("[ROBLOX LOGIN] password-field saved-account suggestion unavailable", passwordAccountError);
-            }
+            const fieldElement = passwordField?.element || {};
+            const fieldX = Number(fieldElement.x);
+            const fieldY = Number(fieldElement.y);
+            const fieldWidth = Number(fieldElement.width);
+            const fieldHeight = Number(fieldElement.height);
 
-            if (!passwordAccountSelected) {
-              // Chromium/Brave credential suggestions are sometimes painted as
-              // browser UI that Windows UI Automation does not expose by name.
-              // In that case, use the same visual target-selection approach as
-              // the rest of Magic AI: the dropdown is visible on screen and
-              // the exact saved account text is "ma9icman1".
+            if ([fieldX, fieldY, fieldWidth, fieldHeight].every(Number.isFinite)) {
+              const accountRowX = Math.round(fieldX + fieldWidth / 2);
+              // Chromium's saved-account row is immediately below the password field.
+              const accountRowY = Math.round(fieldY + fieldHeight + 34);
+
               try {
                 await new Promise((resolve) => setTimeout(resolve, 700));
-                const visualSavedAccount = await executeDesktopAction("VISION_CLICK_TARGET", {
-                  targetLabel: "ma9icman1",
-                  targetIntent: "saved account",
-                });
-                if (visualSavedAccount?.ok !== false) {
-                  passwordAccountSelected = true;
-                  console.log("[ROBLOX LOGIN] selected saved account ma9icman1 for password field with vision", visualSavedAccount);
-                }
-              } catch (passwordVisionError) {
-                console.warn("[ROBLOX LOGIN] password-field vision saved-account selection unavailable", passwordVisionError);
-              }
-            }
 
-            if (!passwordAccountSelected) {
-              // Brave's credential popup can be visible directly underneath the
-              // password field while exposing neither the popup row nor its
-              // text through UI Automation. In that case, double-click the
-              // saved-account row immediately below the password field.
-              try {
-                const fieldElement = passwordField?.element || {};
-                const fieldX = Number(fieldElement.x);
-                const fieldY = Number(fieldElement.y);
-                const fieldWidth = Number(fieldElement.width);
-                const fieldHeight = Number(fieldElement.height);
-                if (![fieldX, fieldY, fieldWidth, fieldHeight].every(Number.isFinite)) {
-                  throw new Error("Password field bounds were not returned.");
-                }
-                await new Promise((resolve) => setTimeout(resolve, 450));
-                const accountRowX = Math.round(fieldX + fieldWidth / 2);
-                const accountRowY = Math.round(fieldY + fieldHeight + 30);
-                const doubleClickResult = await (window as any).magicDesktop.execute("DOUBLE_CLICK", {
+                console.log("[ROBLOX LOGIN] moving mouse to saved-account row", {
+                  field: { x: fieldX, y: fieldY, width: fieldWidth, height: fieldHeight },
+                  target: { x: accountRowX, y: accountRowY },
+                });
+
+                const moveResult = await (window as any).magicDesktop.execute("MOVE_MOUSE", {
                   x: accountRowX,
                   y: accountRowY,
                 });
-                passwordAccountSelected = doubleClickResult?.ok !== false;
-                console.log("[ROBLOX LOGIN] double-clicked saved account row under password field", {
+                console.log("[ROBLOX LOGIN] mouse moved to saved-account row", moveResult);
+
+                await new Promise((resolve) => setTimeout(resolve, 150));
+
+                const clickResult = await (window as any).magicDesktop.execute("DOUBLE_CLICK", {
                   x: accountRowX,
                   y: accountRowY,
-                  result: doubleClickResult,
                 });
-              } catch (passwordDoubleClickError) {
-                console.warn("[ROBLOX LOGIN] password-field saved-account double-click failed", passwordDoubleClickError);
+                console.log("[ROBLOX LOGIN] physically double-clicked saved-account row", clickResult);
+
+                passwordAccountSelected = clickResult?.ok === true;
+              } catch (passwordPhysicalError) {
+                console.warn("[ROBLOX LOGIN] physical saved-account selection failed", passwordPhysicalError);
               }
+            } else {
+              console.warn("[ROBLOX LOGIN] password field returned no usable screen bounds", passwordField);
             }
 
             if (!passwordAccountSelected) {
-              // Final fallback: use the browser's native first-suggestion keyboard
-              // selection if the credential popup is not exposed to UIA or vision.
+              // Only use keyboard selection after the physical attempt has failed.
               try {
                 await new Promise((resolve) => setTimeout(resolve, 300));
                 await (window as any).magicDesktop.execute("KEY_PRESS", { key: "DOWN" });
                 await new Promise((resolve) => setTimeout(resolve, 150));
                 await (window as any).magicDesktop.execute("KEY_PRESS", { key: "ENTER" });
-                passwordAccountSelected = true;
-                console.log("[ROBLOX LOGIN] selected saved account for password field with keyboard fallback");
+                console.log("[ROBLOX LOGIN] physical saved-account selection failed; keyboard fallback attempted");
               } catch (passwordKeyboardError) {
                 console.warn("[ROBLOX LOGIN] password-field keyboard saved-account selection failed", passwordKeyboardError);
               }
