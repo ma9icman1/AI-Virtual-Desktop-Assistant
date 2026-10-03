@@ -16,6 +16,14 @@ function once(text, marker, replacement, label) {
   if (text.includes(replacement)) return text;
   return text.replace(marker, replacement);
 }
+function onceIfPresent(text, marker, replacement, label) {
+  if (text.includes(replacement)) return text;
+  if (!text.includes(marker)) {
+    console.warn(`[computer-agent-upgrade] ${label} marker not found; leaving existing server structure unchanged.`);
+    return text;
+  }
+  return text.replace(marker, replacement);
+}
 
 let main = read(mainPath);
 const helperMarker = 'async function executeDesktopAction(action, params = {}) {';
@@ -123,10 +131,10 @@ const promptMarker = '- "SCREEN_ANALYSIS": {},';
 const promptReplacement = promptMarker + `
 - "SCREENSHOT_REGION": { "region": { "x": number, "y": number, "width": number, "height": number }, "prompt"?: string }
 - "ZOOM_SCREEN": { "region": { "x": number, "y": number, "width": number, "height": number }, "prompt"?: string }`;
-if (!server.includes('SCREENSHOT_REGION":')) server = once(server, promptMarker, promptReplacement, "Server action schema");
+server = onceIfPresent(server, promptMarker, promptReplacement, "Server action schema");
 const stepMarker = '"FETCH_WEB_CONTENT" | "VERIFY_STATE",';
 const stepReplacement = '"FETCH_WEB_CONTENT" | "VERIFY_STATE" | "SCREENSHOT_REGION" | "ZOOM_SCREEN",';
-if (!server.includes(stepReplacement)) server = once(server, stepMarker, stepReplacement, "Server plan action types");
+server = onceIfPresent(server, stepMarker, stepReplacement, "Server plan action types");
 write(serverPath, server);
 
 console.log("[computer-agent-upgrade] applied");
