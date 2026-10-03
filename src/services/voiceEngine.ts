@@ -146,6 +146,8 @@ export class VoiceEngine {
   private isSpeaking: boolean = false;
   private recognitionRestartTimer: number | null = null;
   private nativeSpeechActive = false;
+  private allowFinalNativeTranscript = false;
+  private allowFinalNativeTranscriptTimer: number | null = null;
   private nativeSpeechCleanup: (() => void) | null = null;
   private nativeFallbackAttempted = false;
   private suppressNativeTranscripts = false;
@@ -534,11 +536,22 @@ export class VoiceEngine {
     }
   }
 
-  public stopListening() {
-    // The current user turn has already been delivered. Ignore Whisper's
-    // trailing STOP flush so the assistant cannot process its own TTS or a
-    // duplicated tail of the user's sentence as another command.
-    this.suppressNativeTranscripts = true;
+  public stopListening(options: { allowFinalTranscript?: boolean } = {}) {
+    // Most programmatic stops happen after a transcript was already delivered,
+    // so they suppress Whisper's trailing STOP flush. A manual mic-button stop
+    // can opt into that final flush so the last spoken phrase is not discarded.
+    this.allowFinalNativeTranscript = options.allowFinalTranscript === true;
+    if (this.allowFinalNativeTranscriptTimer !== null) {
+      window.clearTimeout(this.allowFinalNativeTranscriptTimer);
+      this.allowFinalNativeTranscriptTimer = null;
+    }
+    if (this.allowFinalNativeTranscript) {
+      this.allowFinalNativeTranscriptTimer = window.setTimeout(() => {
+        this.allowFinalNativeTranscript = false;
+        this.allowFinalNativeTranscriptTimer = null;
+      }, 3000);
+    }
+    this.suppressNativeTranscripts = !this.allowFinalNativeTranscript;
     this.isListening = false;
     this.stopNativeSpeechFallback();
     if (this.recognitionRestartTimer !== null) {
@@ -592,9 +605,17 @@ export class VoiceEngine {
           // command is being stopped or while the assistant is speaking.
           // This prevents TTS loopback such as the assistant saying
           // "Why did the tomato..." and then treating that as a new user turn.
-          if (this.isSpeaking || this.suppressNativeTranscripts || !this.isListening) return;
+          const allowFinal = this.allowFinalNativeTranscript;
+          if (this.isSpeaking || (!allowFinal && this.suppressNativeTranscripts) || (!allowFinal && !this.isListening)) return;
           console.debug("[ma9icAI voice] Whisper transcript:", text, confidence);
           this.processRecognizedText(text, true, confidence);
+          if (allowFinal) {
+            this.allowFinalNativeTranscript = false;
+            if (this.allowFinalNativeTranscriptTimer !== null) {
+              window.clearTimeout(this.allowFinalNativeTranscriptTimer);
+              this.allowFinalNativeTranscriptTimer = null;
+            }
+          }
         });
         const nativeErrorCleanup = window.magicVoice.onError((message) => {
           console.error("[ma9icAI voice] Whisper error:", message);
