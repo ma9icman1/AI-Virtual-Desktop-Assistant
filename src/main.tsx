@@ -2,6 +2,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { installVoiceAutoResume } from './services/voiceAutoResumePatch';
 
 class AppErrorBoundary extends React.Component<React.PropsWithChildren, {error: Error | null}> {
   state = { error: null as Error | null };
@@ -33,6 +34,8 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, {error: 
 
 const root = document.getElementById('root');
 if (!root) throw new Error('ma9icAI root element is missing.');
+
+installVoiceAutoResume();
 
 createRoot(root).render(
   <AppErrorBoundary>
