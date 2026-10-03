@@ -743,7 +743,39 @@ export default function App() {
             }
 
             if (!passwordAccountSelected) {
-              // Last fallback: use the browser's native first-suggestion keyboard
+              // Brave's credential popup can be visible directly underneath the
+              // password field while exposing neither the popup row nor its
+              // text through UI Automation. In that case, double-click the
+              // saved-account row immediately below the password field.
+              try {
+                const fieldElement = passwordField?.element || {};
+                const fieldX = Number(fieldElement.x);
+                const fieldY = Number(fieldElement.y);
+                const fieldWidth = Number(fieldElement.width);
+                const fieldHeight = Number(fieldElement.height);
+                if (![fieldX, fieldY, fieldWidth, fieldHeight].every(Number.isFinite)) {
+                  throw new Error("Password field bounds were not returned.");
+                }
+                await new Promise((resolve) => setTimeout(resolve, 450));
+                const accountRowX = Math.round(fieldX + fieldWidth / 2);
+                const accountRowY = Math.round(fieldY + fieldHeight + 30);
+                const doubleClickResult = await (window as any).magicDesktop.execute("DOUBLE_CLICK", {
+                  x: accountRowX,
+                  y: accountRowY,
+                });
+                passwordAccountSelected = doubleClickResult?.ok !== false;
+                console.log("[ROBLOX LOGIN] double-clicked saved account row under password field", {
+                  x: accountRowX,
+                  y: accountRowY,
+                  result: doubleClickResult,
+                });
+              } catch (passwordDoubleClickError) {
+                console.warn("[ROBLOX LOGIN] password-field saved-account double-click failed", passwordDoubleClickError);
+              }
+            }
+
+            if (!passwordAccountSelected) {
+              // Final fallback: use the browser's native first-suggestion keyboard
               // selection if the credential popup is not exposed to UIA or vision.
               try {
                 await new Promise((resolve) => setTimeout(resolve, 300));
