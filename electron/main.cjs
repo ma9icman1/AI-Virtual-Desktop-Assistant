@@ -368,6 +368,8 @@ foreach ($el in $elements) {
 async function clickWebField(params = {}) {
   const processName = normalizeProcessName(params.process || "");
   const requestedIndex = Number.isInteger(Number(params.index)) ? Math.max(0, Number(params.index)) : 0;
+  const requestedAutomationId = String(params.automationId || "").trim();
+  const requestedName = String(params.name || "").trim();
   if (!processName) throw new Error("Web field click requires a browser process.");
 
   const script = `
@@ -375,9 +377,12 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 $procName = $scriptArgs[0]
 $wantedIndex = [int]$scriptArgs[1]
+$wantedAutomationId = $scriptArgs[2]
+$wantedName = $scriptArgs[3]
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
 $candidates = @()
+
 foreach ($el in $all) {
   try {
     $p = $el.Current.ProcessId
@@ -389,9 +394,6 @@ foreach ($el in $all) {
     if ($el.Current.IsOffscreen -or -not $el.Current.IsEnabled) { continue }
     $r = $el.Current.BoundingRectangle
     if ($r.Width -lt 180 -or $r.Width -gt 900 -or $r.Height -lt 20 -or $r.Height -gt 100) { continue }
-    # Ignore browser chrome such as the address bar. Roblox form fields are
-    # page-level Edit controls below the browser toolbar.
-    if ($r.Y -lt 90) { continue }
     $candidates += [pscustomobject]@{
       name=[string]$el.Current.Name
       automationId=[string]$el.Current.AutomationId
@@ -406,31 +408,58 @@ foreach ($el in $all) {
     }
   } catch {}
 }
-$candidates = @($candidates | Sort-Object y, x)
-if ($candidates.Count -le $wantedIndex) {
-  throw "No web field was found at index $wantedIndex. Found $($candidates.Count) eligible Edit controls."
+
+$targetInfo = $null
+
+# Explicit semantic targeting always wins when supplied.
+if ($wantedAutomationId) {
+  $targetInfo = @($candidates | Where-Object { $_.automationId -eq $wantedAutomationId }) | Select-Object -First 1
 }
-$targetInfo = $candidates[$wantedIndex]
-$elements = $all
+if (-not $targetInfo -and $wantedName) {
+  $targetInfo = @($candidates | Where-Object { $_.name -like $wantedName }) | Select-Object -First 1
+}
+
+# Backward-compatible index targeting. Prefer stable page-field automation IDs
+# over browser chrome controls such as Brave's navbar-search-input.
+if (-not $targetInfo) {
+  $preferredIds = if ($wantedIndex -eq 0) {
+    @('login-username', 'username', 'email', 'login-email')
+  } else {
+    @('login-password', 'password')
+  }
+  foreach ($preferredId in $preferredIds) {
+    $targetInfo = @($candidates | Where-Object { $_.automationId -eq $preferredId }) | Select-Object -First 1
+    if ($targetInfo) { break }
+  }
+}
+
+if (-not $targetInfo) {
+  $ordered = @($candidates | Sort-Object y, x)
+  if ($ordered.Count -le $wantedIndex) {
+    throw "No web field was found at index $wantedIndex. Found $($ordered.Count) eligible Edit controls."
+  }
+  $targetInfo = $ordered[$wantedIndex]
+}
+
 $target = $null
-foreach ($el in $elements) {
+foreach ($el in $all) {
   try {
     if ($el.Current.ProcessId -ne $targetInfo.pid) { continue }
     if ([string]$el.Current.ControlType.ProgrammaticName -ne 'ControlType.Edit') { continue }
+    if ($targetInfo.automationId -and $el.Current.AutomationId -eq $targetInfo.automationId) {
+      $target = $el
+      break
+    }
     $r = $el.Current.BoundingRectangle
     if ([int][math]::Round($r.X) -ne $targetInfo.x -or [int][math]::Round($r.Y) -ne $targetInfo.y) { continue }
     $target = $el
     break
   } catch {}
 }
+
 if (-not $target) { throw "The selected web field disappeared before it could be focused." }
-try {
-  $target.SetFocus()
-} catch {}
-try {
-  $vp = $target.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-  [void]$vp
-} catch {}
+try { $target.SetFocus() } catch {}
+
 [pscustomobject]@{
   ok=$true
   name=[string]$target.Current.Name
@@ -444,7 +473,7 @@ try {
   height=$targetInfo.height
 } | ConvertTo-Json -Compress
 `;
-  const raw = await runPowerShell(script, [processName, String(requestedIndex)]);
+  const raw = await runPowerShell(script, [processName, String(requestedIndex), requestedAutomationId, requestedName]);
   let element;
   try { element = JSON.parse(raw || "{}"); } catch { throw new Error("Could not parse the selected web field."); }
   if (desktopPermission === "one_action") desktopPermission = "none";
