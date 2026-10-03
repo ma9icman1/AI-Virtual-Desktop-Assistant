@@ -37,6 +37,62 @@ if (!root) throw new Error('ma9icAI root element is missing.');
 
 installVoiceAutoResume();
 
+// The ma9icAI brain/name control is the always-available emergency stop.
+// Keep this in the renderer bootstrap so it survives assistant UI state changes.
+const installTopLeftAiKillSwitch = () => {
+  let active = false;
+
+  const isAiHeaderControl = (element: Element | null) => {
+    if (!element) return false;
+    const button = element.closest('button,[role="button"]');
+    if (!button) return false;
+    const rect = button.getBoundingClientRect();
+    if (rect.top > 130 || rect.left > 360 || rect.width <= 0 || rect.height <= 0) return false;
+
+    const ownLabel = `${button.textContent || ''} ${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''}`.toLowerCase();
+    const parentLabel = `${button.parentElement?.textContent || ''}`.toLowerCase();
+    return /ma9icai/.test(ownLabel) || /ma9icai/.test(parentLabel);
+  };
+
+  const markHeaderControl = () => {
+    document.querySelectorAll('button,[role="button"]').forEach((element) => {
+      if (!isAiHeaderControl(element)) return;
+      element.setAttribute('data-ai-kill-target', 'true');
+      element.setAttribute('title', 'Emergency stop — stop ma9icAI immediately');
+      element.setAttribute('aria-label', 'ma9icAI emergency stop');
+    });
+  };
+
+  const onClick = (event: MouseEvent) => {
+    if (active || !isAiHeaderControl(event.target as Element | null)) return;
+    active = true;
+    try {
+      event.preventDefault();
+      event.stopPropagation();
+      (window as any).magicDesktop?.emergencyStop?.();
+      document.querySelectorAll('[data-ai-kill-target="true"]').forEach((element) => {
+        (element as HTMLElement).style.filter = 'brightness(1.8) drop-shadow(0 0 10px rgba(255,70,100,.9))';
+      });
+      window.setTimeout(() => {
+        document.querySelectorAll('[data-ai-kill-target="true"]').forEach((element) => {
+          (element as HTMLElement).style.filter = '';
+        });
+        active = false;
+      }, 900);
+    } catch (error) {
+      console.error('[AI KILL SWITCH] Failed to trigger emergency stop:', error);
+      active = false;
+    }
+  };
+
+  document.addEventListener('click', onClick, true);
+  markHeaderControl();
+  const observer = new MutationObserver(markHeaderControl);
+  observer.observe(document.documentElement, {childList: true, subtree: true});
+};
+
+installTopLeftAiKillSwitch();
+
 createRoot(root).render(
   <AppErrorBoundary>
     <App />
