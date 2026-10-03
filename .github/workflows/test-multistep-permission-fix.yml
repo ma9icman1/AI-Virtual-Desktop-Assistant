@@ -1,0 +1,25 @@
+name: Test multi-step permission repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/fix-multistep-permission.cjs'
+      - '.github/workflows/test-multistep-permission-fix.yml'
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Apply repair to working tree
+        shell: pwsh
+        run: node tools/fix-multistep-permission.cjs
+      - name: Install dependencies
+        shell: pwsh
+        run: npm ci
+      - name: Build patched working tree
+        shell: pwsh
+        run: npm run build
