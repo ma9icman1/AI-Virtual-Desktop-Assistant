@@ -713,7 +713,7 @@ async function detectWebpage(params = {}) {
   const timeoutMs = Math.min(15000, Math.max(750, Number(params.timeoutMs) || 5000));
   const intervalMs = Math.min(1000, Math.max(150, Number(params.intervalMs) || 300));
   const expectedHost = normalizedHostname(params.expectedHost || "");
-  const browserProcesses = new Set(["msedge", "chrome", "brave", "firefox", "opera", "vivaldi"]);
+  const browserProcesses = new Set(["msedge", "chrome", "brave", "opera", "vivaldi"]);
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
@@ -851,11 +851,7 @@ function resolveBrowserExecutable(browser) {
       process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
       process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
     ],
-    firefox: [
-      "firefox.exe",
-      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Mozilla Firefox", "firefox.exe"),
-      process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Mozilla Firefox", "firefox.exe"),
-    ],
+    // Firefox is intentionally excluded from supported browser automation.
     opera: [
       "opera.exe",
       process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Opera", "opera.exe"),
@@ -978,10 +974,14 @@ async function executeDesktopAction(action, params = {}) {
   const y = mappedPoint.y;
   if (action === "LAUNCH_APP") {
     const requested = String(params.app || "").trim().toLowerCase();
-    const browserAliases = new Set(["browser", "web browser", "internet", "internet browser", "edge", "microsoft edge", "chrome", "google chrome", "firefox", "mozilla firefox", "brave", "brave browser", "opera", "opera browser", "vivaldi", "vivaldi browser"]);
+    const defaultBrowserAliases = new Set(["browser", "web browser", "internet", "internet browser"]);
+    const browserAliases = new Set(["edge", "microsoft edge", "chrome", "google chrome", "brave", "brave browser", "firefox", "mozilla firefox"]);
 
-    // Browser requests delegate to Windows so the configured default browser is always used.
-    if (browserAliases.has(requested)) {
+    // "browser" means the Windows default browser. Named Chromium browsers are
+    // launched explicitly so Chrome/Brave/Edge requests never silently land in
+    // a different default browser. Firefox remains intentionally unsupported
+    // for this desktop automation version.
+    if (defaultBrowserAliases.has(requested)) {
       const child = spawn("cmd.exe", ["/c", "start", "", "https://www.google.com"], { detached: true, stdio: "ignore", windowsHide: true });
       await new Promise((resolve, reject) => {
         child.once("error", (error) => reject(new Error(`Windows could not open the default browser: ${error.message}`)));
@@ -991,6 +991,38 @@ async function executeDesktopAction(action, params = {}) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       if (desktopPermission === "one_action") desktopPermission = "none";
       return { ok: true, verified: true, process: "default-browser", requested };
+    }
+
+    if (browserAliases.has(requested)) {
+      const normalizedBrowser = requested === "microsoft edge" ? "edge"
+        : requested === "google chrome" ? "chrome"
+        : requested === "brave browser" ? "brave"
+        : requested === "mozilla firefox" ? "firefox"
+        : requested;
+
+      if (normalizedBrowser === "firefox") {
+        throw new Error("Firefox browser automation is not supported in this version of ma9icAI. Use Chrome, Brave, or Edge.");
+      }
+
+      const executable = resolveBrowserExecutable(normalizedBrowser);
+      if (!executable) {
+        throw new Error(`Could not find ${normalizedBrowser}. Install it or add its executable to PATH.`);
+      }
+
+      const child = spawn(executable, ["https://www.google.com"], { detached: true, stdio: "ignore", windowsHide: false });
+      await new Promise((resolve, reject) => {
+        child.once("error", (error) => reject(new Error(`Windows could not launch ${normalizedBrowser}: ${error.message}`)));
+        child.once("spawn", resolve);
+      });
+      child.unref();
+
+      const verified = await verifyProcessRunning(normalizedBrowser);
+      if (!verified) {
+        throw new Error(`${normalizedBrowser} was launched, but Windows could not verify the browser process.`);
+      }
+
+      if (desktopPermission === "one_action") desktopPermission = "none";
+      return { ok: true, verified: true, process: normalizedBrowser, requested };
     }
 
     const aliases = {
