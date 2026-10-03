@@ -81,8 +81,8 @@ export class VoiceEngine {
     return this.getInstance().wakeWordMode;
   }
 
-  public static stopListening(options: { allowFinalTranscript?: boolean } = {}): void {
-    this.getInstance().stopListening(options);
+  public static stopListening(): void {
+    this.getInstance().stopListening();
   }
 
   public static getSettings(): VoiceSettings {
@@ -146,11 +146,8 @@ export class VoiceEngine {
   private isSpeaking: boolean = false;
   private recognitionRestartTimer: number | null = null;
   private nativeSpeechActive = false;
-  private allowFinalNativeTranscript = false;
-  private allowFinalNativeTranscriptTimer: number | null = null;
   private nativeSpeechCleanup: (() => void) | null = null;
   private nativeFallbackAttempted = false;
-  private suppressNativeTranscripts = false;
   private settings: VoiceSettings;
   private callbacks: VoiceEngineCallbacks;
   private availableVoices: SpeechSynthesisVoice[] = [];
