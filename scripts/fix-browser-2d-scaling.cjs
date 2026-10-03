@@ -7,98 +7,35 @@ const repoRoot = path.resolve(__dirname, "..");
 const mainPath = path.join(repoRoot, "electron", "main.cjs");
 let source = fs.readFileSync(mainPath, "utf8");
 
-const marker = "// [browser-2d-scaling-v1]";
-const clickThroughMarker = "// [browser-2d-clickthrough-v1]";
+const browserMarker = "// [browser-2d-scaling-v2]";
+const clickThroughMarker = "// [browser-2d-clickthrough-v2]";
 
-if (!source.includes(marker)) {
-  const old = [
-    "  while (Date.now() - started < timeoutMs) {",
-    "    const info = await getActiveWindowInfo();",
-    "    const process = normalizeProcessName(info.process);",
-    "",
-    "    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {",
-    "      await maximizeWindow(info.hwnd);",
-  ].join("\n");
+// The browser detector used to trust GetForegroundWindow(). That is wrong when
+// the 2.5D avatar is the foreground Electron window. Replace that lookup with
+// a browser-process fallback, while retaining the normal foreground fast path.
+if (!source.includes(browserMarker)) {
+  const old = `    const info = await getActiveWindowInfo();\n    const process = normalizeProcessName(info.process);\n\n    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {\n      await maximizeWindow(info.hwnd);`;
 
-  const replacement = [
-    "  while (Date.now() - started < timeoutMs) {",
-    "    // [browser-2d-scaling-v1]",
-    "    // The 2.5D Magic AI overlay can become the foreground window, so do not rely only on GetForegroundWindow().",
-    "    // If the foreground window is not a supported browser, find the visible browser window by process and use it.",
-    "    let info = await getActiveWindowInfo();",
-    "    let process = normalizeProcessName(info.process);",
-    "",
-    "    if (!browserProcesses.has(process) || Number(info.hwnd) <= 0) {",
-    "      const browserNames = Array.from(browserProcesses).map((name) => \"'\" + name + \"'\").join(\",\");",
-    "      const browserWindowScript = [",
-    "        \"$names = @(\" + browserNames + \")\",",
-    "        \"$windows = Get-Process -ErrorAction SilentlyContinue | Where-Object {\",",
-    "        \"  $_.MainWindowHandle -ne 0 -and $names -contains $_.ProcessName.ToLowerInvariant()\",",
-    "        \"} | Sort-Object StartTime -Descending\",",
-    "        \"$target = $windows | Select-Object -First 1\",",
-    "        \"if ($target) {\",",
-    "        \"  [pscustomobject]@{\",",
-    "        \"    hwnd=[int64]$target.MainWindowHandle\",",
-    "        \"    pid=[int]$target.Id\",",
-    "        \"    process=[string]$target.ProcessName\",",
-    "        \"    title=[string]$target.MainWindowTitle\",",
-    "        \"  } | ConvertTo-Json -Compress\",",
-    "        \"}\",",
-    "      ].join(\"\\n\");",
-    "      const browserWindowRaw = await runPowerShell(browserWindowScript).catch(() => \"\");",
-    "      try {",
-    "        const browserWindow = JSON.parse(browserWindowRaw || \"{}\");",
-    "        if (Number(browserWindow.hwnd) > 0) {",
-    "          info = browserWindow;",
-    "          process = normalizeProcessName(browserWindow.process);",
-    "        }",
-    "      } catch {}",
-    "    }",
-    "",
-    "    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {",
-    "      await maximizeWindow(info.hwnd);",
-    "      console.log(\"[WEB DETECT] using browser window after 2.5D overlay activation\", {",
-    "        browser: process,",
-    "        pid: info.pid,",
-    "        hwnd: info.hwnd,",
-    "      });",
-  ].join("\n");
+  const replacement = `    // [browser-2d-scaling-v2]\n    // The 2.5D overlay can become the foreground Electron window. Prefer the\n    // foreground browser when available, otherwise locate the visible browser\n    // window directly by process so vision/UI detection targets the real page.\n    let info = await getActiveWindowInfo();\n    let process = normalizeProcessName(info.process);\n\n    if (!browserProcesses.has(process) || Number(info.hwnd) <= 0) {\n      const browserNames = Array.from(browserProcesses).map((name) => \"'\" + name + \"'\").join(\",\");\n      const browserWindowScript = [\n        \"$names = @(\" + browserNames + \")\",\n        \"$windows = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $names -contains $_.ProcessName.ToLowerInvariant() } | Sort-Object StartTime -Descending\",\n        \"$target = $windows | Select-Object -First 1\",\n        \"if ($target) { [pscustomobject]@{ hwnd=[int64]$target.MainWindowHandle; pid=[int]$target.Id; process=[string]$target.ProcessName; title=[string]$target.MainWindowTitle } | ConvertTo-Json -Compress }\",\n      ].join(\"\\n\");\n      const browserWindowRaw = await runPowerShell(browserWindowScript).catch(() => \"\");\n      try {\n        const browserWindow = JSON.parse(browserWindowRaw || \"{}\");\n        if (Number(browserWindow.hwnd) > 0) {\n          info = browserWindow;\n          process = normalizeProcessName(browserWindow.process);\n        }\n      } catch {}\n    }\n\n    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {\n      await maximizeWindow(info.hwnd);`;
 
   if (!source.includes(old)) {
-    throw new Error("Expected detectWebpage foreground-window block was not found.");
+    throw new Error("Expected current detectWebpage browser lookup was not found; source layout has changed.");
   }
   source = source.replace(old, replacement);
 }
 
+// Make the avatar window click-through while it is in 2.5D overlay mode. This
+// keeps browser controls clickable underneath the visual avatar.
 if (!source.includes(clickThroughMarker)) {
-  const oldLayout = [
-    'ipcMain.on("magic-window-layout", (event, overlayMode) => {',
-    "  assertTrustedRenderer(event);",
-    "  const window = BrowserWindow.fromWebContents(event.sender);",
-    '  if (!window || typeof overlayMode !== "boolean") return;',
-    "",
-    "  if (overlayMode) {",
-  ].join("\n");
+  const old = `ipcMain.on("magic-window-layout", (event, overlayMode) => {\n  assertTrustedRenderer(event);\n  const window = BrowserWindow.fromWebContents(event.sender);\n  if (!window || typeof overlayMode !== "boolean") return;\n\n  if (overlayMode) {`;
 
-  const newLayout = [
-    'ipcMain.on("magic-window-layout", (event, overlayMode) => {',
-    "  assertTrustedRenderer(event);",
-    "  const window = BrowserWindow.fromWebContents(event.sender);",
-    '  if (!window || typeof overlayMode !== "boolean") return;',
-    "",
-    "  // [browser-2d-clickthrough-v1]",
-    "  // 2.5D is a visual overlay. Browser clicks must pass through to Chrome/Brave/Edge underneath.",
-    "  window.setIgnoreMouseEvents(overlayMode, { forward: true });",
-    '  window.setAlwaysOnTop(overlayMode, "screen-saver");',
-    "",
-    "  if (overlayMode) {",
-  ].join("\n");
+  const replacement = `ipcMain.on("magic-window-layout", (event, overlayMode) => {\n  assertTrustedRenderer(event);\n  const window = BrowserWindow.fromWebContents(event.sender);\n  if (!window || typeof overlayMode !== "boolean") return;\n\n  // [browser-2d-clickthrough-v2]\n  // 2.5D is a visual overlay. Let mouse events reach the browser underneath.\n  window.setIgnoreMouseEvents(overlayMode, { forward: true });\n  window.setAlwaysOnTop(overlayMode, "screen-saver");\n\n  if (overlayMode) {`;
 
-  if (!source.includes(oldLayout)) {
-    throw new Error("Expected magic-window-layout block was not found.");
+  if (!source.includes(old)) {
+    throw new Error("Expected current magic-window-layout block was not found; source layout has changed.");
   }
-  source = source.replace(oldLayout, newLayout);
+  source = source.replace(old, replacement);
 }
 
 fs.writeFileSync(mainPath, source, "utf8");
-console.log("[browser-2d-scaling] browser window targeting + click-through applied");
+console.log("[browser-2d-scaling] browser targeting + 2.5D click-through applied");
