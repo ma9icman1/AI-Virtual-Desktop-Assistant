@@ -365,6 +365,92 @@ foreach ($el in $elements) {
   }
 }
 
+async function clickWebField(params = {}) {
+  const processName = normalizeProcessName(params.process || "");
+  const requestedIndex = Number.isInteger(Number(params.index)) ? Math.max(0, Number(params.index)) : 0;
+  if (!processName) throw new Error("Web field click requires a browser process.");
+
+  const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$procName = $scriptArgs[0]
+$wantedIndex = [int]$scriptArgs[1]
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+$candidates = @()
+foreach ($el in $all) {
+  try {
+    $p = $el.Current.ProcessId
+    if ($p -le 0) { continue }
+    $pn = (Get-Process -Id $p -ErrorAction Stop).ProcessName.ToLowerInvariant()
+    if ($pn -ne $procName) { continue }
+    $ct = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', '')
+    if ($ct -ne 'Edit') { continue }
+    if ($el.Current.IsOffscreen -or -not $el.Current.IsEnabled) { continue }
+    $r = $el.Current.BoundingRectangle
+    if ($r.Width -lt 180 -or $r.Width -gt 900 -or $r.Height -lt 20 -or $r.Height -gt 100) { continue }
+    # Ignore browser chrome such as the address bar. Roblox form fields are
+    # page-level Edit controls below the browser toolbar.
+    if ($r.Y -lt 90) { continue }
+    $candidates += [pscustomobject]@{
+      name=[string]$el.Current.Name
+      automationId=[string]$el.Current.AutomationId
+      controlType=$ct
+      process=$pn
+      pid=$p
+      x=[int][math]::Round($r.X)
+      y=[int][math]::Round($r.Y)
+      width=[int][math]::Round($r.Width)
+      height=[int][math]::Round($r.Height)
+      element=$el
+    }
+  } catch {}
+}
+$candidates = @($candidates | Sort-Object y, x)
+if ($candidates.Count -le $wantedIndex) {
+  throw "No web field was found at index $wantedIndex. Found $($candidates.Count) eligible Edit controls."
+}
+$targetInfo = $candidates[$wantedIndex]
+$elements = $all
+$target = $null
+foreach ($el in $elements) {
+  try {
+    if ($el.Current.ProcessId -ne $targetInfo.pid) { continue }
+    if ([string]$el.Current.ControlType.ProgrammaticName -ne 'ControlType.Edit') { continue }
+    $r = $el.Current.BoundingRectangle
+    if ([int][math]::Round($r.X) -ne $targetInfo.x -or [int][math]::Round($r.Y) -ne $targetInfo.y) { continue }
+    $target = $el
+    break
+  } catch {}
+}
+if (-not $target) { throw "The selected web field disappeared before it could be focused." }
+try {
+  $target.SetFocus()
+} catch {}
+try {
+  $vp = $target.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+  [void]$vp
+} catch {}
+[pscustomobject]@{
+  ok=$true
+  name=[string]$target.Current.Name
+  automationId=[string]$target.Current.AutomationId
+  controlType='Edit'
+  process=$targetInfo.process
+  pid=$targetInfo.pid
+  x=$targetInfo.x
+  y=$targetInfo.y
+  width=$targetInfo.width
+  height=$targetInfo.height
+} | ConvertTo-Json -Compress
+`;
+  const raw = await runPowerShell(script, [processName, String(requestedIndex)]);
+  let element;
+  try { element = JSON.parse(raw || "{}"); } catch { throw new Error("Could not parse the selected web field."); }
+  if (desktopPermission === "one_action") desktopPermission = "none";
+  return { ok: true, verified: true, method: "focus", element };
+}
+
 async function readUiElement(params = {}) {
   const matches = await findUiElement(params);
   if (!matches.length) throw new Error("No matching UI element was found.");
@@ -869,6 +955,9 @@ if (-not [MagicFocus]::SetForegroundWindow($proc.MainWindowHandle)) { throw "Win
   }
   if (action === "FIND_UI_ELEMENT") {
     return { ok: true, elements: await findUiElement(params) };
+  }
+  if (action === "CLICK_WEB_FIELD") {
+    return await clickWebField(params);
   }
   if (action === "READ_UI_ELEMENT") {
     return await readUiElement(params);
