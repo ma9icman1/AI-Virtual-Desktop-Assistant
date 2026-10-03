@@ -3,6 +3,7 @@ import queue
 import sys
 import time
 import threading
+from collections import deque
 
 import numpy as np
 import sounddevice as sd
@@ -109,12 +110,18 @@ def main():
                 callback=callback,
             ):
                 emit("RECORDING", "1", "1")
-                noise_floor = 0.002
+                noise_floor = 0.001
                 speech = []
+                audio_history = deque(maxlen=int(12_000 / FRAME_MS))
                 speaking = False
                 silence_frames = 0
-                start_threshold_floor = 0.0028
-                stop_threshold_floor = 0.0018
+                # Some Windows microphone drivers expose a very quiet but valid
+                # signal. Keep the VAD permissive and let Whisper's own VAD do
+                # the final filtering instead of dropping the user's words.
+                start_threshold_floor = 0.0009
+                stop_threshold_floor = 0.00055
+                start_multiplier = 1.45
+                stop_multiplier = 1.15
                 last_level_emit = 0.0
 
                 while not stop_recording.is_set():
@@ -135,10 +142,11 @@ def main():
                             break
 
                         rms = float(np.sqrt(np.mean(np.square(frame)) + 1e-12))
+                        audio_history.append(frame)
                         if not speaking:
-                            noise_floor = min(0.03, noise_floor * 0.98 + rms * 0.02)
-                        start_threshold = max(start_threshold_floor, noise_floor * 2.0)
-                        stop_threshold = max(stop_threshold_floor, noise_floor * 1.35)
+                            noise_floor = min(0.03, noise_floor * 0.985 + rms * 0.015)
+                        start_threshold = max(start_threshold_floor, noise_floor * start_multiplier)
+                        stop_threshold = max(stop_threshold_floor, noise_floor * stop_multiplier)
 
                         now = time.monotonic()
                         if now - last_level_emit >= 0.1:
@@ -164,8 +172,13 @@ def main():
                                 silence_frames = 0
                                 emit("SPEECH_END", "1", "1")
 
+                # Always flush the captured audio when the user clicks the mic
+                # off. This makes manual push-to-talk reliable even when the
+                # lightweight client-side VAD did not cross its threshold.
                 if speaking and speech:
                     transcribe(model, np.concatenate(speech))
+                elif audio_history:
+                    transcribe(model, np.concatenate(list(audio_history)))
                 emit("RECORDING", "0", "1")
                 emit("READY", MODEL_NAME, "1")
         except Exception as error:
