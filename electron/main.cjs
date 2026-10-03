@@ -351,7 +351,10 @@ foreach ($el in $elements) {
       x=[int][math]::Round($r.X); y=[int][math]::Round($r.Y);
       width=[int][math]::Round($r.Width); height=[int][math]::Round($r.Height)
     }
-    if ($matches.Count -ge 20) { break }
+    // Explicit name/automationId lookups are semantic requests. Do not stop
+    // after the first 20 unrelated controls, because browser credential popups
+    // can appear late in the UI Automation tree.
+    if ($matches.Count -ge 20 -and -not $aid -and -not $name) { break }
   } catch {}
 }
 @($matches) | ConvertTo-Json -Compress
