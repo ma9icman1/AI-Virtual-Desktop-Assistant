@@ -1883,6 +1883,7 @@ const PLANNER_ACTION_TYPES = new Set([
   "TYPE_INPUT",
   "KEY_PRESS",
   "WAIT",
+  "VISION_CLICK_TARGET",
 ]);
 const PLANNER_APPS = new Set([
   "browser", "brave", "edge", "chrome", "firefox", "opera", "vivaldi", "notepad", "calculator",
@@ -1963,6 +1964,12 @@ function validateAgentPlan(plan: any) {
         normalized.params.timeoutMs = Math.round(timeoutMs);
         normalized.params.intervalMs = Math.round(intervalMs);
       }
+    }
+    if (actionType === "VISION_CLICK_TARGET") {
+      const targetLabel = String(normalized.params.targetLabel || normalized.params.label || "").trim().slice(0, 200);
+      const targetIntent = String(normalized.params.targetIntent || "").trim().slice(0, 80);
+      if (!targetLabel) throw new Error("Vision click target is required.");
+      normalized.params = { targetLabel, targetIntent };
     }
     if (actionType === "SEARCH_WEB") {
       const query = String(normalized.params.query || normalized.params.text || "").trim();
@@ -2051,6 +2058,18 @@ app.post("/api/agent/plan", async (req, res) => {
       return res.status(413).json({ error: "Goal is too long" });
     }
 
+    // Reuse deterministic desktop-intent routing before asking the local model
+    // to plan. This prevents commands such as "open Roblox and login" from
+    // becoming a single invalid LAUNCH_APP name like "roblox and login".
+    // The same deterministic router is already used by the normal chat path.
+    const deterministicIntent = normalizeDesktopIntent(goal, { action: { type: "NONE" } });
+    const deterministicPlan = deterministicIntent?.action?.type === "MULTI_STEP_PLAN"
+      ? deterministicIntent.action.multiStepPlan
+      : null;
+    if (deterministicPlan?.steps?.length) {
+      return res.json(validateAgentPlan(deterministicPlan));
+    }
+
     const plannerPrompt = `You are the Task Planning Engine for Magic inside the Magic Windows Assistant.
 Deconstruct the user's high-level command into an ordered sequence of executable automation steps.
 User Goal: "${goal}"
@@ -2080,6 +2099,7 @@ Only use these executable step action types:
 - "TYPE_INPUT": { "text": string }
 - "KEY_PRESS": { "key": string }
 - "WAIT": { "ms": number }
+- "VISION_CLICK_TARGET": { "targetLabel": string, "targetIntent": "optional intent such as login" } (use for visually/semantically clicking a live webpage control)
 
 Never output shell commands, PowerShell, command prompt instructions, executable paths, file deletion/install commands, or any action type outside this list.
 Return no more than 12 steps.
