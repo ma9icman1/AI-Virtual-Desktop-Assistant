@@ -2,28 +2,67 @@ const fs = require('fs');
 const path = require('path');
 
 const file = path.resolve(__dirname, '..', 'src', 'App.tsx');
-let text = fs.readFileSync(file, 'utf8');
+let text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 
 const replacements = [
   [
-`      stopExecutionRef.current = false;\n      setAssistantState("executing");\n      setShowActivityPanel(true);\n\n      const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];`,
-`      stopExecutionRef.current = false;\n      setAssistantState("executing");\n      setShowActivityPanel(true);\n\n      // A multi-step voice command is one approved desktop operation. If the\n      // user chose "one action", temporarily scope that approval to the whole\n      // plan so step 1 cannot consume it before step 2 (vision/UI automation).\n      const planUsesOneActionPermission = permissionLevel === "one_action";\n      if (planUsesOneActionPermission) {\n        setDesktopPermission("one_session");\n      }\n\n      const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];`
+`      stopExecutionRef.current = false;
+      setAssistantState("executing");
+      setShowActivityPanel(true);
+
+      const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];`,
+`      stopExecutionRef.current = false;
+      setAssistantState("executing");
+      setShowActivityPanel(true);
+
+      // A multi-step voice command is one approved desktop operation. If the
+      // user chose "one action", temporarily scope that approval to the whole
+      // plan so step 1 cannot consume it before step 2 (vision/UI automation).
+      const planUsesOneActionPermission = permissionLevel === "one_action";
+      if (planUsesOneActionPermission) {
+        setDesktopPermission("one_session");
+      }
+
+      const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];`
   ],
   [
-`      if (!steps.length) {\n        setAssistantState("error");\n        setShowActivityPanel(false);\n        VoiceEngine.speak("The assistant created an empty desktop action plan.", () => setAssistantState("idle"));\n        return;\n      }`,
-`      if (!steps.length) {\n        if (planUsesOneActionPermission) setDesktopPermission("none");\n        setAssistantState("error");\n        setShowActivityPanel(false);\n        VoiceEngine.speak("The assistant created an empty desktop action plan.", () => setAssistantState("idle"));\n        return;\n      }`
+`      if (!steps.length) {
+        setAssistantState("error");
+        setShowActivityPanel(false);
+        VoiceEngine.speak("The assistant created an empty desktop action plan.", () => setAssistantState("idle"));
+        return;
+      }`,
+`      if (!steps.length) {
+        if (planUsesOneActionPermission) setDesktopPermission("none");
+        setAssistantState("error");
+        setShowActivityPanel(false);
+        VoiceEngine.speak("The assistant created an empty desktop action plan.", () => setAssistantState("idle"));
+        return;
+      }`
   ],
   [
-`          setAssistantState("error");\n          setShowActivityPanel(false);\n          VoiceEngine.speak(\`Desktop control stopped: \${reason}\`, () => setAssistantState("idle"));\n          return;`,
-`          if (planUsesOneActionPermission) setDesktopPermission("none");\n          setAssistantState("error");\n          setShowActivityPanel(false);\n          VoiceEngine.speak(\`Desktop control stopped: \${reason}\`, () => setAssistantState("idle"));\n          return;`
+`          setAssistantState("error");
+          setShowActivityPanel(false);
+          VoiceEngine.speak(\`Desktop control stopped: \${reason}\`, () => setAssistantState("idle"));
+          return;`,
+`          if (planUsesOneActionPermission) setDesktopPermission("none");
+          setAssistantState("error");
+          setShowActivityPanel(false);
+          VoiceEngine.speak(\`Desktop control stopped: \${reason}\`, () => setAssistantState("idle"));
+          return;`
   ],
   [
-`      setAssistantState("speaking");\n      const completionText = plan.spokenCompletion || "I have completed all steps in the plan.";`,
-`      if (planUsesOneActionPermission) setDesktopPermission("none");\n      setAssistantState("speaking");\n      const completionText = plan.spokenCompletion || "I have completed all steps in the plan.";`
+`      setAssistantState("speaking");
+      const completionText = plan.spokenCompletion || "I have completed all steps in the plan.";`,
+`      if (planUsesOneActionPermission) setDesktopPermission("none");
+      setAssistantState("speaking");
+      const completionText = plan.spokenCompletion || "I have completed all steps in the plan.";`
   ],
   [
-`    [executeDesktopAction]\n  );`,
-`    [executeDesktopAction, permissionLevel, setDesktopPermission]\n  );`
+`    [executeDesktopAction]
+  );`,
+`    [executeDesktopAction, permissionLevel, setDesktopPermission]
+  );`
   ]
 ];
 
