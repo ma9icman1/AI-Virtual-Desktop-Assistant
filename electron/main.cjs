@@ -463,7 +463,28 @@ foreach ($el in $all) {
 }
 
 if (-not $target) { throw "The selected web field disappeared before it could be focused." }
+
+# SetFocus alone is not enough for Chromium/Brave credential UI. A saved-password
+# suggestion is browser chrome and is normally opened by a real mouse click on the
+# page password box. Focus the field first, then physically click its center.
 try { $target.SetFocus() } catch {}
+
+$clickX = [int][math]::Round($targetInfo.x + ($targetInfo.width / 2))
+$clickY = [int][math]::Round($targetInfo.y + ($targetInfo.height / 2))
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MagicWebFieldInput {
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+}
+'@
+[MagicWebFieldInput]::SetCursorPos($clickX, $clickY) | Out-Null
+Start-Sleep -Milliseconds 80
+[MagicWebFieldInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+Start-Sleep -Milliseconds 80
+[MagicWebFieldInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+Start-Sleep -Milliseconds 150
 
 [pscustomobject]@{
   ok=$true
@@ -476,6 +497,9 @@ try { $target.SetFocus() } catch {}
   y=$targetInfo.y
   width=$targetInfo.width
   height=$targetInfo.height
+  clickX=$clickX
+  clickY=$clickY
+  clicked=$true
 } | ConvertTo-Json -Compress
 `;
   const raw = await runPowerShell(script, [processName, String(requestedIndex), requestedAutomationId, requestedName]);
