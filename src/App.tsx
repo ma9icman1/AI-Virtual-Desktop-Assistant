@@ -633,7 +633,7 @@ export default function App() {
               });
               if (suggestion?.found) {
                 await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
-                  name: "ma9icman1",
+                  name: "*ma9icman1*",
                   process: browserProcess,
                 });
                 await new Promise((resolve) => setTimeout(resolve, 300));
@@ -695,9 +695,9 @@ export default function App() {
 
             try {
               const savedAccount = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
-                name: "ma9icman1",
+                name: "*ma9icman1*",
                 process: browserProcess,
-                timeoutMs: 1800,
+                timeoutMs: 2500,
                 intervalMs: 150,
               });
               if (savedAccount?.found) {
