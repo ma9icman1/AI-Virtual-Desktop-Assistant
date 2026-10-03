@@ -475,13 +475,11 @@ export default function App() {
         // effect has a chance to resize the Electron window.
         console.log("[VISION CLICK TARGET] switching Magic AI to 2.5D before login detection");
         setAvatarMode("2d");
+        // experienceMode is the single source of truth for the overlay resize.
+        // Do not also call setOverlayMode here: doing both paths causes two
+        // BrowserWindow bounds/repaint cycles while Brave is opening login UI.
         setExperienceMode("model");
-        try {
-          (window as any).magicWindow?.setOverlayMode(true);
-        } catch (overlayError) {
-          console.warn("[VISION CLICK TARGET] direct 2.5D overlay request failed", overlayError);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        await new Promise((resolve) => setTimeout(resolve, 800));
 
         let activePage: any = null;
         let browserProcess = "";
