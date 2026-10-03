@@ -168,6 +168,7 @@ def main():
                             if silence_frames >= 15 or duration >= 10:
                                 transcribe(model, np.concatenate(speech))
                                 speech = []
+                                audio_history.clear()
                                 speaking = False
                                 silence_frames = 0
                                 emit("SPEECH_END", "1", "1")
