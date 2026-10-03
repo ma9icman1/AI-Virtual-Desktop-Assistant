@@ -646,9 +646,47 @@ export default function App() {
             });
             console.log("[ROBLOX LOGIN] focused password web field", passwordField);
 
-            // Clicking the password field gives the browser's credential
-            // manager a chance to finish autofilling the saved password.
-            await new Promise((resolve) => setTimeout(resolve, 700));
+            // Brave can show the saved-account popup again when the password
+            // field receives focus. Select the SAME saved account (ma9icman1)
+            // again so the browser fills the password for that exact login.
+            let passwordAccountSelected = false;
+            try {
+              const passwordSuggestion = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
+                name: "ma9icman1",
+                process: browserProcess,
+                timeoutMs: 3500,
+                intervalMs: 200,
+              });
+              if (passwordSuggestion?.found) {
+                await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+                  name: "ma9icman1",
+                  process: browserProcess,
+                });
+                passwordAccountSelected = true;
+                console.log("[ROBLOX LOGIN] selected saved account ma9icman1 for password field");
+              }
+            } catch (passwordAccountError) {
+              console.warn("[ROBLOX LOGIN] password-field saved-account suggestion unavailable", passwordAccountError);
+            }
+
+            if (!passwordAccountSelected) {
+              // If the popup is not exposed through UI Automation, use the
+              // browser's native first-suggestion keyboard selection.
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                await (window as any).magicDesktop.execute("KEY_PRESS", { key: "DOWN" });
+                await new Promise((resolve) => setTimeout(resolve, 150));
+                await (window as any).magicDesktop.execute("KEY_PRESS", { key: "ENTER" });
+                passwordAccountSelected = true;
+                console.log("[ROBLOX LOGIN] selected saved account for password field with keyboard");
+              } catch (passwordKeyboardError) {
+                console.warn("[ROBLOX LOGIN] password-field keyboard saved-account selection failed", passwordKeyboardError);
+              }
+            }
+
+            // Give Brave a moment to apply the stored password before clicking
+            // Log In. We never read, log, or type the password itself.
+            await new Promise((resolve) => setTimeout(resolve, 900));
 
             await clickSemantic(
               ["Log In", "Login", "LOG IN", "LOGIN"],
