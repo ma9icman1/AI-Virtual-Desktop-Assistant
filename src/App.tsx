@@ -321,6 +321,7 @@ export default function App() {
       READ_UI_ELEMENT: { action: "READ_UI_ELEMENT", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process } },
       SET_UI_VALUE: { action: "SET_UI_VALUE", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process, value: params.value ?? params.text ?? "" } },
       WAIT_FOR_UI_ELEMENT: { action: "WAIT_FOR_UI_ELEMENT", params: { name: params.name, automationId: params.automationId, controlType: params.controlType, process: params.process, timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
+      CLICK_WEB_FIELD: { action: "CLICK_WEB_FIELD", params: { process: params.process, index: params.index } },
       NAVIGATE_URL: { action: "NAVIGATE_URL", params: { url: params.url || params.parameter || "", browser: params.browser || params.browserName || "" } },
       SEARCH_WEB: { action: "SEARCH_WEB", params: { query: params.query || params.text || params.parameter || "" } },
       DETECT_WEBPAGE: { action: "DETECT_WEBPAGE", params: { timeoutMs: params.timeoutMs, intervalMs: params.intervalMs } },
