@@ -8,11 +8,10 @@ function patch(file, marker, replacement, label) {
   return true;
 }
 
-const serverMarker = '  const desktopVoiceShellMatch = message.match(/\\b(?:run\\s+(?:command|cmd|shell|terminal|powershell|script)|execute\\s+(?:command|shell)|terminal\\s+run)\\s+["\\\']?(.+?)["\\\']?\\s*$/i);';
-const serverPatch = `  // [direct-site-open]
-  // Route simple website-opening voice commands deterministically instead of
-  // letting the general model turn the site name into an application name.
-  const directSiteOpenMatch = request.match(/^\\s*(?:please\\s+)?(?:open|launch|go\\s+to|navigate\\s+to|visit)\\s+(roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x|wikipedia)(?:\\.com|\\.org)?(?:\\s+(?:and\\s+)?(?:log\\s*in|login|sign\\s*in|signin))?\\s*[.!?]*\\s*$/i);
+const serverMarker = String.raw`  const desktopVoiceShellMatch = message.match(/\b(?:run\s+(?:command|cmd|shell|terminal|powershell|script)|execute\s+(?:command|shell)|terminal\s+run)\s+["']?(.+?)["']?\s*$/i);`;
+const serverPatch = String.raw`  // [direct-site-open]
+  // Route simple website-opening voice commands deterministically.
+  const directSiteOpenMatch = request.match(/^\s*(?:please\s+)?(?:open|launch|go\s+to|navigate\s+to|visit)\s+(roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x|wikipedia)(?:\.com|\.org)?(?:\s+(?:and\s+)?(?:log\s*in|login|sign\s*in|signin))?\s*[.!?]*\s*$/i);
   if (directSiteOpenMatch) {
     const directSiteAliases: Record<string, string> = {
       roblox: "roblox.com", youtube: "youtube.com", amazon: "amazon.com", ebay: "ebay.com",
@@ -31,12 +30,11 @@ const serverPatch = `  // [direct-site-open]
 patch("server.ts", serverMarker, serverPatch, "server deterministic site routing");
 
 const electronMarker = '    // Browser requests delegate to Windows so the configured default browser is always used.\n';
-const electronPatch = `    // [direct-site-open]
-    // A generic browser launch must actually hand a URL to Windows. Do not
-    // spawn cmd.exe and assume that cmd spawning means the browser launched.
+const electronPatch = String.raw`    // [direct-site-open]
+    // Hand the URL directly to Windows and verify the browser handoff.
     if (browserAliases.has(requested)) {
       const requestedUrl = String(params.url || params.site || "").trim();
-      const url = /^https?:\\/\\//i.test(requestedUrl) ? requestedUrl : "https://www.google.com/";
+      const url = /^https?:\/\//i.test(requestedUrl) ? requestedUrl : "https://www.google.com/";
       const errorMessage = await shell.openExternal(url);
       if (errorMessage) throw new Error(\`Windows could not open the default browser: \${errorMessage}\`);
       const expectedHost = normalizedHostname(url);
@@ -50,4 +48,3 @@ const electronPatch = `    // [direct-site-open]
 patch("electron/main.cjs", electronMarker, electronPatch, "electron default browser launch");
 
 console.log("[direct-site-open] direct website launch routing is installed.");
-`;
