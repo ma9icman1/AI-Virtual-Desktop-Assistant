@@ -24,6 +24,8 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 .ma9ic-online.ready i,.ma9ic-rail-row em.ready i,.ma9ic-rail-title b i { background:#00e6a5; box-shadow:0 0 11px #00e6a5; }
 .ma9ic-window-btn { width:28px; height:30px; border:0; background:none; color:#91a8cc; font-size:20px; cursor:pointer; display:grid; place-items:center; }
 .ma9ic-window-btn.close { color:#b8c6e0; }
+.ma9ic-window-btn svg { width:16px; height:16px; stroke-width:2; }
+.ma9ic-window-btn.close svg { width:17px; height:17px; }
 .ma9ic-window-btn:hover { color:#2fd5ff; }
 .ma9ic-body { flex:1; min-height:0; display:flex; }
 .ma9ic-sidebar { width:265px; flex:none; padding:24px 13px 14px; background:#030a15; border:1px solid #173458; border-top:0; border-radius:0 0 0 16px; display:flex; flex-direction:column; }
