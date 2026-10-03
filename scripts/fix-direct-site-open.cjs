@@ -1,31 +1,63 @@
 const fs = require("fs");
+const { execFileSync } = require("child_process");
 
-const file = "server.ts";
+const file = "electron/main.cjs";
 const text = fs.readFileSync(file, "utf8");
-const marker = "// [direct-site-open]";
+const marker = "// [direct-site-open-v2]";
 
 if (text.includes(marker)) {
   console.log("[direct-site-open] already installed; skipped");
   process.exit(0);
 }
 
-const anchor = "  const request = message.toLowerCase();\n";
+// This anchor is present in the actual executeDesktopAction implementation.
+// NAVIGATE_URL must be handled before LAUNCH_APP so a website request cannot be
+// mistaken for a Windows application name.
+const anchor = '  if (action === "LAUNCH_APP") {\n';
 if (!text.includes(anchor)) {
-  throw new Error("[direct-site-open] required normalizeDesktopIntent anchor is missing");
+  throw new Error("[direct-site-open] executeDesktopAction LAUNCH_APP anchor is missing");
 }
 
-const patch = `  ${marker}\n  // Deterministic handling for common direct website-opening commands.\n  // This runs before the local model can reinterpret the request as a web search.\n  const directSiteOpenMatch = request.match(/^\\s*(?:please\\s+)?(?:open|launch|go\\s+to|navigate\\s+to|visit)\\s+(roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x|wikipedia)(?:\\.com|\\.org)?(?:\\s+(?:and\\s+)?(?:log\\s*in|login|sign\\s*in|signin))?\\s*[.!?]*\\s*$/i);\n  if (directSiteOpenMatch) {\n    const directSiteAliases: Record<string, string> = {\n      roblox: "roblox.com",\n      youtube: "youtube.com",\n      amazon: "amazon.com",\n      ebay: "ebay.com",\n      reddit: "reddit.com",\n      discord: "discord.com",\n      facebook: "facebook.com",\n      instagram: "instagram.com",\n      tiktok: "tiktok.com",\n      twitter: "twitter.com",\n      x: "x.com",\n      wikipedia: "wikipedia.org",\n    };\n    const host = directSiteAliases[String(directSiteOpenMatch[1]).toLowerCase()];\n    const url = \`https://\${host}/\`;\n    return {\n      ...parsed,\n      spokenResponse: \`Opening \${host}.\`,\n      action: {\n        type: "MULTI_STEP_PLAN",\n        description: \`Open \${host}\`,\n        multiStepPlan: {\n          planTitle: \`Open \${host}\`,\n          spokenIntro: \`I will open \${host} in your default browser.\`,\n          steps: [\n            {\n              stepNumber: 1,\n              description: \`Open \${url}\`,\n              actionType: "NAVIGATE_URL",\n              params: { url },\n              status: "pending",\n              estimatedDurationMs: 1200,\n            },\n          ],\n          spokenCompletion: \`\${host} is open.\`,\n          currentStepIndex: 0,\n          status: "idle",\n        },\n      },\n    };\n  }\n\n`;
+const patch = `  ${marker}
+  if (action === "NAVIGATE_URL") {
+    const rawUrl = String(params.url || "").trim();
+    if (!rawUrl) throw new Error("NAVIGATE_URL requires a URL.");
+    let url;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      throw new Error("Invalid URL: " + rawUrl);
+    }
+    if (!["http:", "https:"].includes(url.protocol)) {
+      throw new Error("Only HTTP and HTTPS URLs are allowed.");
+    }
 
-fs.writeFileSync(file, text.replace(anchor, anchor + patch));
-console.log("[direct-site-open] deterministic website routing installed");
+    const errorMessage = await shell.openExternal(url.toString());
+    if (errorMessage) {
+      throw new Error("Windows could not open the default browser: " + errorMessage);
+    }
 
-// Fail the build immediately if the resulting server source is malformed.
-const { execFileSync } = require("child_process");
+    // Give Windows a moment to hand the URL to the configured browser. Do not
+    // block the command waiting for UI Automation; browser startup can vary.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return {
+      ok: true,
+      verified: true,
+      launched: true,
+      process: "default-browser",
+      url: url.toString(),
+    };
+  }
+`;
+
+const updated = text.replace(anchor, patch + anchor);
+fs.writeFileSync(file, updated);
+console.log("[direct-site-open] NAVIGATE_URL execution installed");
+
+// Validate the exact generated JavaScript before allowing the build to continue.
 try {
-  execFileSync("npx", ["tsc", "--noEmit", "--pretty", "false", "--incremental", "false"], {
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
+  execFileSync(process.execPath, ["--check", file], { stdio: "inherit" });
 } catch {
-  throw new Error("[direct-site-open] TypeScript validation failed after patching server.ts");
+  throw new Error("[direct-site-open] electron/main.cjs syntax validation failed after patching");
 }
