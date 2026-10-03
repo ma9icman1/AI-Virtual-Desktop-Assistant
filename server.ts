@@ -11,6 +11,7 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 import { KokoroTTS } from "kokoro-js";
 
 const app = express();
+let magicHttpServer: any = null;
 app.disable("x-powered-by");
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -2192,11 +2193,20 @@ async function start() {
     });
   }
 
-  app.listen(PORT, "127.0.0.1", () => {
+  magicHttpServer = app.listen(PORT, "127.0.0.1", () => {
     console.log(`Magic Windows Assistant running on http://0.0.0.0:${PORT}`);
     console.log(`[AI Engine] Provider: ${activeProvider} | Ollama Host: ${OLLAMA_HOST} | Default Chat Model: ${activeOllamaModel}`);
     console.log(`[TTS Engine] Option 1: Microsoft Edge Neural TTS | Option 3: Kokoro 82M Offline TTS`);
     getKokoroTTS().catch(() => {});
+  });
+}
+
+export function shutdownServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!magicHttpServer) return resolve();
+    const serverToClose = magicHttpServer;
+    magicHttpServer = null;
+    try { serverToClose.close(() => resolve()); } catch { resolve(); }
   });
 }
 
