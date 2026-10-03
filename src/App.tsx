@@ -1450,7 +1450,7 @@ export default function App() {
   // Toggle Voice Listening
   const handleToggleListening = useCallback(() => {
     if (isListening) {
-      VoiceEngine.stopListening({ allowFinalTranscript: true });
+      VoiceEngine.stopListening();
       setIsListening(false);
       setAssistantState("idle");
       setAudioLevel(0);
