@@ -670,15 +670,36 @@ export default function App() {
             }
 
             if (!passwordAccountSelected) {
-              // If the popup is not exposed through UI Automation, use the
-              // browser's native first-suggestion keyboard selection.
+              // Chromium/Brave credential suggestions are sometimes painted as
+              // browser UI that Windows UI Automation does not expose by name.
+              // In that case, use the same visual target-selection approach as
+              // the rest of Magic AI: the dropdown is visible on screen and
+              // the exact saved account text is "ma9icman1".
               try {
-                await new Promise((resolve) => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 700));
+                const visualSavedAccount = await executeDesktopAction("VISION_CLICK_TARGET", {
+                  targetLabel: "ma9icman1",
+                  targetIntent: "saved account",
+                });
+                if (visualSavedAccount?.ok !== false) {
+                  passwordAccountSelected = true;
+                  console.log("[ROBLOX LOGIN] selected saved account ma9icman1 for password field with vision", visualSavedAccount);
+                }
+              } catch (passwordVisionError) {
+                console.warn("[ROBLOX LOGIN] password-field vision saved-account selection unavailable", passwordVisionError);
+              }
+            }
+
+            if (!passwordAccountSelected) {
+              // Last fallback: use the browser's native first-suggestion keyboard
+              // selection if the credential popup is not exposed to UIA or vision.
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 300));
                 await (window as any).magicDesktop.execute("KEY_PRESS", { key: "DOWN" });
                 await new Promise((resolve) => setTimeout(resolve, 150));
                 await (window as any).magicDesktop.execute("KEY_PRESS", { key: "ENTER" });
                 passwordAccountSelected = true;
-                console.log("[ROBLOX LOGIN] selected saved account for password field with keyboard");
+                console.log("[ROBLOX LOGIN] selected saved account for password field with keyboard fallback");
               } catch (passwordKeyboardError) {
                 console.warn("[ROBLOX LOGIN] password-field keyboard saved-account selection failed", passwordKeyboardError);
               }
@@ -686,8 +707,10 @@ export default function App() {
 
             // Give Brave a moment to apply the stored password before clicking
             // Log In. We never read, log, or type the password itself.
-            await new Promise((resolve) => setTimeout(resolve, 900));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
+            // The saved-account popup should now be closed. Click the actual
+            // Roblox Log In control underneath it using semantic UI Automation.
             await clickSemantic(
               ["Log In", "Login", "LOG IN", "LOGIN"],
               "login"
