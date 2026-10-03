@@ -534,10 +534,15 @@ export default function App() {
               throw lastError || new Error(`Could not find Roblox ${label} control.`);
             };
 
-            await clickSemantic(
-              ["Username", "Username/Email", "Username or Email", "Email"],
-              "username/email"
-            );
+            // Chromium/Brave often exposes Roblox's HTML inputs as unnamed
+            // UIA Edit controls rather than their visible labels. Target the
+            // first page-level Edit control instead of relying on a label that
+            // UI Automation may not expose.
+            const usernameField = await (window as any).magicDesktop.execute("CLICK_WEB_FIELD", {
+              process: browserProcess,
+              index: 0,
+            });
+            console.log("[ROBLOX LOGIN] focused username/email web field", usernameField);
 
             // Let Brave display its saved-account suggestion, then select
             // the saved account. The password itself is never read or logged.
@@ -565,10 +570,11 @@ export default function App() {
               console.warn("[ROBLOX LOGIN] ma9icman1 suggestion was not exposed by UI Automation");
             }
 
-            await clickSemantic(
-              ["Password", "Password field", "Enter your password"],
-              "password"
-            );
+            const passwordField = await (window as any).magicDesktop.execute("CLICK_WEB_FIELD", {
+              process: browserProcess,
+              index: 1,
+            });
+            console.log("[ROBLOX LOGIN] focused password web field", passwordField);
 
             // Clicking the password field gives the browser's credential
             // manager a chance to finish autofilling the saved password.
