@@ -492,9 +492,97 @@ export default function App() {
 
         if (activeHost === "roblox.com") {
           console.warn("[VISION CLICK TARGET] Roblox Sign In UIA unavailable; using canonical login route.");
-          return await (window as any).magicDesktop.execute("NAVIGATE_URL", {
+          const loginResult = await (window as any).magicDesktop.execute("NAVIGATE_URL", {
             url: "https://www.roblox.com/login",
           });
+
+          // The login page is now handled semantically. Do not ask vision to
+          // estimate coordinates for credential controls: browser UI
+          // automation is more reliable and avoids exposing the password to
+          // the assistant. The browser's own saved-credential UI supplies the
+          // password after the user selects the saved account.
+          try {
+            const page = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
+              timeoutMs: 6000,
+              intervalMs: 250,
+            });
+            const browserProcess = String(page?.browser || page?.process || "brave")
+              .trim()
+              .toLowerCase()
+              .replace(/\.exe$/i, "");
+
+            const clickSemantic = async (names: string[], label: string) => {
+              let lastError: unknown = null;
+              for (const name of names) {
+                try {
+                  const result = await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+                    name,
+                    process: browserProcess,
+                  });
+                  console.log("[ROBLOX LOGIN] clicked semantic control", { label, name, result });
+                  return result;
+                } catch (error) {
+                  lastError = error;
+                }
+              }
+              throw lastError || new Error(`Could not find Roblox ${label} control.`);
+            };
+
+            await clickSemantic(
+              ["Username", "Username/Email", "Username or Email", "Email"],
+              "username/email"
+            );
+
+            // Give Brave time to display its saved-account suggestion, then
+            // select the user's saved Roblox account. We never read a
+            // password from the browser or log credential contents.
+            let accountSelected = false;
+            for (const accountName of ["ma9icman1"]) {
+              try {
+                const suggestion = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
+                  name: accountName,
+                  process: browserProcess,
+                  timeoutMs: 3500,
+                  intervalMs: 200,
+                });
+                if (suggestion?.found) {
+                  await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+                    name: accountName,
+                    process: browserProcess,
+                  });
+                  console.log("[ROBLOX LOGIN] selected saved account", { accountName });
+                  accountSelected = true;
+                  break;
+                }
+              } catch (error) {
+                console.warn("[ROBLOX LOGIN] saved-account suggestion unavailable", error);
+              }
+            }
+
+            if (!accountSelected) {
+              console.warn("[ROBLOX LOGIN] saved account suggestion was not exposed by UI Automation.");
+            }
+
+            await clickSemantic(
+              ["Password", "Password field", "Enter your password"],
+              "password"
+            );
+
+            // Clicking the password field gives the browser's credential
+            // manager a chance to finish autofilling the saved password.
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            await clickSemantic(
+              ["Log In", "Login", "LOG IN", "LOGIN"],
+              "login"
+            );
+
+            console.log("[ROBLOX LOGIN] credential flow completed");
+            return { ok: true, verified: true, loginPage: true, accountSelected };
+          } catch (loginError) {
+            console.warn("[ROBLOX LOGIN] semantic credential flow failed", loginError);
+            return loginResult;
+          }
         }
       }
 
