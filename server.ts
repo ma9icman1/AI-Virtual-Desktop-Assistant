@@ -1534,7 +1534,7 @@ Possible action types:
 - "OPEN_FILE": { "path": string }
 - "REMEMBER": { "key": string, "value": string, "category": string }
 - "FORGET": { "key": string }
-- "MULTI_STEP_PLAN": { "planTitle": string, "spokenIntro": string, "steps": Array<{ "stepNumber": number, "description": string, "actionType": "LAUNCH_APP" | "MOVE_MOUSE" | "CLICK_BUTTON" | "DOUBLE_CLICK" | "RIGHT_CLICK" | "DRAG" | "SCROLL" | "TYPE_INPUT" | "KEY_PRESS" | "WAIT" | "EXECUTE_SHELL" | "FETCH_WEB_CONTENT" | "VERIFY_STATE", "params": { "app"?: string, "command"?: string, "url"?: string, "query"?: string, "x"?: number, "y"?: number, "endX"?: number, "endY"?: number, "coordinateSpace"?: "vision", "text"?: string, "key"?: string, "ms"?: number } }>, "spokenCompletion": string }
+- "MULTI_STEP_PLAN": { "planTitle": string, "spokenIntro": string, "steps": Array<{ "stepNumber": number, "description": string, "actionType": "LAUNCH_APP" | "MOVE_MOUSE" | "CLICK_BUTTON" | "DOUBLE_CLICK" | "RIGHT_CLICK" | "DRAG" | "SCROLL" | "TYPE_INPUT" | "KEY_PRESS" | "WAIT" | "EXECUTE_SHELL" | "FETCH_WEB_CONTENT" | "VERIFY_STATE" | "SCREENSHOT_REGION" | "ZOOM_SCREEN", "params": { "app"?: string, "command"?: string, "url"?: string, "query"?: string, "x"?: number, "y"?: number, "endX"?: number, "endY"?: number, "coordinateSpace"?: "vision", "text"?: string, "key"?: string, "ms"?: number } }>, "spokenCompletion": string }
 - "NONE": null
 
 Return ONLY valid JSON matching this structure:

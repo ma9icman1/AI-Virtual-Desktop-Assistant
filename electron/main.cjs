@@ -255,6 +255,7 @@ async function startWhisperProcess(window) {
 /* desktop execution policy hardening v1 */
 function runPowerShell(script, args = []) {
   console.log(`[DEBUG PS] args=${JSON.stringify(args.map((value) => String(value ?? "")))}`);
+  const startedAt = Date.now();
   return new Promise((resolve, reject) => {
     const scriptArgs = JSON.stringify(args.map((value) => String(value ?? "")));
     const safeScript = "$scriptArgs = ConvertFrom-Json $env:MAGIC_RUN_ARGS;\n" + script;
@@ -273,6 +274,7 @@ function runPowerShell(script, args = []) {
           reject(new Error(stderr.trim() || error.message));
         } else {
           console.log(`[DEBUG PS] OK stdout=${JSON.stringify(stdout)} stderr=${JSON.stringify(stderr)}`);
+          if (process.env.MAGIC_PERF === "1") console.log(`[PERF] PowerShell ${Date.now() - startedAt}ms args=${args.length}`);
           resolve(stdout.trim());
         }
       }
@@ -290,6 +292,7 @@ function resolveAutomationProcessName(value) {
   return aliases[requested] || requested;
 }
 
+const magicActiveWindowCache = { value: null, expiresAt: 0 };
 async function getActiveWindowInfo() {
   const script = `
 Add-Type @'
@@ -311,8 +314,10 @@ $name = ""
 if ($processId -gt 0) { try { $name = (Get-Process -Id $processId -ErrorAction Stop).ProcessName } catch {} }
 [pscustomobject]@{ hwnd=[int64]$hwnd; title=$sb.ToString(); process=$name; pid=$processId } | ConvertTo-Json -Compress
 `;
+  const now = Date.now();
+  if (magicActiveWindowCache.value && magicActiveWindowCache.expiresAt > now) return magicActiveWindowCache.value;
   const raw = await runPowerShell(script);
-  try { return JSON.parse(raw || "{}"); } catch { return { title: "", process: "", pid: 0 }; }
+  try { const value = JSON.parse(raw || "{}"); magicActiveWindowCache.value = value; magicActiveWindowCache.expiresAt = Date.now() + 150; return value; } catch { return { title: "", process: "", pid: 0 }; }
 }
 
 async function findUiElement(params = {}) {
@@ -392,7 +397,7 @@ foreach ($el in $all) {
   try {
     $p = $el.Current.ProcessId
     if ($p -le 0) { continue }
-    $pn = (Get-Process -Id $p -ErrorAction Stop).ProcessName.ToLowerInvariant()
+    $pn = if ($processCache.ContainsKey($p)) { $processCache[$p] } else { try { $v = (Get-Process -Id $p -ErrorAction Stop).ProcessName.ToLowerInvariant() } catch { $v = '' }; $processCache[$p] = $v; $v }
     if ($pn -ne $procName) { continue }
     $ct = [string]($el.Current.ControlType.ProgrammaticName -replace '^ControlType\\.', '')
     if ($ct -ne 'Edit') { continue }
@@ -873,7 +878,79 @@ function normalizedHostname(value) {
   }
 }
 
+
+async function captureDesktopRegion(params = {}) {
+  const display = screen.getPrimaryDisplay();
+  const visionSize = getVisionCanvasSize(display, AI_SCREEN_WIDTH);
+  const sources = await desktopCapturer.getSources({
+    types: ["screen"],
+    thumbnailSize: { width: display.size.width, height: display.size.height },
+    fetchWindowIcons: false,
+  });
+  const source = sources.find((candidate) => candidate.display_id === String(display.id)) || sources[0];
+  if (!source || source.thumbnail.isEmpty()) throw new Error("Windows did not return a desktop screenshot.");
+  const full = source.thumbnail.resize({ width: visionSize.width, height: visionSize.height, quality: "good" });
+  const requested = params.region || params;
+  const x = Math.max(0, Math.round(Number(requested.x) || 0));
+  const y = Math.max(0, Math.round(Number(requested.y) || 0));
+  const width = Math.max(1, Math.round(Number(requested.width) || visionSize.width));
+  const height = Math.max(1, Math.round(Number(requested.height) || visionSize.height));
+  const right = Math.min(visionSize.width, x + width);
+  const bottom = Math.min(visionSize.height, y + height);
+  if (right <= x || bottom <= y) throw new Error("The requested screenshot region is outside the desktop.");
+  const cropped = full.crop({ x, y, width: right - x, height: bottom - y });
+  const fullMap = createCoordinateMap(display, screen, visionSize.width, visionSize.height);
+  const cropWidth = right - x;
+  const cropHeight = bottom - y;
+  const coordMap = {
+    version: 1,
+    coordinateSpace: "vision",
+    captureX: Math.round(fullMap.captureX + (x / visionSize.width) * fullMap.captureWidth),
+    captureY: Math.round(fullMap.captureY + (y / visionSize.height) * fullMap.captureHeight),
+    captureWidth: Math.max(1, Math.round((cropWidth / visionSize.width) * fullMap.captureWidth)),
+    captureHeight: Math.max(1, Math.round((cropHeight / visionSize.height) * fullMap.captureHeight)),
+    imageWidth: cropWidth,
+    imageHeight: cropHeight,
+  };
+  return {
+    image: "data:image/jpeg;base64," + cropped.toJPEG(70).toString("base64"),
+    visionWidth: cropWidth,
+    visionHeight: cropHeight,
+    sourceWidth: display.size.width,
+    sourceHeight: display.size.height,
+    sourceScaleFactor: Number(display.scaleFactor) || 1,
+    coordinateSpace: "vision",
+    coordMap,
+    coordMapString: formatCoordinateMap(coordMap),
+    region: { x, y, width: cropWidth, height: cropHeight },
+  };
+}
+
 async function executeDesktopAction(action, params = {}) {
+  // [direct-site-open-v3]
+  // Open website URLs directly through Electron/Windows instead of treating
+  // them as application names or sending them to web search.
+  if (action === "NAVIGATE_URL") {
+    const rawUrl = String(params.url || "").trim();
+    if (!rawUrl) throw new Error("NAVIGATE_URL requires a URL.");
+    let url;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      throw new Error("Invalid URL: " + rawUrl);
+    }
+    if (!["http:", "https:"].includes(url.protocol)) {
+      throw new Error("Only HTTP and HTTPS URLs are allowed.");
+    }
+    const errorMessage = await shell.openExternal(url.toString());
+    if (errorMessage) {
+      throw new Error("Windows could not open the default browser: " + errorMessage);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, launched: true, process: "default-browser", url: url.toString() };
+  }
+
   console.log(`[DEBUG ACTION] action=${JSON.stringify(action)} params=${JSON.stringify(params)}`);
   if (desktopKilled || !["one_action", "one_session", "always"].includes(desktopPermission)) {
     throw new Error("Desktop control is not permitted.");
@@ -1223,6 +1300,10 @@ try {
     if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, process: requested, action };
   }
+  if (action === "CAPTURE_REGION" || action === "SCREENSHOT_REGION" || action === "ZOOM") {
+    return await captureDesktopRegion(params);
+  }
+
   const supportedInputActions = new Set([
     "MOVE_MOUSE",
     "CLICK",
@@ -1336,6 +1417,7 @@ public static class MagicPasteInput {
     [MagicPasteInput]::keybd_event([MagicPasteInput]::VK_CONTROL, 0, [MagicPasteInput]::KEYEVENTF_KEYUP, [UIntPtr]::Zero)
     Write-Host "[TYPE_TEXT] Complete"
   }
+
 
 
 

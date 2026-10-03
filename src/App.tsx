@@ -335,7 +335,36 @@ export default function App() {
       FETCH_WEB_CONTENT: { action: "FETCH_WEB_CONTENT", params: { url: params.url || "", query: params.query || params.parameter || "" } },
       VERIFY_STATE: { action: "VERIFY_STATE", params: { app: params.app || params.process || params.parameter || "" } },
       WAIT: { action: "WAIT", params: { ms: params.ms || params.estimatedDurationMs || 500 } },
+      SCREENSHOT_REGION: { action: "CAPTURE_REGION", params: { region: params.region || { x: params.x, y: params.y, width: params.width, height: params.height } } },
+      ZOOM_SCREEN: { action: "CAPTURE_REGION", params: { region: params.region || { x: params.x, y: params.y, width: params.width, height: params.height } } },
     };
+    if (normalizedType === "SCREENSHOT_REGION" || normalizedType === "ZOOM_SCREEN") {
+      const regionResult = await (window as any).magicDesktop.execute("CAPTURE_REGION", {
+        region: params.region || { x: params.x, y: params.y, width: params.width, height: params.height },
+      });
+      if (!regionResult?.image) throw new Error("Desktop region capture returned no image.");
+      const response = await fetch("/api/vision/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: regionResult.image,
+          sourceWidth: regionResult.sourceWidth,
+          sourceHeight: regionResult.sourceHeight,
+          visionWidth: regionResult.visionWidth,
+          visionHeight: regionResult.visionHeight,
+          coordinateSpace: "vision",
+          coordMap: regionResult.coordMap,
+          coordMapString: regionResult.coordMapString,
+          prompt: params.prompt || "Analyze this zoomed desktop region in detail. Prioritize readable text, buttons, inputs, menus, tabs, and other actionable controls. Return exact pixel coordinates for the cropped screenshot.",
+        }),
+      });
+      if (!response.ok) throw new Error("Vision analysis failed for the zoomed desktop region.");
+      const vision = await response.json();
+      setActiveVision(vision);
+      setVisionThumbnail(regionResult.image);
+      return { ok: true, ...regionResult, vision };
+    }
+
     if (normalizedType === "VISION_CLICK_TARGET") {
       const frame = await VisionService.captureScreenFrame();
       const imageData = frame.image;
