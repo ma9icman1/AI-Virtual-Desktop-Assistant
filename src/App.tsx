@@ -469,6 +469,20 @@ export default function App() {
       // coordinate. UI Automation invokes the actual accessible webpage
       // control without depending on the model's pixel estimate.
       if (/sign\s*in|log\s*in|login/i.test(targetIntent)) {
+        // Login controls must be inspected with Magic AI already out of the
+        // browser's way. Do this before DETECT_WEBPAGE / semantic clicking,
+        // because those operations can happen before React's experience-mode
+        // effect has a chance to resize the Electron window.
+        console.log("[VISION CLICK TARGET] switching Magic AI to 2.5D before login detection");
+        setAvatarMode("2d");
+        setExperienceMode("model");
+        try {
+          (window as any).magicWindow?.setOverlayMode(true);
+        } catch (overlayError) {
+          console.warn("[VISION CLICK TARGET] direct 2.5D overlay request failed", overlayError);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 350));
+
         let activePage: any = null;
         let browserProcess = "";
 
