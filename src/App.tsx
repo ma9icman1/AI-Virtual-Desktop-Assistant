@@ -567,7 +567,21 @@ export default function App() {
             }
 
             if (!accountSelected) {
-              console.warn("[ROBLOX LOGIN] ma9icman1 suggestion was not exposed by UI Automation");
+              // Chromium's credential suggestion popup is sometimes rendered
+              // outside the webpage UIA tree. If the saved account is not
+              // exposed by UI Automation, use the browser's native keyboard
+              // selection without reading or typing the password.
+              console.warn("[ROBLOX LOGIN] ma9icman1 suggestion was not exposed by UI Automation; trying native keyboard selection");
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 700));
+                await (window as any).magicDesktop.execute("KEY_PRESS", { key: "DOWN" });
+                await new Promise((resolve) => setTimeout(resolve, 150));
+                await (window as any).magicDesktop.execute("KEY_PRESS", { key: "ENTER" });
+                console.log("[ROBLOX LOGIN] selected first saved-account suggestion with keyboard");
+                accountSelected = true;
+              } catch (keyboardError) {
+                console.warn("[ROBLOX LOGIN] native saved-account keyboard selection failed", keyboardError);
+              }
             }
 
             const passwordField = await (window as any).magicDesktop.execute("CLICK_WEB_FIELD", {
