@@ -17,35 +17,34 @@ const browserMarker = "// [browser-2d-scaling-v3]";
 const clickThroughMarker = "// [browser-2d-clickthrough-v3]";
 let next = source;
 
-// This script is intentionally idempotent. If the current version is already
-// patched, it performs no write at all. The target discovery below is scoped
-// to detectWebpage so earlier computer-agent/runtime edits do not make this
-// patch depend on one exact copy of the surrounding source.
+// This script is intentionally idempotent. The build pipeline runs several
+// source-repair scripts before this one, so do not require one exact copy of
+// the surrounding detectWebpage implementation. Locate the small, stable
+// active-window/maximize span and replace that span atomically.
 if (!next.includes(browserMarker)) {
   const detectStart = next.indexOf("async function detectWebpage(");
   if (detectStart < 0) {
     throw new Error("[browser-2d-scaling] detectWebpage() was not found. Refusing to modify files.");
   }
 
-  const lookupStart = next.indexOf("getActiveWindowInfo()", detectStart);
-  const lookupEnd = lookupStart >= 0
-    ? next.indexOf("await maximizeWindow(info.hwnd);", lookupStart)
-    : -1;
+  const lookupMatch = /(?:const|let|var)\s+info\s*=\s*await\s+getActiveWindowInfo\(\);/.exec(next.slice(detectStart));
+  const lookupStart = lookupMatch ? detectStart + lookupMatch.index : -1;
+  const maximizeToken = "await maximizeWindow(info.hwnd);";
+  const lookupEnd = lookupStart >= 0 ? next.indexOf(maximizeToken, lookupStart) : -1;
+  const nextFunction = next.indexOf("async function ", lookupStart + 1);
 
-  if (lookupStart < 0 || lookupEnd < 0 || lookupEnd > next.indexOf("async function ", lookupStart + 1)) {
+  if (lookupStart < 0 || lookupEnd < 0 || (nextFunction >= 0 && lookupEnd > nextFunction)) {
     throw new Error(
-      "[browser-2d-scaling] Could not safely locate the detectWebpage browser lookup. Refusing to modify files."
+      "[browser-2d-scaling] Could not safely locate the detectWebpage active-window lookup. Refusing to modify files."
     );
   }
 
   const lineStart = next.lastIndexOf("\n", lookupStart) + 1;
-  const originalBlock = next.slice(lineStart, lookupEnd + "await maximizeWindow(info.hwnd);".length);
+  const originalBlock = next.slice(lineStart, lookupEnd + maximizeToken.length);
 
-  if (!/getActiveWindowInfo\(\)/.test(originalBlock) ||
-      !/browserProcesses\.has\(process\)/.test(originalBlock) ||
-      !/maximizeWindow\(info\.hwnd\)/.test(originalBlock)) {
+  if (!/getActiveWindowInfo\(\)/.test(originalBlock) || !/maximizeWindow\(info\.hwnd\)/.test(originalBlock)) {
     throw new Error(
-      "[browser-2d-scaling] Current detectWebpage browser lookup is structurally different. Refusing to modify files."
+      "[browser-2d-scaling] Current detectWebpage active-window block is structurally different. Refusing to modify files."
     );
   }
 
@@ -77,7 +76,7 @@ if (!next.includes(browserMarker)) {
     if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
       await maximizeWindow(info.hwnd);`;
 
-  next = next.slice(0, lineStart) + replacement + next.slice(lookupEnd + "await maximizeWindow(info.hwnd);".length);
+  next = next.slice(0, lineStart) + replacement + next.slice(lookupEnd + maximizeToken.length);
 }
 
 if (!next.includes(clickThroughMarker)) {
