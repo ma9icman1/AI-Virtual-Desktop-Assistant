@@ -498,12 +498,6 @@ export class VoiceEngine {
 
   public async startListening() {
     if (this.isListening) return;
-    this.allowFinalNativeTranscript = false;
-    if (this.allowFinalNativeTranscriptTimer !== null) {
-      window.clearTimeout(this.allowFinalNativeTranscriptTimer);
-      this.allowFinalNativeTranscriptTimer = null;
-    }
-    this.suppressNativeTranscripts = false;
     this.isListening = true;
     this.nativeFallbackAttempted = false;
 
@@ -538,22 +532,7 @@ export class VoiceEngine {
     }
   }
 
-  public stopListening(options: { allowFinalTranscript?: boolean } = {}) {
-    // Most programmatic stops happen after a transcript was already delivered,
-    // so they suppress Whisper's trailing STOP flush. A manual mic-button stop
-    // can opt into that final flush so the last spoken phrase is not discarded.
-    this.allowFinalNativeTranscript = options.allowFinalTranscript === true;
-    if (this.allowFinalNativeTranscriptTimer !== null) {
-      window.clearTimeout(this.allowFinalNativeTranscriptTimer);
-      this.allowFinalNativeTranscriptTimer = null;
-    }
-    if (this.allowFinalNativeTranscript) {
-      this.allowFinalNativeTranscriptTimer = window.setTimeout(() => {
-        this.allowFinalNativeTranscript = false;
-        this.allowFinalNativeTranscriptTimer = null;
-      }, 3000);
-    }
-    this.suppressNativeTranscripts = !this.allowFinalNativeTranscript;
+  public stopListening() {
     this.isListening = false;
     this.stopNativeSpeechFallback();
     if (this.recognitionRestartTimer !== null) {
@@ -603,21 +582,9 @@ export class VoiceEngine {
       // the transcript listener immediately would discard that final result.
       if (!this.nativeSpeechCleanup) {
         const nativeTranscriptCleanup = window.magicVoice.onTranscript(({ text, confidence }) => {
-          // Never feed Whisper transcripts back into the assistant while a
-          // command is being stopped or while the assistant is speaking.
-          // This prevents TTS loopback such as the assistant saying
-          // "Why did the tomato..." and then treating that as a new user turn.
-          const allowFinal = this.allowFinalNativeTranscript;
-          if (this.isSpeaking || (!allowFinal && this.suppressNativeTranscripts) || (!allowFinal && !this.isListening)) return;
+          if (this.isSpeaking) return;
           console.debug("[ma9icAI voice] Whisper transcript:", text, confidence);
           this.processRecognizedText(text, true, confidence);
-          if (allowFinal) {
-            this.allowFinalNativeTranscript = false;
-            if (this.allowFinalNativeTranscriptTimer !== null) {
-              window.clearTimeout(this.allowFinalNativeTranscriptTimer);
-              this.allowFinalNativeTranscriptTimer = null;
-            }
-          }
         });
         const nativeErrorCleanup = window.magicVoice.onError((message) => {
           console.error("[ma9icAI voice] Whisper error:", message);
