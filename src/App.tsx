@@ -449,12 +449,14 @@ export default function App() {
       // control without depending on the model's pixel estimate.
       if (/sign\s*in|log\s*in|login/i.test(targetIntent)) {
         let activePage: any = null;
+        let browserProcess = "";
+
         try {
           activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
             timeoutMs: 2500,
             intervalMs: 250,
           });
-          const browserProcess = String(activePage?.browser || activePage?.process || "")
+          browserProcess = String(activePage?.browser || activePage?.process || "")
             .trim()
             .toLowerCase()
             .replace(/\.exe$/i, "");
@@ -472,16 +474,24 @@ export default function App() {
             });
 
             console.log("[VISION CLICK TARGET] semantic browser click completed", semanticClick);
-            return semanticClick;
+
+            const observedUrl = String(activePage?.url || "").toLowerCase();
+            if (!/roblox\.com/.test(observedUrl)) {
+              return semanticClick;
+            }
+
+            // Roblox sign-in succeeded semantically. Continue directly into
+            // the saved-credential flow below rather than falling back to
+            // vision coordinates.
+            await new Promise((resolve) => setTimeout(resolve, 900));
           }
         } catch (semanticError) {
           console.warn("[VISION CLICK TARGET] semantic browser click unavailable", semanticError);
         }
 
-        // If the semantic control is not exposed by the browser's UIA tree,
-        // do NOT fall back to MiniCPM's pixel coordinate for Roblox Sign In.
-        // The current Roblox page has been observed to produce incorrect Y
-        // coordinates from vision. Use the site's canonical login route instead.
+        // Roblox Sign In is never allowed to fall back to MiniCPM's pixel
+        // coordinate because the vision model has previously produced an
+        // incorrect Y coordinate for this control.
         const activeHost = (() => {
           try {
             return new URL(String(activePage?.url || "")).hostname.toLowerCase().replace(/^www\./, "");
@@ -490,26 +500,22 @@ export default function App() {
           }
         })();
 
-        if (activeHost === "roblox.com") {
-          console.warn("[VISION CLICK TARGET] Roblox Sign In UIA unavailable; using canonical login route.");
-          const loginResult = await (window as any).magicDesktop.execute("NAVIGATE_URL", {
-            url: "https://www.roblox.com/login",
-          });
-
-          // The login page is now handled semantically. Do not ask vision to
-          // estimate coordinates for credential controls: browser UI
-          // automation is more reliable and avoids exposing the password to
-          // the assistant. The browser's own saved-credential UI supplies the
-          // password after the user selects the saved account.
+        if (activeHost === "roblox.com" || browserProcess === "brave") {
           try {
-            const page = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
-              timeoutMs: 6000,
-              intervalMs: 250,
-            });
-            const browserProcess = String(page?.browser || page?.process || "brave")
-              .trim()
-              .toLowerCase()
-              .replace(/\.exe$/i, "");
+            if (activeHost !== "roblox.com" || !/\/login(?:\/|$)/i.test(String(activePage?.url || ""))) {
+              console.log("[ROBLOX LOGIN] opening canonical login page");
+              await (window as any).magicDesktop.execute("NAVIGATE_URL", {
+                url: "https://www.roblox.com/login",
+              });
+              activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
+                timeoutMs: 6000,
+                intervalMs: 250,
+              });
+              browserProcess = String(activePage?.browser || activePage?.process || browserProcess || "brave")
+                .trim()
+                .toLowerCase()
+                .replace(/\.exe$/i, "");
+            }
 
             const clickSemantic = async (names: string[], label: string) => {
               let lastError: unknown = null;
@@ -519,7 +525,7 @@ export default function App() {
                     name,
                     process: browserProcess,
                   });
-                  console.log("[ROBLOX LOGIN] clicked semantic control", { label, name, result });
+                  console.log("[ROBLOX LOGIN] clicked semantic control", { label, name });
                   return result;
                 } catch (error) {
                   lastError = error;
@@ -533,34 +539,30 @@ export default function App() {
               "username/email"
             );
 
-            // Give Brave time to display its saved-account suggestion, then
-            // select the user's saved Roblox account. We never read a
-            // password from the browser or log credential contents.
+            // Let Brave display its saved-account suggestion, then select
+            // the saved account. The password itself is never read or logged.
             let accountSelected = false;
-            for (const accountName of ["ma9icman1"]) {
-              try {
-                const suggestion = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
-                  name: accountName,
+            try {
+              const suggestion = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
+                name: "ma9icman1",
+                process: browserProcess,
+                timeoutMs: 4000,
+                intervalMs: 200,
+              });
+              if (suggestion?.found) {
+                await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+                  name: "ma9icman1",
                   process: browserProcess,
-                  timeoutMs: 3500,
-                  intervalMs: 200,
                 });
-                if (suggestion?.found) {
-                  await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
-                    name: accountName,
-                    process: browserProcess,
-                  });
-                  console.log("[ROBLOX LOGIN] selected saved account", { accountName });
-                  accountSelected = true;
-                  break;
-                }
-              } catch (error) {
-                console.warn("[ROBLOX LOGIN] saved-account suggestion unavailable", error);
+                console.log("[ROBLOX LOGIN] selected saved account ma9icman1");
+                accountSelected = true;
               }
+            } catch (accountError) {
+              console.warn("[ROBLOX LOGIN] saved-account suggestion unavailable", accountError);
             }
 
             if (!accountSelected) {
-              console.warn("[ROBLOX LOGIN] saved account suggestion was not exposed by UI Automation.");
+              console.warn("[ROBLOX LOGIN] ma9icman1 suggestion was not exposed by UI Automation");
             }
 
             await clickSemantic(
@@ -570,18 +572,20 @@ export default function App() {
 
             // Clicking the password field gives the browser's credential
             // manager a chance to finish autofilling the saved password.
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 700));
 
             await clickSemantic(
               ["Log In", "Login", "LOG IN", "LOGIN"],
               "login"
             );
 
-            console.log("[ROBLOX LOGIN] credential flow completed");
+            console.log("[ROBLOX LOGIN] credential flow completed", { accountSelected });
             return { ok: true, verified: true, loginPage: true, accountSelected };
           } catch (loginError) {
             console.warn("[ROBLOX LOGIN] semantic credential flow failed", loginError);
-            return loginResult;
+            if (activeHost === "roblox.com") {
+              throw loginError;
+            }
           }
         }
       }
