@@ -701,12 +701,21 @@ export default function App() {
                 intervalMs: 200,
               });
               if (passwordSuggestion?.found) {
+                // On Brave's password-field credential popup, the saved
+                // username row needs a double-click to actually commit the
+                // stored credential/password. A single UIA click can only
+                // highlight the row without applying the password.
+                await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
+                  name: "ma9icman1",
+                  process: browserProcess,
+                });
+                await new Promise((resolve) => setTimeout(resolve, 120));
                 await (window as any).magicDesktop.execute("CLICK_UI_ELEMENT", {
                   name: "ma9icman1",
                   process: browserProcess,
                 });
                 passwordAccountSelected = true;
-                console.log("[ROBLOX LOGIN] selected saved account ma9icman1 for password field");
+                console.log("[ROBLOX LOGIN] double-clicked saved account ma9icman1 for password field");
               }
             } catch (passwordAccountError) {
               console.warn("[ROBLOX LOGIN] password-field saved-account suggestion unavailable", passwordAccountError);
