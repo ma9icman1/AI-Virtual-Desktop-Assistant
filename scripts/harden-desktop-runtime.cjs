@@ -16,8 +16,12 @@ if (!main.includes('const computerControl = require("./computer-control.cjs");')
 }
 
 if (!main.includes('timeout: timeoutMs')) {
-  const pattern = /function runPowerShell\(script, args = \[\]\) \{[\s\S]*?\n\}\n/;
-  const replacement = `function runPowerShell(script, args = [], timeoutMs = 15000) {
+  const startMarker = 'function runPowerShell(script, args = []) {';
+  const endMarker = '\n}\n\nfunction normalizeProcessName';
+  const start = main.indexOf(startMarker);
+  const end = start >= 0 ? main.indexOf(endMarker, start) : -1;
+  if (start >= 0 && end >= 0) {
+    const replacement = `function runPowerShell(script, args = [], timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const child = execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script, ...args], { windowsHide: true, timeout: timeoutMs, killSignal: "SIGKILL" }, (error, stdout, stderr) => {
       if (error) {
@@ -27,10 +31,8 @@ if (!main.includes('timeout: timeoutMs')) {
     });
     child.on("error", reject);
   });
-}
-`;
-  if (pattern.test(main)) {
-    main = main.replace(pattern, replacement);
+}`;
+    main = main.slice(0, start) + replacement + main.slice(end + 2);
     log('added PowerShell desktop-action timeout');
   } else {
     log('PowerShell helper not found; timeout patch skipped');
