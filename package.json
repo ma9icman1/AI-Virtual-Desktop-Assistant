@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "postinstall": "npm run build",
-    "build": "node scripts/fix-wakeword.cjs && node scripts/fix-desktop-actions.cjs && node scripts/repair-desktop-actions.cjs && node scripts/fix-type-input.cjs && node scripts/fix-multi-action.cjs && node scripts/fix-focus-verification.cjs && node scripts/fix-vision-click-v2.cjs && node scripts/fix-site-search.cjs && node scripts/fix-site-search-runtime.cjs && node scripts/fix-contextual-site-search.cjs && node scripts/performance-pass.cjs && node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "node scripts/fix-wakeword.cjs && node scripts/fix-desktop-actions.cjs && node scripts/repair-desktop-actions.cjs && node scripts/fix-type-input.cjs && node scripts/fix-multi-action.cjs && node scripts/fix-focus-verification.cjs && node scripts/fix-vision-click-v2.cjs && node scripts/fix-site-search.cjs && node scripts/fix-site-search-runtime.cjs && node scripts/fix-contextual-site-search.cjs && node scripts/apply-computer-agent-upgrade.cjs && node scripts/performance-pass.cjs && node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "desktop:dev": "npm run build && electron .",
     "desktop:package": "npm run build && npx electron-builder --win nsis portable",
@@ -23,7 +23,6 @@
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/three": "^0.186.0",
-    "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "kokoro-js": "^1.2.1",
