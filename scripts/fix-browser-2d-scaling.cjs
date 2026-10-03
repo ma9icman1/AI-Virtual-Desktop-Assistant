@@ -18,13 +18,36 @@ const clickThroughMarker = "// [browser-2d-clickthrough-v3]";
 let next = source;
 
 // This script is intentionally idempotent. If the current version is already
-// patched, it performs no write at all.
+// patched, it performs no write at all. The target discovery below is scoped
+// to detectWebpage so earlier computer-agent/runtime edits do not make this
+// patch depend on one exact copy of the surrounding source.
 if (!next.includes(browserMarker)) {
-  const old = `    const info = await getActiveWindowInfo();
-    const process = normalizeProcessName(info.process);
+  const detectStart = next.indexOf("async function detectWebpage(");
+  if (detectStart < 0) {
+    throw new Error("[browser-2d-scaling] detectWebpage() was not found. Refusing to modify files.");
+  }
 
-    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
-      await maximizeWindow(info.hwnd);`;
+  const lookupStart = next.indexOf("getActiveWindowInfo()", detectStart);
+  const lookupEnd = lookupStart >= 0
+    ? next.indexOf("await maximizeWindow(info.hwnd);", lookupStart)
+    : -1;
+
+  if (lookupStart < 0 || lookupEnd < 0 || lookupEnd > next.indexOf("async function ", lookupStart + 1)) {
+    throw new Error(
+      "[browser-2d-scaling] Could not safely locate the detectWebpage browser lookup. Refusing to modify files."
+    );
+  }
+
+  const lineStart = next.lastIndexOf("\n", lookupStart) + 1;
+  const originalBlock = next.slice(lineStart, lookupEnd + "await maximizeWindow(info.hwnd);".length);
+
+  if (!/getActiveWindowInfo\(\)/.test(originalBlock) ||
+      !/browserProcesses\.has\(process\)/.test(originalBlock) ||
+      !/maximizeWindow\(info\.hwnd\)/.test(originalBlock)) {
+    throw new Error(
+      "[browser-2d-scaling] Current detectWebpage browser lookup is structurally different. Refusing to modify files."
+    );
+  }
 
   const replacement = `    // [browser-2d-scaling-v3]
     // The 2.5D avatar can be the foreground Electron window. Do not let that
@@ -54,41 +77,29 @@ if (!next.includes(browserMarker)) {
     if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
       await maximizeWindow(info.hwnd);`;
 
-  if (!next.includes(old)) {
-    throw new Error(
-      "[browser-2d-scaling] Current detectWebpage browser lookup does not match the checked-in source. Refusing to modify files. Inspect electron/main.cjs before changing this script."
-    );
-  }
-  next = next.replace(old, replacement);
+  next = next.slice(0, lineStart) + replacement + next.slice(lookupEnd + "await maximizeWindow(info.hwnd);".length);
 }
 
 if (!next.includes(clickThroughMarker)) {
-  const old = `ipcMain.on("magic-window-layout", (event, overlayMode) => {
-  assertTrustedRenderer(event);
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (!window || typeof overlayMode !== "boolean") return;
+  const layoutStart = next.indexOf('ipcMain.on("magic-window-layout", (event, overlayMode) => {');
+  const overlayStart = layoutStart >= 0
+    ? next.indexOf('  if (overlayMode) {', layoutStart)
+    : -1;
 
-  if (overlayMode) {`;
+  if (layoutStart < 0 || overlayStart < 0) {
+    throw new Error(
+      "[browser-2d-scaling] Current magic-window-layout block does not match the checked-in source. Refusing to modify files."
+    );
+  }
 
-  const replacement = `ipcMain.on("magic-window-layout", (event, overlayMode) => {
-  assertTrustedRenderer(event);
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (!window || typeof overlayMode !== "boolean") return;
-
-  // [browser-2d-clickthrough-v3]
+  const replacement = `  // [browser-2d-clickthrough-v3]
   // The 2.5D avatar is visual only. Forward mouse events so the browser below
   // remains the real interaction target.
   window.setIgnoreMouseEvents(overlayMode, { forward: true });
   window.setAlwaysOnTop(overlayMode, "screen-saver");
 
-  if (overlayMode) {`;
-
-  if (!next.includes(old)) {
-    throw new Error(
-      "[browser-2d-scaling] Current magic-window-layout block does not match the checked-in source. Refusing to modify files."
-    );
-  }
-  next = next.replace(old, replacement);
+`;
+  next = next.slice(0, overlayStart) + replacement + next.slice(overlayStart);
 }
 
 if (next !== source) {
