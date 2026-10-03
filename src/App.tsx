@@ -404,7 +404,7 @@ export default function App() {
       // Prefer an exact semantic match over a loose word match. This prevents
       // "sign in" from accidentally selecting an unrelated element that merely
       // contains one common word.
-      const target = [...elements]
+      let target = [...elements]
         .filter(controlMatches)
         .sort((a: any, b: any) => {
           const aText = normalizeControlText(a?.label || a?.text || a?.name);
@@ -413,12 +413,27 @@ export default function App() {
           const bExact = bText.includes(normalizeControlText(targetLabel)) ? 1 : 0;
           return bExact - aExact;
         })[0];
-      const point = target?.center || (target?.boundingBox
+      let point = target?.center || (target?.boundingBox
         ? {
             x: target.boundingBox.x + target.boundingBox.width / 2,
             y: target.boundingBox.y + target.boundingBox.height / 2,
           }
         : null);
+
+      // Roblox Sign In has a reliable native/browser fallback below. Do not
+      // require the vision model to recognize the button before allowing that
+      // semantic path to run; Brave can expose the page controls through
+      // Windows UI Automation even when vision returns no matching element.
+      if ((!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y)))
+        && /sign\s*in|log\s*in|login/i.test(targetIntent)) {
+        console.warn("[VISION CLICK TARGET] vision did not identify Sign In; using semantic browser fallback", {
+          targetLabel: params.targetLabel,
+          detectedElements: elements.length,
+        });
+        target = { label: "Sign in", type: "link" };
+        point = { x: 0, y: 0 };
+      }
+
       if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
         throw new Error(`Vision could not find the visible ${params.targetLabel || "target control"}.`);
       }
