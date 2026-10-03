@@ -476,6 +476,28 @@ export default function App() {
 
             console.log("[VISION CLICK TARGET] semantic browser click completed", semanticClick);
 
+            // The URL captured before the click can still be the old Roblox
+            // page. Re-detect after the click so we do not mistake a successful
+            // same-window transition to /login for a reason to open a second
+            // browser window.
+            await new Promise((resolve) => setTimeout(resolve, 900));
+            try {
+              activePage = await (window as any).magicDesktop.execute("DETECT_WEBPAGE", {
+                timeoutMs: 5000,
+                intervalMs: 250,
+              });
+              browserProcess = String(activePage?.browser || activePage?.process || browserProcess)
+                .trim()
+                .toLowerCase()
+                .replace(/\.exe$/i, "");
+              console.log("[ROBLOX LOGIN] page after Sign In click", {
+                browserProcess,
+                observedUrl: activePage?.url || "",
+              });
+            } catch (navigationCheckError) {
+              console.warn("[ROBLOX LOGIN] could not re-detect page after Sign In click", navigationCheckError);
+            }
+
             const observedUrl = String(activePage?.url || "").toLowerCase();
             if (!/roblox\.com/.test(observedUrl)) {
               return semanticClick;
@@ -483,8 +505,8 @@ export default function App() {
 
             // Roblox sign-in succeeded semantically. Continue directly into
             // the saved-credential flow below rather than falling back to
-            // vision coordinates.
-            await new Promise((resolve) => setTimeout(resolve, 900));
+            // vision coordinates. The refreshed activePage prevents a second
+            // browser window when Roblox already transitioned to /login.
           }
         } catch (semanticError) {
           console.warn("[VISION CLICK TARGET] semantic browser click unavailable", semanticError);
@@ -548,6 +570,19 @@ export default function App() {
             // Let Brave display its saved-account suggestion, then select
             // the saved account. The password itself is never read or logged.
             let accountSelected = false;
+            const verifyUsernameSelected = async () => {
+              try {
+                const field = await (window as any).magicDesktop.execute("READ_UI_ELEMENT", {
+                  automationId: "login-username",
+                  process: browserProcess,
+                });
+                const value = String(field?.element?.value || "").trim().toLowerCase();
+                return value === "ma9icman1";
+              } catch {
+                return false;
+              }
+            };
+
             try {
               const suggestion = await (window as any).magicDesktop.execute("WAIT_FOR_UI_ELEMENT", {
                 name: "ma9icman1",
@@ -560,28 +595,48 @@ export default function App() {
                   name: "ma9icman1",
                   process: browserProcess,
                 });
-                console.log("[ROBLOX LOGIN] selected saved account ma9icman1");
-                accountSelected = true;
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                accountSelected = await verifyUsernameSelected();
+                console.log("[ROBLOX LOGIN] saved-account selection", { found: true, selected: accountSelected });
               }
             } catch (accountError) {
               console.warn("[ROBLOX LOGIN] saved-account suggestion unavailable", accountError);
             }
 
             if (!accountSelected) {
-              // Chromium's credential suggestion popup is sometimes rendered
-              // outside the webpage UIA tree. If the saved account is not
-              // exposed by UI Automation, use the browser's native keyboard
-              // selection without reading or typing the password.
-              console.warn("[ROBLOX LOGIN] ma9icman1 suggestion was not exposed by UI Automation; trying native keyboard selection");
+              // Credential-manager popups are sometimes only partially exposed
+              // through UI Automation. Use the browser's native selection, then
+              // verify that the username field actually received ma9icman1.
+              console.warn("[ROBLOX LOGIN] trying native saved-account keyboard selection");
               try {
-                await new Promise((resolve) => setTimeout(resolve, 700));
+                await new Promise((resolve) => setTimeout(resolve, 500));
                 await (window as any).magicDesktop.execute("KEY_PRESS", { key: "DOWN" });
                 await new Promise((resolve) => setTimeout(resolve, 150));
                 await (window as any).magicDesktop.execute("KEY_PRESS", { key: "ENTER" });
-                console.log("[ROBLOX LOGIN] selected first saved-account suggestion with keyboard");
-                accountSelected = true;
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                accountSelected = await verifyUsernameSelected();
+                console.log("[ROBLOX LOGIN] keyboard saved-account selection", { selected: accountSelected });
               } catch (keyboardError) {
                 console.warn("[ROBLOX LOGIN] native saved-account keyboard selection failed", keyboardError);
+              }
+            }
+
+            if (!accountSelected) {
+              // Last safe fallback: put the known saved username into the
+              // username field. The password is never read or logged; focusing
+              // the password field below gives the browser a chance to autofill
+              // the stored password for this exact username.
+              try {
+                await (window as any).magicDesktop.execute("SET_UI_VALUE", {
+                  automationId: "login-username",
+                  process: browserProcess,
+                  value: "ma9icman1",
+                });
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                accountSelected = await verifyUsernameSelected();
+                console.log("[ROBLOX LOGIN] username fallback", { selected: accountSelected });
+              } catch (usernameFallbackError) {
+                console.warn("[ROBLOX LOGIN] username fallback failed", usernameFallbackError);
               }
             }
 
