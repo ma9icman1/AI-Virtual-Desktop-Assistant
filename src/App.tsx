@@ -56,6 +56,8 @@ import {
   Lightbulb,
   ChevronRight,
   FolderOpen,
+  Minus,
+  Square,
 } from "lucide-react";
 
 function describeError(error: unknown, fallback: string): string {
@@ -1674,8 +1676,8 @@ export default function App() {
                 <span>Avatar 2.5D</span>
               </button>
               <span className={`ma9ic-online ${aiConnected ? "ready" : "offline"}`}><i />{aiConnected ? "Online" : "Offline"}</span>
-              <button type="button" onClick={() => (window as any).magicWindow?.minimize?.()} className="ma9ic-window-btn" title="Minimize">—</button>
-              <button type="button" onClick={() => (window as any).magicWindow?.toggleMaximize?.()} className="ma9ic-window-btn" title="Maximize">□</button>
+              <button type="button" onClick={() => (window as any).magicWindow?.minimize?.()} className="ma9ic-window-btn" title="Minimize"><Minus /></button>
+              <button type="button" onClick={() => (window as any).magicWindow?.toggleMaximize?.()} className="ma9ic-window-btn" title="Maximize"><Square /></button>
               <button type="button" onClick={() => (window as any).magicWindow?.close()} className="ma9ic-window-btn close" title={`Close ${assistantName}`}><X /></button>
             </div>
           </header>
