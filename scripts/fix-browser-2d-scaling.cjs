@@ -2,40 +2,111 @@
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const mainPath = path.join(repoRoot, "electron", "main.cjs");
-let source = fs.readFileSync(mainPath, "utf8");
+const backupPath = `${mainPath}.browser-2d-backup`;
 
-const browserMarker = "// [browser-2d-scaling-v2]";
-const clickThroughMarker = "// [browser-2d-clickthrough-v2]";
-
-// The browser detector used to trust GetForegroundWindow(). That is wrong when
-// the 2.5D avatar is the foreground Electron window. Replace that lookup with
-// a browser-process fallback, while retaining the normal foreground fast path.
-if (!source.includes(browserMarker)) {
-  const old = `    const info = await getActiveWindowInfo();\n    const process = normalizeProcessName(info.process);\n\n    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {\n      await maximizeWindow(info.hwnd);`;
-
-  const replacement = `    // [browser-2d-scaling-v2]\n    // The 2.5D overlay can become the foreground Electron window. Prefer the\n    // foreground browser when available, otherwise locate the visible browser\n    // window directly by process so vision/UI detection targets the real page.\n    let info = await getActiveWindowInfo();\n    let process = normalizeProcessName(info.process);\n\n    if (!browserProcesses.has(process) || Number(info.hwnd) <= 0) {\n      const browserNames = Array.from(browserProcesses).map((name) => \"'\" + name + \"'\").join(\",\");\n      const browserWindowScript = [\n        \"$names = @(\" + browserNames + \")\",\n        \"$windows = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $names -contains $_.ProcessName.ToLowerInvariant() } | Sort-Object StartTime -Descending\",\n        \"$target = $windows | Select-Object -First 1\",\n        \"if ($target) { [pscustomobject]@{ hwnd=[int64]$target.MainWindowHandle; pid=[int]$target.Id; process=[string]$target.ProcessName; title=[string]$target.MainWindowTitle } | ConvertTo-Json -Compress }\",\n      ].join(\"\\n\");\n      const browserWindowRaw = await runPowerShell(browserWindowScript).catch(() => \"\");\n      try {\n        const browserWindow = JSON.parse(browserWindowRaw || \"{}\");\n        if (Number(browserWindow.hwnd) > 0) {\n          info = browserWindow;\n          process = normalizeProcessName(browserWindow.process);\n        }\n      } catch {}\n    }\n\n    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {\n      await maximizeWindow(info.hwnd);`;
-
-  if (!source.includes(old)) {
-    throw new Error("Expected current detectWebpage browser lookup was not found; source layout has changed.");
-  }
-  source = source.replace(old, replacement);
+if (!fs.existsSync(mainPath)) {
+  throw new Error(`[browser-2d-scaling] Missing target file: ${mainPath}`);
 }
 
-// Make the avatar window click-through while it is in 2.5D overlay mode. This
-// keeps browser controls clickable underneath the visual avatar.
-if (!source.includes(clickThroughMarker)) {
-  const old = `ipcMain.on("magic-window-layout", (event, overlayMode) => {\n  assertTrustedRenderer(event);\n  const window = BrowserWindow.fromWebContents(event.sender);\n  if (!window || typeof overlayMode !== "boolean") return;\n\n  if (overlayMode) {`;
+const source = fs.readFileSync(mainPath, "utf8");
+const browserMarker = "// [browser-2d-scaling-v3]";
+const clickThroughMarker = "// [browser-2d-clickthrough-v3]";
+let next = source;
 
-  const replacement = `ipcMain.on("magic-window-layout", (event, overlayMode) => {\n  assertTrustedRenderer(event);\n  const window = BrowserWindow.fromWebContents(event.sender);\n  if (!window || typeof overlayMode !== "boolean") return;\n\n  // [browser-2d-clickthrough-v2]\n  // 2.5D is a visual overlay. Let mouse events reach the browser underneath.\n  window.setIgnoreMouseEvents(overlayMode, { forward: true });\n  window.setAlwaysOnTop(overlayMode, "screen-saver");\n\n  if (overlayMode) {`;
+// This script is intentionally idempotent. If the current version is already
+// patched, it performs no write at all.
+if (!next.includes(browserMarker)) {
+  const old = `    const info = await getActiveWindowInfo();
+    const process = normalizeProcessName(info.process);
 
-  if (!source.includes(old)) {
-    throw new Error("Expected current magic-window-layout block was not found; source layout has changed.");
+    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
+      await maximizeWindow(info.hwnd);`;
+
+  const replacement = `    // [browser-2d-scaling-v3]
+    // The 2.5D avatar can be the foreground Electron window. Do not let that
+    // steal browser detection. Prefer the foreground browser, then locate a
+    // visible browser window by process and use its real HWND/PID.
+    let info = await getActiveWindowInfo();
+    let process = normalizeProcessName(info.process);
+
+    if (!browserProcesses.has(process) || Number(info.hwnd) <= 0) {
+      const browserNames = Array.from(browserProcesses).map((name) => "'" + name + "'").join(",");
+      const browserWindowScript = [
+        "$names = @(" + browserNames + ")",
+        "$windows = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $names -contains $_.ProcessName.ToLowerInvariant() } | Sort-Object StartTime -Descending",
+        "$target = $windows | Select-Object -First 1",
+        "if ($target) { [pscustomobject]@{ hwnd=[int64]$target.MainWindowHandle; pid=[int]$target.Id; process=[string]$target.ProcessName; title=[string]$target.MainWindowTitle } | ConvertTo-Json -Compress }",
+      ].join("\\n");
+      const browserWindowRaw = await runPowerShell(browserWindowScript).catch(() => "");
+      try {
+        const browserWindow = JSON.parse(browserWindowRaw || "{}");
+        if (Number(browserWindow.hwnd) > 0) {
+          info = browserWindow;
+          process = normalizeProcessName(browserWindow.process);
+        }
+      } catch {}
+    }
+
+    if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
+      await maximizeWindow(info.hwnd);`;
+
+  if (!next.includes(old)) {
+    throw new Error(
+      "[browser-2d-scaling] Current detectWebpage browser lookup does not match the checked-in source. Refusing to modify files. Inspect electron/main.cjs before changing this script."
+    );
   }
-  source = source.replace(old, replacement);
+  next = next.replace(old, replacement);
 }
 
-fs.writeFileSync(mainPath, source, "utf8");
-console.log("[browser-2d-scaling] browser targeting + 2.5D click-through applied");
+if (!next.includes(clickThroughMarker)) {
+  const old = `ipcMain.on("magic-window-layout", (event, overlayMode) => {
+  assertTrustedRenderer(event);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || typeof overlayMode !== "boolean") return;
+
+  if (overlayMode) {`;
+
+  const replacement = `ipcMain.on("magic-window-layout", (event, overlayMode) => {
+  assertTrustedRenderer(event);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || typeof overlayMode !== "boolean") return;
+
+  // [browser-2d-clickthrough-v3]
+  // The 2.5D avatar is visual only. Forward mouse events so the browser below
+  // remains the real interaction target.
+  window.setIgnoreMouseEvents(overlayMode, { forward: true });
+  window.setAlwaysOnTop(overlayMode, "screen-saver");
+
+  if (overlayMode) {`;
+
+  if (!next.includes(old)) {
+    throw new Error(
+      "[browser-2d-scaling] Current magic-window-layout block does not match the checked-in source. Refusing to modify files."
+    );
+  }
+  next = next.replace(old, replacement);
+}
+
+if (next !== source) {
+  if (!fs.existsSync(backupPath)) {
+    fs.copyFileSync(mainPath, backupPath);
+  }
+
+  // Write only after every expected target was found. Then syntax-check the
+  // resulting file; restore the backup automatically if validation fails.
+  fs.writeFileSync(mainPath, next, "utf8");
+  try {
+    execFileSync(process.execPath, ["--check", mainPath], { stdio: "pipe" });
+  } catch (error) {
+    fs.copyFileSync(backupPath, mainPath);
+    throw new Error(
+      `[browser-2d-scaling] Modified main.cjs failed Node syntax validation; original restored. ${error?.message || error}`
+    );
+  }
+}
+
+console.log("[browser-2d-scaling] browser targeting + 2.5D click-through applied and syntax-validated");
