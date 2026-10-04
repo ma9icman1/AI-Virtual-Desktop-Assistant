@@ -217,7 +217,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent select-none ${className}`}
+      className={`avatar2d-shell relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent select-none ${className}`}
       style={{ perspective: "1000px" }}
     >
       {/* Background Ambient Glow Ring */}
@@ -235,7 +235,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
       {/* 2.5D Parallax Stage */}
       <div
-        className="relative w-full max-w-[480px] h-[580px] flex items-center justify-center transition-transform duration-75 ease-out"
+        className="avatar2d-stage relative w-full flex items-center justify-center transition-transform duration-75 ease-out"
         style={{
           transformStyle: "preserve-3d",
           transform: `rotateY(${rotY}deg) rotateX(${rotX}deg)`,
@@ -290,11 +290,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       </div>
 
       {/* Floating Status & Quick Action Controls Overlay */}
-      <div className="absolute bottom-6 flex flex-col items-center gap-3 z-20">
+      <div className="avatar2d-controls absolute flex flex-col items-center z-20">
         {/* Status Pills */}
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-cyan-500/25 bg-slate-900/80 backdrop-blur-md text-xs font-medium text-slate-200 shadow-xl shadow-cyan-950/30">
+        <div className="avatar2d-status flex items-center gap-2">
           <span
-            className={`w-2 h-2 rounded-full ${
+            className={`avatar2d-status-dot w-2 h-2 rounded-full ${
               isSpeaking
                 ? "bg-cyan-400 animate-ping"
                 : isListening
@@ -312,12 +312,12 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         </div>
 
         {/* Quick Toolbar */}
-        <div className="flex items-center gap-2 p-1 rounded-2xl border border-slate-800 bg-slate-900/90 backdrop-blur-lg shadow-2xl">
+        <div className="avatar2d-toolbar flex items-center">
           {onToggleListening && (
             <button
               type="button"
               onClick={onToggleListening}
-              className={`p-2.5 rounded-xl transition-all cursor-pointer ${
+              className={`avatar2d-tool avatar2d-tool-mic transition-all cursor-pointer ${
                 isListening
                   ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
                   : "text-slate-400 hover:text-slate-100 hover:bg-slate-800"
@@ -332,7 +332,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={onSpeakGreeting}
-              className="p-2.5 rounded-xl text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-all cursor-pointer"
+              className="avatar2d-tool transition-all cursor-pointer"
               title="Test Voice Greeting"
             >
               <Volume2 className="w-4 h-4" />
@@ -343,7 +343,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={() => onSwitchMode("avatar")}
-              className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition-all cursor-pointer"
+              className="avatar2d-tool transition-all cursor-pointer"
               title="Switch to 3D Model View"
             >
               <Layers className="w-4 h-4" />
@@ -354,7 +354,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={onToggleFullView}
-              className="p-2.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all cursor-pointer"
+              className="avatar2d-tool transition-all cursor-pointer"
               title="Toggle Full Desktop View"
             >
               <Maximize2 className="w-4 h-4" />
