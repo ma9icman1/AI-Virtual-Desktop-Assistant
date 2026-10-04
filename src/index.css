@@ -343,10 +343,10 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 
-/* 2.5D compact/taskbar avatar — reference-matched Nova dock */
+/* 2.5D compact/taskbar avatar — centered compact dock */
 .avatar2d-shell {
-  min-width: 520px;
-  min-height: 500px;
+  min-width: 300px;
+  min-height: 300px;
   position: relative;
   color: #eaf6ff;
 }
@@ -375,76 +375,86 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 .avatar2d-controls {
   left: 50%;
-  bottom: 26px;
+  bottom: 18px;
   transform: translateX(-50%);
-  width: min(82%, 650px);
-  gap: 12px;
+  width: 100%;
+  max-width: 380px;
+  gap: 4px;
+  align-items: center;
 }
 
 .avatar2d-status {
   position: relative;
-  min-height: 58px;
-  min-width: min(560px, 100%);
-  padding: 0 30px;
-  border: 2px solid #168cff;
-  border-radius: 32px;
+  justify-content: center;
+  min-height: 27px;
+  width: 140px;
+  max-width: 140px;
+  padding: 0 11px;
+  border: 1px solid #168cff;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(5,18,36,.97), rgba(2,9,22,.97));
   color: #e9f7ff;
-  font-size: 22px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: .1px;
   box-shadow:
-    0 0 8px rgba(0,145,255,.95),
-    0 0 24px rgba(0,113,255,.58),
-    inset 0 0 20px rgba(0,95,190,.16);
+    0 0 4px rgba(0,145,255,.95),
+    0 0 10px rgba(0,113,255,.58),
+    inset 0 0 8px rgba(0,95,190,.16);
+}
+
+.avatar2d-status > span:last-child {
+  flex: 1 1 auto;
+  text-align: center;
 }
 
 .avatar2d-status::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -15px;
-  width: 25px;
-  height: 25px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
   background: #061426;
-  border-right: 2px solid #168cff;
-  border-bottom: 2px solid #168cff;
+  border-right: 1px solid #168cff;
+  border-bottom: 1px solid #168cff;
   transform: translateX(-50%) rotate(45deg);
-  box-shadow: 5px 5px 10px rgba(0,100,255,.12);
+  box-shadow: 2px 2px 4px rgba(0,100,255,.12);
 }
 
 .avatar2d-status-dot {
   flex: 0 0 auto;
-  width: 12px !important;
-  height: 12px !important;
+  width: 5px !important;
+  height: 5px !important;
   background: #00e6a5 !important;
-  box-shadow: 0 0 10px #00e6a5, 0 0 18px rgba(0,230,165,.65);
+  box-shadow: 0 0 4px #00e6a5, 0 0 7px rgba(0,230,165,.65);
   animation: none !important;
 }
 
 .avatar2d-toolbar {
   position: relative;
-  width: 100%;
-  min-height: 112px;
-  padding: 0 18px;
-  border: 2px solid #168cff;
-  border-radius: 58px;
+  width: 170px;
+  max-width: 170px;
+  min-height: 52px;
+  padding: 0 8px;
+  border: 1px solid #168cff;
+  border-radius: 26px;
   background: linear-gradient(180deg, rgba(5,18,36,.98), rgba(2,9,22,.98));
   box-shadow:
-    0 0 9px rgba(0,145,255,.95),
-    0 0 28px rgba(0,113,255,.52),
-    inset 0 0 28px rgba(0,95,190,.14);
+    0 0 4px rgba(0,145,255,.95),
+    0 0 12px rgba(0,113,255,.52),
+    inset 0 0 12px rgba(0,95,190,.14);
 }
 
 .avatar2d-tool {
   position: relative;
   flex: 1 1 0;
-  height: 72px;
-  min-width: 70px;
+  height: 34px;
+  min-width: 34px;
   display: grid;
   place-items: center;
   border: 0;
-  border-right: 2px solid rgba(67,129,190,.42);
+  border-right: 1px solid rgba(67,129,190,.42);
   border-radius: 0;
   background: transparent;
   color: #dceeff;
@@ -457,10 +467,10 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 .avatar2d-tool svg {
-  width: 43px !important;
-  height: 43px !important;
+  width: 20px !important;
+  height: 20px !important;
   stroke-width: 1.9;
-  filter: drop-shadow(0 0 7px rgba(44,163,255,.35));
+  filter: drop-shadow(0 0 4px rgba(44,163,255,.35));
 }
 
 .avatar2d-tool:hover {
@@ -480,9 +490,59 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 @media (max-width: 720px) {
   .avatar2d-shell { min-width: 100%; }
   .avatar2d-stage { min-height: 430px; }
-  .avatar2d-controls { width: 92%; bottom: 18px; }
-  .avatar2d-status { min-width: 0; width: 88%; font-size: 17px; min-height: 48px; padding: 0 20px; }
-  .avatar2d-toolbar { min-height: 86px; }
-  .avatar2d-tool { height: 58px; }
-  .avatar2d-tool svg { width: 34px !important; height: 34px !important; }
+  .avatar2d-controls { width: 100%; max-width: 320px; bottom: 12px; }
+  .avatar2d-status { width: 240px; max-width: 240px; font-size: 8px; min-height: 24px; padding: 0 9px; }
+  .avatar2d-toolbar { width: 280px; max-width: 280px; min-height: 44px; }
+  .avatar2d-tool { height: 28px; }
+  .avatar2d-tool svg { width: 18px !important; height: 18px !important; }
+}
+
+
+/* computer-agent two-mode STOP control */
+.ma9ic-brand-kill {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.ma9ic-brand-kill:hover .ma9ic-brand-logo {
+  filter: drop-shadow(0 0 16px rgba(255,55,95,.95));
+  transform: scale(1.04);
+}
+
+.ma9ic-brand-kill:active .ma9ic-brand-logo {
+  transform: scale(.96);
+}
+
+.ma9ic-brand-title-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+
+/* 2.5D overlay transparency — the real Windows desktop must show through.
+   Keep the avatar/control chrome itself, but never paint a rectangular app background. */
+html:has(body.avatar-overlay),
+body.avatar-overlay,
+body.avatar-overlay #root,
+body.avatar-overlay .ma9ic-shell,
+body.avatar-overlay .avatar2d-shell,
+body.avatar-overlay .avatar2d-stage,
+body.avatar-overlay .avatar2d-stage > .relative {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.avatar-overlay .avatar2d-ambient-glow {
+  display: none !important;
 }

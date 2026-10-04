@@ -2026,7 +2026,8 @@ const PLANNER_ACTION_TYPES = new Set([
   "KEY_PRESS",
   "WAIT",
   "VISION_CLICK_TARGET",
-]);
+,
+  "BROWSER_NAVIGATE", "BROWSER_GET_PAGE", "BROWSER_CLICK_TEXT", "BROWSER_TYPE", "BROWSER_SCREENSHOT"]);
 const PLANNER_APPS = new Set([
   "browser", "brave", "edge", "chrome", "firefox", "opera", "vivaldi", "notepad", "calculator",
   "paint", "explorer", "files", "terminal", "taskmgr",

@@ -910,6 +910,39 @@ function normalizedHostname(value) {
 
 
 async function captureDesktopRegion(params = {}) {
+  if (["BROWSER_NAVIGATE", "BROWSER_GET_PAGE", "BROWSER_CLICK_TEXT", "BROWSER_TYPE", "BROWSER_SCREENSHOT"].includes(action)) {
+    const browser = String(params.browser || "chrome").trim().toLowerCase();
+    if (!["chrome", "brave", "edge"].includes(browser)) {
+      throw new Error("Browser mode supports Chrome, Brave, and Edge only.");
+    }
+    const executable = resolveBrowserExecutable(browser);
+    if (!executable) throw new Error("Could not find " + browser + ".");
+    const base = {
+      browser,
+      executable,
+      appDataDir: app.getPath("userData"),
+      url: String(params.url || "about:blank")
+    };
+    if (action === "BROWSER_NAVIGATE") {
+      return await browserControl.navigate({ ...base, url: String(params.url || "") });
+    }
+    if (action === "BROWSER_GET_PAGE") return await browserControl.getPage(base);
+    if (action === "BROWSER_CLICK_TEXT") {
+      return await browserControl.clickText({
+        ...base,
+        text: params.text || params.targetLabel
+      });
+    }
+    if (action === "BROWSER_TYPE") {
+      return await browserControl.typeInto({
+        ...base,
+        text: params.text,
+        targetLabel: params.targetLabel
+      });
+    }
+    return await browserControl.screenshot(base);
+  }
+
   const display = screen.getPrimaryDisplay();
   const visionSize = getVisionCanvasSize(display, AI_SCREEN_WIDTH);
   const sources = await desktopCapturer.getSources({
@@ -1675,6 +1708,13 @@ public static class MagicPasteInput {
 
 
 
+
+
+
+
+
+
+
   'KEY_PRESS' {
     $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
     $vk = switch ($key) {
@@ -2145,18 +2185,27 @@ ipcMain.handle("magic-ollama-download", async (event, model) => {
   }
 });
 
+ipcMain.on("magic-window-overlay-interaction", (event, interactive) => {
+  assertTrustedRenderer(event);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || typeof interactive !== "boolean") return;
+
+  // Renderer mouse events do not fire while the Electron window is click-through,
+  // so this IPC is only a manual fallback. The overlay layout handler below uses
+  // the OS cursor position to make the control strip interactive reliably.
+  window.setIgnoreMouseEvents(!interactive, { forward: true });
+});
+
 ipcMain.on("magic-window-layout", (event, overlayMode) => {
   assertTrustedRenderer(event);
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || typeof overlayMode !== "boolean") return;
 
-  // [browser-2d-clickthrough-v3]
-  // The 2.5D avatar is visual only. Forward mouse events so the browser below
-  // remains the real interaction target.
-  window.setIgnoreMouseEvents(overlayMode, { forward: true });
   window.setAlwaysOnTop(overlayMode, "screen-saver");
 
   if (overlayMode) {
+    // The avatar overlay is click-through everywhere except its bottom-center
+    // controls. Resize it first so the native hit-test area matches the 2.5D dock.
     const workArea = screen.getPrimaryDisplay().workArea;
     const width = 430;
     const height = 620;
@@ -2167,11 +2216,47 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
       width,
       height,
     });
+
+    window.setIgnoreMouseEvents(true, { forward: true });
+    window.__avatarControlInteractive = false;
+
+    if (window.__avatarControlPoll) clearInterval(window.__avatarControlPoll);
+    window.__avatarControlPoll = setInterval(() => {
+      if (window.isDestroyed()) return;
+
+      const bounds = window.getBounds();
+      const cursor = screen.getCursorScreenPoint();
+      const localX = cursor.x - bounds.x;
+      const localY = cursor.y - bounds.y;
+
+      // The status pill + toolbar sit centered near the bottom of the 2.5D
+      // window. Use a generous native hit box around them so the actual small
+      // buttons are easy to click without making the whole avatar interactive.
+      const inControlStrip =
+        localX >= Math.max(0, bounds.width / 2 - 210) &&
+        localX <= Math.min(bounds.width, bounds.width / 2 + 210) &&
+        localY >= Math.max(0, bounds.height - 145) &&
+        localY <= Math.min(bounds.height, bounds.height - 2);
+
+      if (inControlStrip === window.__avatarControlInteractive) return;
+
+      window.__avatarControlInteractive = inControlStrip;
+      window.setIgnoreMouseEvents(!inControlStrip, { forward: true });
+    }, 16);
   } else {
+    if (window.__avatarControlPoll) {
+      clearInterval(window.__avatarControlPoll);
+      window.__avatarControlPoll = null;
+    }
+
+    window.__avatarControlInteractive = false;
+    window.setIgnoreMouseEvents(false, { forward: true });
+
     window.setMinimumSize(920, 630);
+    const workArea = screen.getPrimaryDisplay().workArea;
     window.setBounds({
-      x: Math.max(0, Math.round((screen.getPrimaryDisplay().workArea.width - 920) / 2)),
-      y: Math.max(0, Math.round((screen.getPrimaryDisplay().workArea.height - 630) / 2)),
+      x: Math.max(0, Math.round((workArea.width - 920) / 2) + workArea.x),
+      y: Math.max(0, Math.round((workArea.height - 630) / 2) + workArea.y),
       width: 920,
       height: 630,
     });
@@ -2281,6 +2366,42 @@ async function createWindow() {
   }
 
   
+
+  globalShortcut.register("CommandOrControl+Shift+S", () => {
+    desktopKilled = true;
+    desktopPermission = "none";
+    for (const child of activeDesktopChildren) {
+      try { child.kill("SIGKILL"); } catch {}
+    }
+    activeDesktopChildren.clear();
+    browserControl.stopAll("Global STOP shortcut.");
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("desktop-control-killed", {
+          reason: "Global STOP shortcut (Ctrl+Shift+S)."
+        });
+      }
+    });
+  });
+
+  globalShortcut.register("CommandOrControl+Shift+H", async () => {
+    try {
+      const result = await captureDesktopRegion({
+        x: 0,
+        y: 0,
+        width: AI_SCREEN_WIDTH,
+        height: 720
+      });
+
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send("desktop-help-screenshot", result);
+        }
+      });
+    } catch (error) {
+      console.warn("[HELP MODE]", error?.message || error);
+    }
+  });
 
   globalShortcut.register("CommandOrControl+Alt+Escape", () => {
     desktopKilled = true;

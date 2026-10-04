@@ -3,6 +3,7 @@ const {contextBridge, ipcRenderer} = require("electron");
 contextBridge.exposeInMainWorld("magicWindow", {
   moveBy: (deltaX, deltaY) => ipcRenderer.send("magic-window-move", deltaX, deltaY),
   setOverlayMode: (overlayMode) => ipcRenderer.send("magic-window-layout", overlayMode),
+  setOverlayInteractive: (interactive) => ipcRenderer.send("magic-window-overlay-interaction", interactive),
   close: () => ipcRenderer.send("magic-window-close"),
   minimize: () => ipcRenderer.send("magic-window-minimize"),
   toggleMaximize: () => ipcRenderer.send("magic-window-toggle-maximize"),
@@ -21,6 +22,11 @@ contextBridge.exposeInMainWorld("magicDesktop", {
   captureScreen: () => ipcRenderer.invoke("desktop-capture-screen"),
   captureScreenInfo: () => ipcRenderer.invoke("desktop-capture-screen-info"),
   emergencyStop: () => ipcRenderer.send("desktop-control-kill"),
+  onHelpScreenshot: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("desktop-help-screenshot", listener);
+    return () => ipcRenderer.removeListener("desktop-help-screenshot", listener);
+  },
   onEmergencyStop: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("desktop-control-killed", listener);
