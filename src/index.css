@@ -352,6 +352,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 .avatar2d-stage {
+  pointer-events: none;
   width: min(100%, 620px);
   height: min(100%, 720px);
   min-height: 500px;
@@ -374,6 +375,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 .avatar2d-controls {
+  pointer-events: auto;
   left: 50%;
   bottom: 26px;
   transform: translateX(-50%);
@@ -437,6 +439,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 .avatar2d-tool {
+  pointer-events: auto;
   position: relative;
   flex: 1 1 0;
   height: 72px;
