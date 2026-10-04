@@ -385,6 +385,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 .avatar2d-status {
   position: relative;
+  justify-content: center;
   min-height: 27px;
   width: 140px;
   max-width: 140px;
@@ -400,6 +401,11 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
     0 0 4px rgba(0,145,255,.95),
     0 0 10px rgba(0,113,255,.58),
     inset 0 0 8px rgba(0,95,190,.16);
+}
+
+.avatar2d-status > span:last-child {
+  flex: 1 1 auto;
+  text-align: center;
 }
 
 .avatar2d-status::after {
