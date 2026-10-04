@@ -522,3 +522,21 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
   cursor: pointer;
   text-align: left;
 }
+
+
+/* 2.5D overlay transparency — the real Windows desktop must show through.
+   Keep the avatar/control chrome itself, but never paint a rectangular app background. */
+html:has(body.avatar-overlay),
+body.avatar-overlay,
+body.avatar-overlay #root,
+body.avatar-overlay .ma9ic-shell,
+body.avatar-overlay .avatar2d-shell,
+body.avatar-overlay .avatar2d-stage,
+body.avatar-overlay .avatar2d-stage > .relative {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.avatar-overlay .avatar2d-ambient-glow {
+  display: none !important;
+}
