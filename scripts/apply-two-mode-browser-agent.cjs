@@ -56,7 +56,7 @@ if (!main.includes('globalShortcut.register("CommandOrControl+Shift+S"')) {
     "  globalShortcut.register(\"CommandOrControl+Shift+H\", async () => {\n" +
     "    try { const result = await captureDesktopRegion({ x:0, y:0, width:AI_SCREEN_WIDTH, height:720 }); BrowserWindow.getAllWindows().forEach((win) => { if (!win.isDestroyed()) win.webContents.send(\"desktop-help-screenshot\", result); }); } catch (error) { console.warn(\"[HELP MODE]\", error?.message || error); }\n" +
     "  });\n\n";
-  main = insertOnce(main, "  createWindow();", shortcuts, "global computer-agent shortcuts");
+  main = insertOnce(main, 'app.on("before-quit",', shortcuts, "global computer-agent shortcuts");
 }
 if (!main.includes("globalShortcut.unregisterAll();")) main = main.replace("app.on(\"before-quit\",", "globalShortcut.unregisterAll();\n\napp.on(\"before-quit\",");
 write(mainPath, main);
