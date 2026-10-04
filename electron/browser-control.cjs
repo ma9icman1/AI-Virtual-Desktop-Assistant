@@ -233,10 +233,11 @@ async function clickText(options = {}) {
 async function typeInto(options = {}) {
   const session = await getSession(options);
   const selector = String(options.selector || "").trim();
+  const targetLabel = String(options.targetLabel || "").trim();
   const text = String(options.text || "");
-  if (!selector) throw new Error("Browser type requires a CSS selector.");
+  if (!selector && !targetLabel) throw new Error("Browser type requires an input selector or label.");
   if (text.length > 4000) throw new Error("Browser text input is limited to 4000 characters.");
-  const script = '(() => { const el=document.querySelector(' + quoteJs(selector) + '); if(!el)return {ok:false,error:"No matching browser input was found."}; el.focus(); const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")?.set||Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")?.set; if(setter)setter.call(el,' + quoteJs(text) + '); else el.value=' + quoteJs(text) + '; el.dispatchEvent(new Event("input",{bubbles:true})); el.dispatchEvent(new Event("change",{bubbles:true})); return {ok:true}; })()';
+  const script = '(() => { const wanted=' + quoteJs(targetLabel) + '.toLowerCase(); const selector=' + quoteJs(selector || "input,textarea,[contenteditable=\\"true\\"]") + '; const nodes=[...document.querySelectorAll(selector)]; const el=nodes.find(node=>{const value=String(node.getAttribute("aria-label")||node.getAttribute("placeholder")||node.getAttribute("name")||"").toLowerCase(); return !wanted || value.includes(wanted);}) || nodes[0]; if(!el)return {ok:false,error:"No matching browser input was found."}; el.focus(); const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")?.set||Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")?.set; if(setter)setter.call(el,' + quoteJs(text) + '); else if("value" in el) el.value=' + quoteJs(text) + '; else el.textContent=' + quoteJs(text) + '; el.dispatchEvent(new Event("input",{bubbles:true})); el.dispatchEvent(new Event("change",{bubbles:true})); return {ok:true}; })()';
   const result = await evaluate(session, script);
   if (!result?.ok) throw new Error(result?.error || "Browser type failed.");
   return { ok: true, mode: "browser", transport: "cdp", browser: session.browser };
