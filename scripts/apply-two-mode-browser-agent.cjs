@@ -58,7 +58,7 @@ const emergencyShortcutNeedle = '  globalShortcut.register("CommandOrControl+Alt
     "  });\n\n";
   main = insertOnce(main, '  globalShortcut.register("CommandOrControl+Alt+Escape", () => {', shortcuts, "global computer-agent shortcuts");
 }
-if (!main.includes("globalShortcut.unregisterAll();")) main = main.replace("app.on(\"before-quit\",", "globalShortcut.unregisterAll();\n\napp.on(\"before-quit\",");
+if (!main.includes("globalShortcut.unregisterAll();")) main = main.replace('app.on("before-quit", (event) => {\n', 'app.on("before-quit", (event) => {\n  globalShortcut.unregisterAll();\n');
 write(mainPath, main);
 
 let preload = read(preloadPath);
