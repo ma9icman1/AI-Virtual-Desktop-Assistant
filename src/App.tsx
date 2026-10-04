@@ -1984,8 +1984,8 @@ export default function App() {
                     onToggleListening={handleToggleListening}
                     onToggleFullView={() => {
                       setAvatarMode("2d");
-                      setExperienceMode("full");
-                      (window as any).magicWindow?.setOverlayMode(false);
+                      setExperienceMode("model");
+                      (window as any).magicWindow?.setOverlayMode(true);
                     }}
                     onSwitchMode={(mode) => {
                       if (mode === "avatar") {
