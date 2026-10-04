@@ -222,7 +222,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     >
       {/* Background Ambient Glow Ring */}
       <div
-        className="absolute w-[460px] h-[460px] rounded-full blur-3xl pointer-events-none transition-all duration-700"
+        className="avatar2d-ambient-glow absolute w-[460px] h-[460px] rounded-full blur-3xl pointer-events-none transition-all duration-700"
         style={{
           background: isSpeaking
             ? "radial-gradient(circle, rgba(6,182,212,0.3) 0%, rgba(99,102,241,0.2) 50%, transparent 70%)"
