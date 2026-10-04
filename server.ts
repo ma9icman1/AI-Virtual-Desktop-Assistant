@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import path from "path";
 import { Readable } from "stream";
 import { GoogleGenAI } from "@google/genai";
@@ -641,6 +641,71 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
         },
       },
     };
+  }
+  // [wikipedia-direct-search-v1]
+  // Explicit natural-language Wikipedia commands.
+  const wikipediaSearchMatch = commandText.match(
+    /^(?:please\s+)?(?:open\s+)?wikipedia(?:\.org)?(?:\s+and)?\s+(?:search|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+  );
+
+  if (wikipediaSearchMatch) {
+    const query = String(wikipediaSearchMatch[1] || "")
+      .trim()
+      .replace(/[.!?]+$/g, "");
+
+    if (query) {
+      const spoken = "Opening Wikipedia and searching for " + query + ".";
+      return {
+        ...parsed,
+        spokenResponse: spoken,
+        spokenReply: spoken,
+        action: {
+          type: "MULTI_STEP_PLAN",
+          description: "Search Wikipedia for " + query,
+          multiStepPlan: {
+            planTitle: "Search Wikipedia",
+            spokenIntro: spoken,
+            steps: [
+              {
+                stepNumber: 1,
+                description: "Open Wikipedia",
+                actionType: "NAVIGATE_URL",
+                params: { url: "https://wikipedia.org/" },
+                status: "pending",
+                estimatedDurationMs: 1200
+              },
+              {
+                stepNumber: 2,
+                description: "Find and click the Wikipedia search box",
+                actionType: "VISION_CLICK_TARGET",
+                params: { targetLabel: "search bar", targetIntent: "search" },
+                status: "pending",
+                estimatedDurationMs: 900
+              },
+              {
+                stepNumber: 3,
+                description: "Type " + query,
+                actionType: "TYPE_INPUT",
+                params: { text: query },
+                status: "pending",
+                estimatedDurationMs: 500
+              },
+              {
+                stepNumber: 4,
+                description: "Submit the Wikipedia search",
+                actionType: "KEY_PRESS",
+                params: { key: "ENTER" },
+                status: "pending",
+                estimatedDurationMs: 300
+              }
+            ],
+            spokenCompletion: "I searched Wikipedia for " + query + ".",
+            currentStepIndex: 0,
+            status: "idle"
+          }
+        }
+      };
+    }
   }
   // [contextual-site-search] generic site routing installed
   // Handle both explicit commands ('open wikipedia and search for magic') and
@@ -1653,6 +1718,10 @@ Return ONLY valid JSON matching this structure:
       };
     }
 
+    // Keep Gemini on the same desktop-intent normalization path as Ollama.
+    // This converts raw Gemini desktop actions into the MULTI_STEP_PLAN shape expected by App.tsx.
+    parsed = normalizeDesktopIntent(message, parsed, visionContext);
+    
     const spoken = parsed.spokenResponse || parsed.spokenReply || "How can I assist you?";
     res.json({
       ...parsed,
@@ -1735,7 +1804,9 @@ Rules: return at most 8 detectedElements; prioritize clickable/input controls; o
           messages: [
             {
               role: "user",
-              content: `Find the active application and visible actionable controls. Return only the compact JSON schema above.`,
+              content: `${prompt}
+
+Find the active application and visible actionable controls. Follow the target-specific instruction above exactly. Return only the compact JSON schema above.`,
               images: [cleanBase64],
             },
           ],
@@ -1985,17 +2056,16 @@ function validateAgentPlan(plan: any) {
       normalized.params = { timeoutMs: Math.round(timeoutMs), intervalMs: Math.round(intervalMs) };
     }
     if (actionType === "NAVIGATE_URL") {
+      // [browser-2d-browser-param-v4]
       const url = String(normalized.params.url || "").trim();
       let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(url);
-      } catch {
-        throw new Error("Planner URL is invalid.");
-      }
-      if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2048) {
-        throw new Error("Planner URL is not allowed.");
-      }
-      normalized.params = { url };
+      try { parsedUrl = new URL(url); } catch { throw new Error("Planner URL is invalid."); }
+      if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2048) throw new Error("Planner URL is not allowed.");
+      const browserRaw = String(normalized.params.browser || normalized.params.browserName || "").trim().toLowerCase();
+      const browser = browserRaw.replace(/\s+browser$/i, "");
+      const allowedBrowsers = new Set(["", "browser", "chrome", "google chrome", "brave", "brave browser", "edge", "microsoft edge", "opera", "opera browser", "vivaldi", "vivaldi browser"]);
+      if (!allowedBrowsers.has(browser)) throw new Error("Planner browser is not allowed: " + browser + ".");
+      normalized.params = { url, ...(browser ? { browser } : {}) };
     }
     if (["MOVE_MOUSE", "CLICK_BUTTON", "DOUBLE_CLICK", "RIGHT_CLICK"].includes(actionType)) {
       for (const [key, max] of [["x", 1280], ["y", 800]] as const) {
@@ -2211,3 +2281,4 @@ export function shutdownServer(): Promise<void> {
 }
 
 start();
+
