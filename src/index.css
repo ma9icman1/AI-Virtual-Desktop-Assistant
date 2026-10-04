@@ -386,8 +386,8 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 .avatar2d-status {
   position: relative;
   min-height: 27px;
-  width: 280px;
-  max-width: 280px;
+  width: 140px;
+  max-width: 140px;
   padding: 0 11px;
   border: 1px solid #168cff;
   border-radius: 14px;
@@ -427,8 +427,8 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 .avatar2d-toolbar {
   position: relative;
-  width: 340px;
-  max-width: 340px;
+  width: 170px;
+  max-width: 170px;
   min-height: 52px;
   padding: 0 8px;
   border: 1px solid #168cff;
