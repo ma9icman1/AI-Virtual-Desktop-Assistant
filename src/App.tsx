@@ -1881,7 +1881,11 @@ export default function App() {
             audioLevel={audioLevel}
             onSpeakGreeting={triggerMagicGreeting}
             onToggleListening={handleToggleListening}
-            onToggleFullView={() => setExperienceMode("full")}
+            onToggleFullView={() => {
+              setAvatarMode("2d");
+              setExperienceMode("full");
+              (window as any).magicWindow?.setOverlayMode(false);
+            }}
             onSwitchMode={(mode) => setAvatarMode(mode === "avatar" ? "3d" : "2d")}
             status={assistantState}
             voiceNotice={voiceNotice}
@@ -1980,7 +1984,8 @@ export default function App() {
                     onToggleListening={handleToggleListening}
                     onToggleFullView={() => {
                       setAvatarMode("2d");
-                      setExperienceMode("model");
+                      setExperienceMode("full");
+                      (window as any).magicWindow?.setOverlayMode(false);
                     }}
                     onSwitchMode={(mode) => {
                       if (mode === "avatar") {
