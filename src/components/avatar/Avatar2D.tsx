@@ -175,6 +175,40 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     return () => window.clearTimeout(blinkTimeout);
   }, []);
 
+  // Electron ignores mouse input in overlay mode so the browser below stays interactive.
+  // Temporarily enable mouse input when the pointer is over the avatar controls.
+  useEffect(() => {
+    const controls = containerRef.current?.querySelector(".avatar2d-controls");
+    if (!controls) return;
+
+    let interactive = false;
+    let raf = 0;
+    const updateHitState = (clientX: number, clientY: number) => {
+      const rect = controls.getBoundingClientRect();
+      const inside =
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom;
+
+      if (inside !== interactive) {
+        interactive = inside;
+        (window as any).magicWindow?.setOverlayInteractive?.(inside);
+      }
+    };
+
+    const onMove = (event: MouseEvent) => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => updateHitState(event.clientX, event.clientY));
+    };
+
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+      if (interactive) (window as any).magicWindow?.setOverlayInteractive?.(false);
+    };
+  }, []);
   // 3. Simulated 3D Parallax Mouse Tracker
   useEffect(() => {
     if (!enableParallax) return;
