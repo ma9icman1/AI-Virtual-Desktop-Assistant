@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -1957,10 +1957,8 @@ export default function App() {
                       setExperienceMode("model");
                     }}
                     onSwitchMode={(mode) => {
-                      if (mode === "avatar") {
-                        setAvatarMode("3d");
-                        setExperienceMode("model");
-                      }
+                      setAvatarMode(mode === "avatar" ? "3d" : "2d");
+                      setExperienceMode("model");
                     }}
                     status={assistantState}
                     voiceNotice={voiceNotice}
