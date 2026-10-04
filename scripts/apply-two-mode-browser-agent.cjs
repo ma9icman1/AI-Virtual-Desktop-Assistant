@@ -46,7 +46,7 @@ if (main.includes(permissionBlock) && !main.includes("browserControl.resume();")
 const killBlock = "  desktopKilled = true;\n  desktopPermission = \"none\";";
 if (main.includes(killBlock) && !main.includes("activeDesktopChildren.forEach")) main = main.replace(killBlock, killBlock + '\n  for (const child of activeDesktopChildren) { try { child.kill("SIGKILL"); } catch {} }\n  activeDesktopChildren.clear();\n  browserControl.stopAll("Emergency stop triggered by user.");');
 
-if (!main.includes('globalShortcut.register("CommandOrControl+Shift+S"')) {
+const emergencyShortcutNeedle = '  globalShortcut.register("CommandOrControl+Alt+Escape", () => {\n    desktopKilled = true;\n    desktopPermission = "none";';\nif (main.includes(emergencyShortcutNeedle) && !main.includes("[two-mode-cdp] emergency shortcut hardened")) main = main.replace(emergencyShortcutNeedle, emergencyShortcutNeedle + '\n    // [two-mode-cdp] emergency shortcut hardened\n    for (const child of activeDesktopChildren) { try { child.kill("SIGKILL"); } catch {} }\n    activeDesktopChildren.clear();\n    browserControl.stopAll("Emergency stop key.");');\n\nif (!main.includes('globalShortcut.register("CommandOrControl+Shift+S"')) {
   const shortcuts = "  globalShortcut.register(\"CommandOrControl+Shift+S\", () => {\n" +
     "    desktopKilled = true; desktopPermission = \"none\";\n" +
     "    for (const child of activeDesktopChildren) { try { child.kill(\"SIGKILL\"); } catch {} }\n" +
