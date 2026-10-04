@@ -2190,7 +2190,9 @@ ipcMain.on("magic-window-overlay-interaction", (event, interactive) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || typeof interactive !== "boolean") return;
 
-  // Overlay is click-through except while the pointer is over the avatar controls.
+  // Renderer mouse events do not fire while the Electron window is click-through,
+  // so this IPC is only a manual fallback. The overlay layout handler below uses
+  // the OS cursor position to make the control strip interactive reliably.
   window.setIgnoreMouseEvents(!interactive, { forward: true });
 });
 
@@ -2202,10 +2204,40 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
   // [browser-2d-clickthrough-v3]
   // The 2.5D avatar is visual only. Forward mouse events so the browser below
   // remains the real interaction target.
-  window.setIgnoreMouseEvents(overlayMode, { forward: true });
   window.setAlwaysOnTop(overlayMode, "screen-saver");
 
   if (overlayMode) {
+    // Electron cannot receive renderer mousemove events while click-through is
+    // enabled. Poll the real Windows cursor instead and only make the small
+    // bottom-center control strip interactive. Everything else remains
+    // click-through to the browser/desktop underneath.
+    window.setIgnoreMouseEvents(true, { forward: true });
+
+    if (window.__avatarControlPoll) clearInterval(window.__avatarControlPoll);
+    window.__avatarControlPoll = setInterval(() => {
+      if (window.isDestroyed()) return;
+      const bounds = window.getBounds();
+      const cursor = screen.getCursorScreenPoint();
+
+      const localX = cursor.x - bounds.x;
+      const localY = cursor.y - bounds.y;
+
+      // Status + toolbar occupy the centered bottom portion of the 430x620
+      // overlay. Keep a generous hit area so the tiny controls are easy to use.
+      const inControlStrip =
+        localX >= Math.max(0, bounds.width / 2 - 200) &&
+        localX <= Math.min(bounds.width, bounds.width / 2 + 200) &&
+        localY >= bounds.height - 125 &&
+        localY <= bounds.height - 5;
+
+      window.setIgnoreMouseEvents(!inControlStrip, { forward: true });
+    }, 40);
+  } else {
+    if (window.__avatarControlPoll) {
+      clearInterval(window.__avatarControlPoll);
+      window.__avatarControlPoll = null;
+    }
+    window.setIgnoreMouseEvents(false, { forward: true });
     const workArea = screen.getPrimaryDisplay().workArea;
     const width = 430;
     const height = 620;
