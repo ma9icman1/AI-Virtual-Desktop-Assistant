@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("magicWindow", {
   moveBy: (deltaX, deltaY) => ipcRenderer.send("magic-window-move", deltaX, deltaY),
   setOverlayMode: (overlayMode) => ipcRenderer.send("magic-window-layout", overlayMode),
   setOverlayInteractive: (interactive) => ipcRenderer.send("magic-window-overlay-interaction", interactive),
+  setOverlayControlRect: (rect) => ipcRenderer.send("magic-window-overlay-control-rect", rect),
   close: () => ipcRenderer.send("magic-window-close"),
   minimize: () => ipcRenderer.send("magic-window-minimize"),
   toggleMaximize: () => ipcRenderer.send("magic-window-toggle-maximize"),
