@@ -175,6 +175,25 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     return () => window.clearTimeout(blinkTimeout);
   }, []);
 
+  // TEMP DEBUG: trace whether native mouse events reach the transparent 2.5D renderer.
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      const hit = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      console.log("[2.5D DEBUG] pointerdown", {
+        x: event.clientX,
+        y: event.clientY,
+        target: target?.tagName,
+        targetClass: target?.className,
+        hit: hit?.tagName,
+        hitClass: hit?.className,
+        controls: Boolean(hit?.closest?.(".avatar2d-controls")),
+      });
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    return () => window.removeEventListener("pointerdown", handlePointerDown, true);
+  }, []);
+
   // 3. Simulated 3D Parallax Mouse Tracker
   useEffect(() => {
     if (!enableParallax) return;
@@ -305,7 +324,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onToggleListening && (
             <button
               type="button"
-              onClick={onToggleListening}
+              onClick={() => { console.log("[2.5D DEBUG] MIC click"); onToggleListening(); }}
               className={`avatar2d-tool avatar2d-tool-mic transition-all cursor-pointer ${
                 isListening
                   ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
@@ -320,7 +339,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onSpeakGreeting && (
             <button
               type="button"
-              onClick={onSpeakGreeting}
+              onClick={() => { console.log("[2.5D DEBUG] SPEAKER click"); onSpeakGreeting(); }}
               className="avatar2d-tool transition-all cursor-pointer"
               title="Test Voice Greeting"
             >
@@ -331,7 +350,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onSwitchMode && (
             <button
               type="button"
-              onClick={() => onSwitchMode("avatar")}
+              onClick={() => { console.log("[2.5D DEBUG] LAYERS click"); onSwitchMode("avatar"); }}
               className="avatar2d-tool transition-all cursor-pointer"
               title="Switch to 3D Model View"
             >
@@ -342,7 +361,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onToggleFullView && (
             <button
               type="button"
-              onClick={onToggleFullView}
+              onClick={() => { console.log("[2.5D DEBUG] EXPAND click"); onToggleFullView(); }}
               className="avatar2d-tool transition-all cursor-pointer"
               title="Toggle Full Desktop View"
             >
