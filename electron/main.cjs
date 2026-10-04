@@ -910,6 +910,39 @@ function normalizedHostname(value) {
 
 
 async function captureDesktopRegion(params = {}) {
+  if (["BROWSER_NAVIGATE", "BROWSER_GET_PAGE", "BROWSER_CLICK_TEXT", "BROWSER_TYPE", "BROWSER_SCREENSHOT"].includes(action)) {
+    const browser = String(params.browser || "chrome").trim().toLowerCase();
+    if (!["chrome", "brave", "edge"].includes(browser)) {
+      throw new Error("Browser mode supports Chrome, Brave, and Edge only.");
+    }
+    const executable = resolveBrowserExecutable(browser);
+    if (!executable) throw new Error("Could not find " + browser + ".");
+    const base = {
+      browser,
+      executable,
+      appDataDir: app.getPath("userData"),
+      url: String(params.url || "about:blank")
+    };
+    if (action === "BROWSER_NAVIGATE") {
+      return await browserControl.navigate({ ...base, url: String(params.url || "") });
+    }
+    if (action === "BROWSER_GET_PAGE") return await browserControl.getPage(base);
+    if (action === "BROWSER_CLICK_TEXT") {
+      return await browserControl.clickText({
+        ...base,
+        text: params.text || params.targetLabel
+      });
+    }
+    if (action === "BROWSER_TYPE") {
+      return await browserControl.typeInto({
+        ...base,
+        text: params.text,
+        targetLabel: params.targetLabel
+      });
+    }
+    return await browserControl.screenshot(base);
+  }
+
   const display = screen.getPrimaryDisplay();
   const visionSize = getVisionCanvasSize(display, AI_SCREEN_WIDTH);
   const sources = await desktopCapturer.getSources({
@@ -1675,6 +1708,13 @@ public static class MagicPasteInput {
 
 
 
+
+
+
+
+
+
+
   'KEY_PRESS' {
     $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
     $vk = switch ($key) {
@@ -2281,6 +2321,42 @@ async function createWindow() {
   }
 
   
+
+  globalShortcut.register("CommandOrControl+Shift+S", () => {
+    desktopKilled = true;
+    desktopPermission = "none";
+    for (const child of activeDesktopChildren) {
+      try { child.kill("SIGKILL"); } catch {}
+    }
+    activeDesktopChildren.clear();
+    browserControl.stopAll("Global STOP shortcut.");
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("desktop-control-killed", {
+          reason: "Global STOP shortcut (Ctrl+Shift+S)."
+        });
+      }
+    });
+  });
+
+  globalShortcut.register("CommandOrControl+Shift+H", async () => {
+    try {
+      const result = await captureDesktopRegion({
+        x: 0,
+        y: 0,
+        width: AI_SCREEN_WIDTH,
+        height: 720
+      });
+
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send("desktop-help-screenshot", result);
+        }
+      });
+    } catch (error) {
+      console.warn("[HELP MODE]", error?.message || error);
+    }
+  });
 
   globalShortcut.register("CommandOrControl+Alt+Escape", () => {
     desktopKilled = true;

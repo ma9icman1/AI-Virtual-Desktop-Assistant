@@ -486,3 +486,35 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
   .avatar2d-tool { height: 58px; }
   .avatar2d-tool svg { width: 34px !important; height: 34px !important; }
 }
+
+
+/* computer-agent two-mode STOP control */
+.ma9ic-brand-kill {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.ma9ic-brand-kill:hover .ma9ic-brand-logo {
+  filter: drop-shadow(0 0 16px rgba(255,55,95,.95));
+  transform: scale(1.04);
+}
+
+.ma9ic-brand-kill:active .ma9ic-brand-logo {
+  transform: scale(.96);
+}
+
+.ma9ic-brand-title-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
