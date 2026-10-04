@@ -2150,12 +2150,6 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || typeof overlayMode !== "boolean") return;
 
-  // [browser-2d-clickthrough-v3]
-  // The 2.5D avatar is visual only. Forward mouse events so the browser below
-  // remains the real interaction target.
-  window.setIgnoreMouseEvents(overlayMode, { forward: true });
-  window.setAlwaysOnTop(overlayMode, "screen-saver");
-
   if (overlayMode) {
     const workArea = screen.getPrimaryDisplay().workArea;
     const width = 430;
