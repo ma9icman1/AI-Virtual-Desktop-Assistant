@@ -343,7 +343,7 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 
-/* 2.5D compact/taskbar avatar — small dock */
+/* 2.5D compact/taskbar avatar — reference-matched Nova dock */
 .avatar2d-shell {
   min-width: 300px;
   min-height: 300px;
@@ -352,12 +352,12 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 .avatar2d-stage {
-  width: min(100%, 520px);
-  height: min(100%, 650px);
-  min-height: 360px;
+  width: min(100%, 620px);
+  height: min(100%, 720px);
+  min-height: 500px;
   align-items: flex-end;
   justify-content: center;
-  margin-top: -12px;
+  margin-top: -18px;
 }
 
 .avatar2d-stage > .relative {
@@ -377,75 +377,74 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
   left: 50%;
   bottom: 18px;
   transform: translateX(-50%);
-  width: min(68%, 520px);
-  gap: 2px;
+  width: min(92%, 680px);
+  gap: 8px;
 }
 
 .avatar2d-status {
   position: relative;
-  min-height: 32px;
-  min-width: 0;
-  width: 82%;
-  padding: 0 15px;
-  border: 1px solid #168cff;
-  border-radius: 18px;
+  min-height: 54px;
+  width: min(78%, 560px);
+  padding: 0 22px;
+  border: 2px solid #168cff;
+  border-radius: 28px;
   background: linear-gradient(180deg, rgba(5,18,36,.97), rgba(2,9,22,.97));
   color: #e9f7ff;
-  font-size: 12px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: .1px;
   box-shadow:
-    0 0 3px rgba(0,145,255,.95),
-    0 0 7px rgba(0,113,255,.58),
-    inset 0 0 5px rgba(0,95,190,.16);
+    0 0 8px rgba(0,145,255,.95),
+    0 0 20px rgba(0,113,255,.58),
+    inset 0 0 16px rgba(0,95,190,.16);
 }
 
 .avatar2d-status::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -8px;
-  width: 13px;
-  height: 13px;
+  bottom: -12px;
+  width: 20px;
+  height: 20px;
   background: #061426;
-  border-right: 1px solid #168cff;
-  border-bottom: 1px solid #168cff;
+  border-right: 2px solid #168cff;
+  border-bottom: 2px solid #168cff;
   transform: translateX(-50%) rotate(45deg);
-  box-shadow: 2px 2px 5px rgba(0,100,255,.12);
+  box-shadow: 4px 4px 8px rgba(0,100,255,.12);
 }
 
 .avatar2d-status-dot {
   flex: 0 0 auto;
-  width: 5px !important;
-  height: 5px !important;
+  width: 10px !important;
+  height: 10px !important;
   background: #00e6a5 !important;
-  box-shadow: 0 0 4px #00e6a5, 0 0 6px rgba(0,230,165,.65);
+  box-shadow: 0 0 8px #00e6a5, 0 0 14px rgba(0,230,165,.65);
   animation: none !important;
 }
 
 .avatar2d-toolbar {
   position: relative;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 5px;
-  border: 1px solid #168cff;
-  border-radius: 17px;
+  width: min(100%, 680px);
+  min-height: 104px;
+  padding: 0 16px;
+  border: 2px solid #168cff;
+  border-radius: 52px;
   background: linear-gradient(180deg, rgba(5,18,36,.98), rgba(2,9,22,.98));
   box-shadow:
-    0 0 3px rgba(0,145,255,.95),
-    0 0 8px rgba(0,113,255,.52),
-    inset 0 0 7px rgba(0,95,190,.14);
+    0 0 8px rgba(0,145,255,.95),
+    0 0 24px rgba(0,113,255,.52),
+    inset 0 0 24px rgba(0,95,190,.14);
 }
 
 .avatar2d-tool {
   position: relative;
   flex: 1 1 0;
-  height: 22px;
-  min-width: 22px;
+  height: 68px;
+  min-width: 62px;
   display: grid;
   place-items: center;
   border: 0;
-  border-right: 1px solid rgba(67,129,190,.42);
+  border-right: 2px solid rgba(67,129,190,.42);
   border-radius: 0;
   background: transparent;
   color: #dceeff;
@@ -458,10 +457,10 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 }
 
 .avatar2d-tool svg {
-  width: 13px !important;
-  height: 13px !important;
+  width: 40px !important;
+  height: 40px !important;
   stroke-width: 1.9;
-  filter: drop-shadow(0 0 4px rgba(44,163,255,.35));
+  filter: drop-shadow(0 0 7px rgba(44,163,255,.35));
 }
 
 .avatar2d-tool:hover {
@@ -480,12 +479,12 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 
 @media (max-width: 720px) {
   .avatar2d-shell { min-width: 100%; }
-  .avatar2d-stage { min-height: 320px; }
-  .avatar2d-controls { width: 82%; bottom: 12px; }
-  .avatar2d-status { min-width: 0; width: 90%; font-size: 10px; min-height: 28px; padding: 0 10px; }
-  .avatar2d-toolbar { min-height: 46px; }
-  .avatar2d-tool { height: 32px; }
-  .avatar2d-tool svg { width: 20px !important; height: 20px !important; }
+  .avatar2d-stage { min-height: 430px; }
+  .avatar2d-controls { width: 92%; bottom: 12px; }
+  .avatar2d-status { width: 78%; font-size: 15px; min-height: 44px; padding: 0 16px; }
+  .avatar2d-toolbar { min-height: 82px; width: 92%; }
+  .avatar2d-tool { height: 54px; }
+  .avatar2d-tool svg { width: 30px !important; height: 30px !important; }
 }
 
 
