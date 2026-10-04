@@ -95,7 +95,13 @@ export default function App() {
   const [showActivityPanel, setShowActivityPanel] = useState(true);
   const [activityText, setActivityText] = useState("");
   const [guiBlurred, setGuiBlurred] = useState(true);
-  const [permissionLevel, setPermissionLevel] = useState<PermissionLevel>("none");
+  const [permissionLevel, setPermissionLevel] = useState<PermissionLevel>(() => {
+    try {
+      return localStorage.getItem("ma9icai_desktop_permission") === "always" ? "always" : "none";
+    } catch {
+      return "none";
+    }
+  });
   const [pendingPlan, setPendingPlan] = useState<MultiStepPlan | null>(null);
   const [isPermissionOpen, setIsPermissionOpen] = useState(false);
   const [isTakeControlOpen, setIsTakeControlOpen] = useState(false);
@@ -295,8 +301,28 @@ export default function App() {
     takeControlOpenRef.current = isTakeControlOpen;
   }, [isTakeControlOpen]);
 
+  // [persistent-desktop-permission-v1]
+  useEffect(() => {
+    if (permissionLevel === "always") {
+      (window as any).magicDesktop?.setPermission("always");
+    }
+  }, [permissionLevel]);
+
   const setDesktopPermission = useCallback((level: PermissionLevel) => {
     setPermissionLevel(level);
+    if (level === "always") {
+      try {
+        localStorage.setItem("ma9icai_desktop_permission", "always");
+      } catch {
+        // Persistent storage can be unavailable; the current session still works.
+      }
+    } else if (level === "deny") {
+      try {
+        localStorage.removeItem("ma9icai_desktop_permission");
+      } catch {
+        // Ignore storage cleanup failures.
+      }
+    }
     (window as any).magicDesktop?.setPermission(level);
   }, []);
 
