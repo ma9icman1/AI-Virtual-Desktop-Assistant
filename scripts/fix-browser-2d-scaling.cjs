@@ -6,6 +6,8 @@ const { execFileSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const mainPath = path.join(repoRoot, "electron", "main.cjs");
+const serverPath = path.join(repoRoot, "server.ts");
+const appPath = path.join(repoRoot, "src", "App.tsx");
 const backupPath = `${mainPath}.browser-2d-backup`;
 
 if (!fs.existsSync(mainPath)) {
@@ -15,17 +17,14 @@ if (!fs.existsSync(mainPath)) {
 const source = fs.readFileSync(mainPath, "utf8");
 const browserMarker = "// [browser-2d-scaling-v3]";
 const clickThroughMarker = "// [browser-2d-clickthrough-v3]";
+const navFixMarker = "// [browser-2d-nav-fix-v4]";
 let next = source;
 
-// This script is intentionally idempotent. The build pipeline runs several
-// source-repair scripts before this one, so do not require one exact copy of
-// the surrounding detectWebpage implementation. Locate the small, stable
-// active-window/maximize span and replace that span atomically.
+// The build pipeline has several source-repair passes before this script.
+// Keep the browser detection patch structural and idempotent.
 if (!next.includes(browserMarker)) {
   const detectStart = next.indexOf("async function detectWebpage(");
-  if (detectStart < 0) {
-    throw new Error("[browser-2d-scaling] detectWebpage() was not found. Refusing to modify files.");
-  }
+  if (detectStart < 0) throw new Error("[browser-2d-scaling] detectWebpage() was not found. Refusing to modify files.");
 
   const lookupMatch = /(?:const|let|var)\s+info\s*=\s*await\s+getActiveWindowInfo\(\);/.exec(next.slice(detectStart));
   const lookupStart = lookupMatch ? detectStart + lookupMatch.index : -1;
@@ -34,18 +33,13 @@ if (!next.includes(browserMarker)) {
   const nextFunction = next.indexOf("async function ", lookupStart + 1);
 
   if (lookupStart < 0 || lookupEnd < 0 || (nextFunction >= 0 && lookupEnd > nextFunction)) {
-    throw new Error(
-      "[browser-2d-scaling] Could not safely locate the detectWebpage active-window lookup. Refusing to modify files."
-    );
+    throw new Error("[browser-2d-scaling] Could not safely locate the detectWebpage active-window lookup. Refusing to modify files.");
   }
 
   const lineStart = next.lastIndexOf("\n", lookupStart) + 1;
   const originalBlock = next.slice(lineStart, lookupEnd + maximizeToken.length);
-
   if (!/getActiveWindowInfo\(\)/.test(originalBlock) || !/maximizeWindow\(info\.hwnd\)/.test(originalBlock)) {
-    throw new Error(
-      "[browser-2d-scaling] Current detectWebpage active-window block is structurally different. Refusing to modify files."
-    );
+    throw new Error("[browser-2d-scaling] Current detectWebpage active-window block is structurally different. Refusing to modify files.");
   }
 
   const replacement = `    // [browser-2d-scaling-v3]
@@ -79,44 +73,79 @@ if (!next.includes(browserMarker)) {
   next = next.slice(0, lineStart) + replacement + next.slice(lookupEnd + maximizeToken.length);
 }
 
+// [browser-2d-nav-fix-v4]
+// The old direct-site-open handler returned before the canonical NAVIGATE_URL
+// implementation below. That bypassed named-browser selection, webpage
+// verification, and browser maximization. Remove that stale early-return block.
+if (!next.includes(navFixMarker)) {
+  const staleMarker = "// [direct-site-open-v3]";
+  const staleStart = next.indexOf(staleMarker);
+  if (staleStart >= 0) {
+    const debugToken = "  console.log(`[DEBUG ACTION] action=";
+    const debugStart = next.indexOf(debugToken, staleStart);
+    if (debugStart < 0) {
+      throw new Error("[browser-2d-scaling] Could not locate the canonical desktop-action log after the stale URL handler.");
+    }
+    const replacement = `  // [browser-2d-nav-fix-v4]\n  // Direct URL handling is implemented by the canonical NAVIGATE_URL branch\n  // below. Never return early here, or named Chrome/Brave/Edge requests would\n  // silently fall back to the Windows default browser.\n`;
+    next = next.slice(0, staleStart) + replacement + next.slice(debugStart);
+  } else {
+    // The stale block may already be absent in a future source revision.
+    next = next.replace(/(async function executeDesktopAction\(action, params = \{\}\) \{\n)/, `$1  // [browser-2d-nav-fix-v4] canonical NAVIGATE_URL handler is authoritative.\n`);
+  }
+}
+
 if (!next.includes(clickThroughMarker)) {
   const layoutStart = next.indexOf('ipcMain.on("magic-window-layout", (event, overlayMode) => {');
-  const overlayStart = layoutStart >= 0
-    ? next.indexOf('  if (overlayMode) {', layoutStart)
-    : -1;
-
+  const overlayStart = layoutStart >= 0 ? next.indexOf('  if (overlayMode) {', layoutStart) : -1;
   if (layoutStart < 0 || overlayStart < 0) {
-    throw new Error(
-      "[browser-2d-scaling] Current magic-window-layout block does not match the checked-in source. Refusing to modify files."
-    );
+    throw new Error("[browser-2d-scaling] Current magic-window-layout block does not match the checked-in source. Refusing to modify files.");
   }
-
-  const replacement = `  // [browser-2d-clickthrough-v3]
-  // The 2.5D avatar is visual only. Forward mouse events so the browser below
-  // remains the real interaction target.
-  window.setIgnoreMouseEvents(overlayMode, { forward: true });
-  window.setAlwaysOnTop(overlayMode, "screen-saver");
-
-`;
+  const replacement = `  // [browser-2d-clickthrough-v3]\n  // The 2.5D avatar is visual only. Forward mouse events so the browser below\n  // remains the real interaction target.\n  window.setIgnoreMouseEvents(overlayMode, { forward: true });\n  window.setAlwaysOnTop(overlayMode, "screen-saver");\n\n`;
   next = next.slice(0, overlayStart) + replacement + next.slice(overlayStart);
 }
 
 if (next !== source) {
-  if (!fs.existsSync(backupPath)) {
-    fs.copyFileSync(mainPath, backupPath);
-  }
-
-  // Write only after every expected target was found. Then syntax-check the
-  // resulting file; restore the backup automatically if validation fails.
+  if (!fs.existsSync(backupPath)) fs.copyFileSync(mainPath, backupPath);
   fs.writeFileSync(mainPath, next, "utf8");
   try {
     execFileSync(process.execPath, ["--check", mainPath], { stdio: "pipe" });
   } catch (error) {
     fs.copyFileSync(backupPath, mainPath);
-    throw new Error(
-      `[browser-2d-scaling] Modified main.cjs failed Node syntax validation; original restored. ${error?.message || error}`
-    );
+    throw new Error(`[browser-2d-scaling] Modified main.cjs failed Node syntax validation; original restored. ${error?.message || error}`);
   }
 }
 
-console.log("[browser-2d-scaling] browser targeting + 2.5D click-through applied and syntax-validated");
+// Preserve the named browser through plan validation. Without this, the
+// deterministic router can correctly identify Chrome/Brave/Edge and then the
+// planner silently strips the browser field before Electron receives it.
+if (fs.existsSync(serverPath)) {
+  const serverSource = fs.readFileSync(serverPath, "utf8");
+  const serverMarker = "// [browser-2d-browser-param-v4]";
+  if (!serverSource.includes(serverMarker)) {
+    const navBlock = /if \(actionType === "NAVIGATE_URL"\) \{[\s\S]*?normalized\.params = \{ url \};\n    \}/;
+    if (!navBlock.test(serverSource)) {
+      throw new Error("[browser-2d-scaling] Could not locate NAVIGATE_URL validation block in server.ts.");
+    }
+    const patched = serverSource.replace(navBlock, `if (actionType === "NAVIGATE_URL") {\n      // [browser-2d-browser-param-v4]\n      const url = String(normalized.params.url || "").trim();\n      let parsedUrl: URL;\n      try {\n        parsedUrl = new URL(url);\n      } catch {\n        throw new Error("Planner URL is invalid.");\n      }\n      if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2048) {\n        throw new Error("Planner URL is not allowed.");\n      }\n      const browserRaw = String(normalized.params.browser || normalized.params.browserName || "").trim().toLowerCase();\n      const browser = browserRaw.replace(/\\s+browser$/i, "");\n      const allowedBrowsers = new Set(["", "browser", "chrome", "google chrome", "brave", "brave browser", "edge", "microsoft edge", "opera", "opera browser", "vivaldi", "vivaldi browser"]);\n      if (!allowedBrowsers.has(browser)) throw new Error(`Planner browser is not allowed: ${browser}.`);\n      normalized.params = { url, ...(browser ? { browser } : {}) };\n    }`);
+    fs.writeFileSync(serverPath, patched, "utf8");
+  }
+}
+
+// Vision clicks must enter the 2.5D overlay mode BEFORE the screenshot is
+// captured. The previous code only switched to 2.5D for Roblox login, so normal
+// webpage searches (including YouTube search) captured the full assistant window
+// and never activated the 2.5D browser interaction mode.
+if (fs.existsSync(appPath)) {
+  const appSource = fs.readFileSync(appPath, "utf8");
+  const appMarker = "// [browser-2d-vision-mode-v4]";
+  if (!appSource.includes(appMarker)) {
+    const target = `    if (normalizedType === "VISION_CLICK_TARGET") {\n      const frame = await VisionService.captureScreenFrame();`;
+    if (!appSource.includes(target)) {
+      throw new Error("[browser-2d-scaling] Could not locate VISION_CLICK_TARGET capture block in App.tsx.");
+    }
+    const replacement = `    if (normalizedType === "VISION_CLICK_TARGET") {\n      // [browser-2d-vision-mode-v4]\n      // Enter the small click-through 2.5D assistant view before capturing the\n      // browser. This keeps the assistant out of the page controls and makes\n      // the screenshot/coordinate map represent the real browser surface.\n      console.log("[VISION CLICK TARGET] enabling 2.5D browser interaction mode");\n      setAvatarMode("2d");\n      setExperienceMode("model");\n      await new Promise((resolve) => setTimeout(resolve, 650));\n      const frame = await VisionService.captureScreenFrame();`;
+    fs.writeFileSync(appPath, appSource.replace(target, replacement), "utf8");
+  }
+}
+
+console.log("[browser-2d-scaling] browser targeting + named-browser routing + 2.5D vision mode applied and syntax-validated");
