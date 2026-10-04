@@ -14,6 +14,8 @@ SAMPLE_RATE = 16_000
 FRAME_MS = 30
 FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 MODEL_NAME = os.environ.get("MAGIC_WHISPER_MODEL", "small.en")
+WHISPER_BEAM_SIZE = max(1, int(os.environ.get("MAGIC_WHISPER_BEAM_SIZE", "1")))
+WHISPER_BEST_OF = max(1, int(os.environ.get("MAGIC_WHISPER_BEST_OF", "1")))
 
 
 def emit(kind, value="", confidence="0.9"):
@@ -31,10 +33,11 @@ def transcribe(model, samples):
         audio,
         language="en",
         task="transcribe",
-        beam_size=5,
-        best_of=5,
+        beam_size=WHISPER_BEAM_SIZE,
+        best_of=WHISPER_BEST_OF,
         vad_filter=True,
         condition_on_previous_text=False,
+        without_timestamps=True,
         initial_prompt=(
             "Magic, hey Magic, okay Magic, ma9icAI, magic AI, magic eye, "
             "Edge, Firefox, Chrome, browser, click, type, open, close, search, screen."
@@ -143,7 +146,6 @@ def main():
                             stop_recording.set()
                             break
                         elif command == "START":
-                            # Ignore duplicate START presses while already recording.
                             emit("COMMAND_IGNORED", "START while recording", "1")
                     except queue.Empty:
                         pass
@@ -185,7 +187,6 @@ def main():
                                 silence_frames = 0
                                 emit("SPEECH_END", "1", "1")
 
-                # Always flush captured audio when the user stops the mic.
                 if speaking and speech:
                     transcribe(model, np.concatenate(speech))
                 elif audio_history:
