@@ -2185,6 +2185,15 @@ ipcMain.handle("magic-ollama-download", async (event, model) => {
   }
 });
 
+ipcMain.on("magic-window-overlay-interaction", (event, interactive) => {
+  assertTrustedRenderer(event);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || typeof interactive !== "boolean") return;
+
+  // Overlay is click-through except while the pointer is over the avatar controls.
+  window.setIgnoreMouseEvents(!interactive, { forward: true });
+});
+
 ipcMain.on("magic-window-layout", (event, overlayMode) => {
   assertTrustedRenderer(event);
   const window = BrowserWindow.fromWebContents(event.sender);
