@@ -346,11 +346,17 @@ body.desktop-shell, body.desktop-shell #root { background:#020611 !important; }
 /* Overlay transparency: the 2.5D canvas must reveal the real Windows desktop.
    Keep the Nova controls' own backgrounds intact; only the avatar canvas layers
    are forced transparent. */
+/* 2.5D overlay: absolutely no painted canvas/background behind Nova. */
+body.avatar-overlay,
+body.avatar-overlay #root,
 body.avatar-overlay .avatar2d-shell,
 body.avatar-overlay .avatar2d-stage,
-body.avatar-overlay .avatar2d-stage > .relative {
+body.avatar-overlay .avatar2d-stage > .relative,
+body.avatar-overlay .avatar2d-stage > .relative > div {
   background: transparent !important;
+  background-color: rgba(0,0,0,0) !important;
   background-image: none !important;
+  box-shadow: none !important;
 }
 
 /* 2.5D compact/taskbar avatar — reference-matched Nova dock */
