@@ -145,7 +145,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
   // login click separate so the model can never turn "Roblox and login"
   // into an unsafe LAUNCH_APP app name.
   const robloxLoginMatch = commandText.match(
-    /^(?:please\s+)?(?:open|go\s+to|visit|load|browse\s+to)\s+roblox(?:\s+website)?\s+and\s+(?:log\s*[- ]?in|login|sign\s*[- ]?in)\s*$/i
+    /^(?:please\s+)?(?:open|go\s+to|visit|load|browse\s+to)\s*(?:roblox(?:\.com)?|roblox\s+com)(?:\s+website)?\s+and\s+(?:log\s*[- ]?in|login|sign\s*[- ]?in)(?:\s+for\s+me)?\s*$/i
   );
   if (robloxLoginMatch) {
     const url = "https://roblox.com";
@@ -1392,6 +1392,58 @@ async function getOllamaStatus(): Promise<{ online: boolean; models: any[] }> {
   }
 }
 
+// Live weather integration powered by python-weather's wttr.in data source.
+// We call wttr.in directly from the Node server so no Python runtime is required.
+async function getLiveWeatherByIp(): Promise<any> {
+  const response = await fetch("https://wttr.in/?format=j1", {
+    headers: { "User-Agent": "ma9ic-ai-weather/1.0", Accept: "application/json" },
+    signal: AbortSignal.timeout(7000),
+  });
+  if (!response.ok) throw new Error(`Weather service returned HTTP ${response.status}`);
+  const data: any = await response.json();
+  if (!data?.current_condition?.[0] || !data?.weather?.[0]) {
+    throw new Error("Weather service returned incomplete live data.");
+  }
+  return data;
+}
+
+function getWeatherIntent(message: string): "current" | "forecast" | "rain" | null {
+  const text = message.toLowerCase().replace(/[!?.,]+/g, " ").replace(/\s+/g, " ").trim();
+  if (/\b(?:is it|will it|are we)\s+(?:going to|gonna)\s+rain\b|\bchance of rain\b|\bwill it rain\b/.test(text)) return "rain";
+  if (/\b(?:weather forecast|forecast|forecast for|weather this week|weather tomorrow|weather today and tomorrow)\b/.test(text)) return "forecast";
+  if (/\b(?:weather|what(?:'s| is) the weather|how(?:'s| is) the weather|temperature|how hot|how cold)\b/.test(text)) return "current";
+  return null;
+}
+
+function formatWeatherResponse(data: any, intent: "current" | "forecast" | "rain"): string {
+  const current = data.current_condition[0];
+  const today = data.weather[0];
+  const location = data.nearest_area?.[0];
+  const place = location?.areaName?.[0]?.value || location?.region?.[0]?.value || "your area";
+  const temp = current.temp_F;
+  const feels = current.FeelsLikeF;
+  const condition = current.weatherDesc?.[0]?.value || "unknown conditions";
+  const chance = Number(today.hourly?.reduce((max: number, hour: any) => Math.max(max, Number(hour.chanceofrain || 0)), 0) || 0);
+
+  if (intent === "rain") {
+    return chance > 0
+      ? `Yes. There is about a ${chance}% chance of rain in ${place} today.`
+      : `No. The live forecast shows a 0% chance of rain in ${place} today.`;
+  }
+
+  if (intent === "forecast") {
+    const days = data.weather.slice(0, 3).map((day: any) => {
+      const date = day.date;
+      const desc = day.hourly?.[4]?.weatherDesc?.[0]?.value || day.hourly?.[0]?.weatherDesc?.[0]?.value || "mixed conditions";
+      const rain = Math.max(...(day.hourly || []).map((hour: any) => Number(hour.chanceofrain || 0)), 0);
+      return `${date}: high ${day.maxtempF}°F, low ${day.mintempF}°F, ${desc}, rain chance up to ${rain}%`;
+    });
+    return `Here's the live forecast for ${place}. ${days.join(". ")}.`;
+  }
+
+  return `In ${place}, it's ${temp}°F and ${condition}, feeling like ${feels}°F.`;
+}
+
 // Helper: Invoke local Ollama chat endpoint
 async function callOllamaChat(params: {
   model?: string;
@@ -1649,6 +1701,72 @@ app.post("/api/chat", async (req, res) => {
     }
 
     const configuredAssistantName = typeof assistantName === "string" && assistantName.trim() ? assistantName.trim().slice(0, 32) : "Nova";
+
+    // Joke requests are deterministic: use the Official Joke API instead of
+    // asking Ollama/Gemini to invent a joke. This also prevents a follow-up
+    // "tell me a joke" after weather from falling back to the model's canned reply.
+    const jokeIntent = /\b(?:tell|give|share|read)\s+(?:me\s+)?(?:a\s+)?(?:funny\s+)?joke\b/i.test(message)
+      || /\b(?:another|one)\s+joke\b/i.test(message)
+      || /^\s*joke\s*[!?.,]*$/i.test(message);
+    if (jokeIntent) {
+      try {
+        const jokeResponse = await fetch("https://official-joke-api.appspot.com/random_joke", {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!jokeResponse.ok) {
+          throw new Error(`Official Joke API returned HTTP ${jokeResponse.status}`);
+        }
+        const joke = await jokeResponse.json() as any;
+        const setup = String(joke?.setup || "").trim();
+        const punchline = String(joke?.punchline || "").trim();
+        if (!setup || !punchline) {
+          throw new Error("Official Joke API returned an incomplete joke.");
+        }
+        const spokenJoke = `${setup} ${punchline}`;
+        return res.json({
+          spokenResponse: spokenJoke,
+          spokenReply: spokenJoke,
+          action: { type: "NONE", description: "Live joke lookup" },
+          status: "complete",
+          provider: "official-joke-api",
+        });
+      } catch (jokeError: any) {
+        console.warn("[Joke] Live lookup failed:", jokeError?.message || jokeError);
+        return res.json({
+          spokenResponse: "I couldn't reach the live joke service right now. Please try again in a moment.",
+          spokenReply: "I couldn't reach the live joke service right now. Please try again in a moment.",
+          action: { type: "NONE", description: "Live joke lookup failed" },
+          status: "idle",
+          warning: String(jokeError?.message || jokeError),
+        });
+      }
+    }
+
+    const weatherIntent = getWeatherIntent(message);
+    if (weatherIntent) {
+      try {
+        const weatherData = await getLiveWeatherByIp();
+        const spokenWeather = formatWeatherResponse(weatherData, weatherIntent);
+        return res.json({
+          spokenResponse: spokenWeather,
+          spokenReply: spokenWeather,
+          action: { type: "NONE", description: "Live weather lookup" },
+          status: "complete",
+          provider: "python-weather/wttr.in",
+        });
+      } catch (weatherError: any) {
+        console.warn("[Weather] Live lookup failed:", weatherError?.message || weatherError);
+        return res.json({
+          spokenResponse: "I couldn't reach the live weather service right now. Please try again in a moment.",
+          spokenReply: "I couldn't reach the live weather service right now. Please try again in a moment.",
+          action: { type: "NONE", description: "Live weather lookup failed" },
+          status: "idle",
+          warning: String(weatherError?.message || weatherError),
+        });
+      }
+    }
+
     const systemPrompt = `You are "${configuredAssistantName}", a sophisticated, friendly, articulate, highly capable AI desktop assistant inside the ma9ic AI app.
 Persona: Composed, attentive, clear, proactive, and elegant.
 Voice response style: Concise, spoken-friendly, conversational, direct (under 40 words).
@@ -1690,7 +1808,7 @@ Return ONLY valid JSON matching this structure:
     if (useOllama) {
       try {
         const chatMessages = [
-          ...history.slice(-8).map((h: any) => ({
+          ...history.slice(-4).map((h: any) => ({
             role: h.role === "assistant" ? "assistant" : "user",
             content: h.content,
           })),
@@ -1706,7 +1824,7 @@ Return ONLY valid JSON matching this structure:
           (model, index, models) => model && models.indexOf(model) === index
         )) {
           try {
-            rawContent = await callOllamaChat({ model, systemPrompt, messages: chatMessages, formatJson: true });
+            rawContent = await callOllamaChat({ model, systemPrompt, messages: chatMessages, formatJson: true, options: { temperature: 0.2, num_ctx: 4096, num_predict: 180 } });
             lastChatError = null;
             break;
           } catch (error) {
@@ -1758,7 +1876,7 @@ Return ONLY valid JSON matching this structure:
     // Gemini Execution Path
     const ai = getAI();
     const contents = [
-      ...history.slice(-8).map((h: any) => ({
+      ...history.slice(-4).map((h: any) => ({
         role: h.role === "assistant" ? "model" : "user",
         parts: [{ text: h.content }],
       })),
