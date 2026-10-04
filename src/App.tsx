@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+﻿import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   AssistantState,
   ChatMessage,
@@ -275,7 +275,7 @@ export default function App() {
         {
           id: `msg-kill-${Date.now()}`,
           role: "system",
-          content: `⚠️ **Emergency Stop Triggered**: ${payload?.reason || "Desktop automation was halted."}`,
+          content: `âš ï¸ **Emergency Stop Triggered**: ${payload?.reason || "Desktop automation was halted."}`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -366,6 +366,11 @@ export default function App() {
     }
 
     if (normalizedType === "VISION_CLICK_TARGET") {
+      // [browser-2d-vision-mode-v4]
+      console.log("[VISION CLICK TARGET] enabling 2.5D browser interaction mode");
+      setAvatarMode("2d");
+      setExperienceMode("model");
+      await new Promise((resolve) => setTimeout(resolve, 650));
       const frame = await VisionService.captureScreenFrame();
       const imageData = frame.image;
       console.log("[VISION CLICK TARGET] screenshot captured", {
@@ -999,6 +1004,14 @@ export default function App() {
       setAssistantState("executing");
       setShowActivityPanel(true);
 
+      // A multi-step voice command is one approved desktop operation. If the
+      // user chose "one action", temporarily scope that approval to the whole
+      // plan so step 1 cannot consume it before step 2 (vision/UI automation).
+      const planUsesOneActionPermission = permissionLevel === "one_action";
+      if (planUsesOneActionPermission) {
+        setDesktopPermission("one_session");
+      }
+
       const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];
       const steps = rawSteps.filter((step: any) => step && typeof step === "object" && String(step.actionType || "").trim());
       console.log("[PLAN EXECUTOR] received plan", {
@@ -1012,6 +1025,7 @@ export default function App() {
         })),
       });
       if (!steps.length) {
+        if (planUsesOneActionPermission) setDesktopPermission("none");
         setAssistantState("error");
         setShowActivityPanel(false);
         VoiceEngine.speak("The assistant created an empty desktop action plan.", () => setAssistantState("idle"));
@@ -1061,6 +1075,8 @@ export default function App() {
             coordinateSpace: steps[i].params?.coordinateSpace,
             visionWidth: steps[i].params?.visionWidth,
             visionHeight: steps[i].params?.visionHeight,
+            coordMap: steps[i].params?.coordMap,
+            coordMapString: steps[i].params?.coordMapString,
           });
 
           // Web navigation/search is followed immediately by a visual scan so
@@ -1111,6 +1127,7 @@ export default function App() {
                 : msg
             )
           );
+          if (planUsesOneActionPermission) setDesktopPermission("none");
           setAssistantState("error");
           setShowActivityPanel(false);
           VoiceEngine.speak(`Desktop control stopped: ${reason}`, () => setAssistantState("idle"));
@@ -1120,6 +1137,7 @@ export default function App() {
 // Step completed
       }
 
+      if (planUsesOneActionPermission) setDesktopPermission("none");
       setAssistantState("speaking");
       const completionText = plan.spokenCompletion || "I have completed all steps in the plan.";
       VoiceEngine.speak(completionText, () => {
@@ -1128,7 +1146,7 @@ export default function App() {
         setShowActivityPanel(false);
       });
     },
-    [executeDesktopAction]
+    [executeDesktopAction, permissionLevel, setDesktopPermission]
   );
 
   // Screen Capture & Multimodal Vision Analysis (Gemini Flash OCR)
@@ -1280,7 +1298,7 @@ export default function App() {
       await VoiceEngine.startListening();
       setIsListening(true);
       setAssistantState("listening");
-      setVoiceNotice("Wake word active — say Magic.");
+      setVoiceNotice("Wake word active â€” say Magic.");
     } catch (error) {
       VoiceEngine.setWakeWordMode(false);
       setIsListening(false);
@@ -1540,9 +1558,9 @@ export default function App() {
       VoiceEngine.setWakeWordMode(false);
       setIsListening(true);
       setAssistantState("listening");
-      setVoiceNotice("Starting microphone…");
+      setVoiceNotice("Starting microphoneâ€¦");
       VoiceEngine.startListening().then(() => {
-        setVoiceNotice("Microphone active — speak now.");
+        setVoiceNotice("Microphone active â€” speak now.");
       }).catch((error) => {
         setIsListening(false);
         setAssistantState("error");
@@ -1708,7 +1726,7 @@ export default function App() {
 
   const dashboardPrompts = [
     { title: 'Open Chrome', sub: 'Launch applications', icon: <AppWindow />, prompt: 'Open Chrome' },
-    { title: "What’s the weather today?", sub: 'Get information', icon: <Globe2 />, prompt: "What's the weather today?" },
+    { title: "Whatâ€™s the weather today?", sub: 'Get information', icon: <Globe2 />, prompt: "What's the weather today?" },
     { title: 'Show me my desktop', sub: 'Window management', icon: <Monitor />, prompt: 'Show me my desktop' },
     { title: 'Set a timer for 10 minutes', sub: 'Productivity tools', icon: <Settings />, prompt: 'Set a timer for 10 minutes' },
     { title: 'Open my documents', sub: 'File & folder access', icon: <FolderOpen />, prompt: 'Open my documents' },
@@ -1765,7 +1783,7 @@ export default function App() {
                 <div className="ma9ic-brand-title">ma9icAI</div>
               </div>
             </button>
-            <div className="ma9ic-header-tagline">✦ Your AI. Your Desktop. Your Control.</div>
+            <div className="ma9ic-header-tagline">âœ¦ Your AI. Your Desktop. Your Control.</div>
             <div className="ma9ic-header-actions">
               <button
                 type="button"
@@ -1849,7 +1867,7 @@ export default function App() {
                   <h2>{activeSection}</h2>
                   <p>Use the controls below or choose an action from the sidebar.</p>
                   {activeSection === 'Apps & Tools' && <button onClick={() => runDashboardPrompt('Open an app')} className="ma9ic-placeholder-action"><AppWindow /> Open an App</button>}
-                  {activeSection === 'About' && <p className="ma9ic-about-copy">ma9icAI — your AI virtual desktop assistant for voice, vision, desktop control and local models.</p>}
+                  {activeSection === 'About' && <p className="ma9ic-about-copy">ma9icAI â€” your AI virtual desktop assistant for voice, vision, desktop control and local models.</p>}
                 </div>
               )}
 
@@ -1933,7 +1951,7 @@ export default function App() {
                 <Cpu className="h-5 w-5 text-cyan-300" />
                 <div>
                   <h2 className="text-sm font-semibold text-white">AI model menu</h2>
-                  <p className="text-[11px] text-slate-400">{ollamaConfig?.ollamaOnline ? `Ollama online · ${ollamaConfig.ollamaHost}` : "Ollama is offline or not installed"}</p>
+                  <p className="text-[11px] text-slate-400">{ollamaConfig?.ollamaOnline ? `Ollama online Â· ${ollamaConfig.ollamaHost}` : "Ollama is offline or not installed"}</p>
                 </div>
               </div>
               <button
@@ -1980,14 +1998,14 @@ export default function App() {
               </div>
               <div className="mt-3 space-y-2">
                 {[
-                  { name: "qwen2.5vl:3b", label: "Qwen 2.5 VL 3B", note: "Vision + text · 4-8 GB VRAM" },
-                  { name: "minicpm-v", label: "MiniCPM-V", note: "Vision + text · 4-8 GB VRAM" },
-                  { name: "llama3.2:3b", label: "Llama 3.2 3B", note: "Text assistant · 4-8 GB VRAM" },
+                  { name: "qwen2.5vl:3b", label: "Qwen 2.5 VL 3B", note: "Vision + text Â· 4-8 GB VRAM" },
+                  { name: "minicpm-v", label: "MiniCPM-V", note: "Vision + text Â· 4-8 GB VRAM" },
+                  { name: "llama3.2:3b", label: "Llama 3.2 3B", note: "Text assistant Â· 4-8 GB VRAM" },
                 ].map((model) => (
                   <div key={model.name} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-2.5 py-2">
                     <div className="min-w-0">
                       <p className="truncate text-[11px] font-semibold text-slate-100">{model.label}</p>
-                      <p className="font-mono text-[9px] text-slate-500">{model.name} · {model.note}</p>
+                      <p className="font-mono text-[9px] text-slate-500">{model.name} Â· {model.note}</p>
                     </div>
                     <button
                       type="button"
@@ -1998,7 +2016,7 @@ export default function App() {
                         try {
                           const result = await (window as any).magicWindow?.downloadOllama?.(model.name);
                           if (!result?.ok) throw new Error(result?.error || "Could not start the model download.");
-                          setOllamaNotice(`Downloading ${model.name}…`);
+                          setOllamaNotice(`Downloading ${model.name}â€¦`);
                           void refreshOllamaConfig();
                         } catch (error) {
                           setDownloadingOllamaModel(null);
@@ -2019,7 +2037,7 @@ export default function App() {
                 <Terminal className="h-4 w-4 text-emerald-300" />
                 <div>
                   <p className="text-xs font-semibold text-white">Start Ollama MiniCPM-V</p>
-                  <p className="mt-1 font-mono text-[10px] text-slate-400">ollama serve · local API :11434</p>
+                  <p className="mt-1 font-mono text-[10px] text-slate-400">ollama serve Â· local API :11434</p>
                 </div>
               </div>
               <button
@@ -2032,8 +2050,8 @@ export default function App() {
                     const result = await (window as any).magicWindow?.startOllama?.();
                     if (!result?.ok) throw new Error(result?.error || "Could not start Ollama.");
                     setOllamaNotice(result.models?.length
-                      ? `Ollama is online · ${result.models.length} installed model${result.models.length === 1 ? "" : "s"}.`
-                      : "Ollama is online. No models are installed yet — choose Install / Download above.");
+                      ? `Ollama is online Â· ${result.models.length} installed model${result.models.length === 1 ? "" : "s"}.`
+                      : "Ollama is online. No models are installed yet â€” choose Install / Download above.");
                     await refreshOllamaConfig();
                   } catch (error) {
                     setOllamaActionError(error instanceof Error ? error.message : "Could not start Ollama.");
@@ -2095,3 +2113,4 @@ export default function App() {
     </div>
   );
 }
+
