@@ -62,7 +62,7 @@ const patch = `  ${marker}
         windowsHide: false,
       });
       await new Promise((resolve, reject) => {
-        child.once("error", (error) => reject(new Error(`Windows could not navigate ${targetBrowser}: ${error.message}`)));
+        child.once("error", (error) => reject(new Error(\`Windows could not navigate ${targetBrowser}: ${error.message}\`)));
         child.once("spawn", resolve);
       });
       child.unref();
