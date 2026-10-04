@@ -220,18 +220,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       className={`avatar2d-shell relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent select-none ${className}`}
       style={{ perspective: "1000px" }}
     >
-      {/* Background Ambient Glow Ring */}
-      <div
-        className="absolute w-[460px] h-[460px] rounded-full blur-3xl pointer-events-none transition-all duration-700"
-        style={{
-          background: isSpeaking
-            ? "radial-gradient(circle, rgba(6,182,212,0.3) 0%, rgba(99,102,241,0.2) 50%, transparent 70%)"
-            : isListening
-            ? "radial-gradient(circle, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.2) 50%, transparent 70%)"
-            : "radial-gradient(circle, rgba(99,102,241,0.15) 0%, rgba(14,165,233,0.08) 50%, transparent 70%)",
-          transform: `scale(${1 + audioLevel * 0.4})`,
-        }}
-      />
+      {/* Ambient glow disabled in 2.5D overlay so the real Windows desktop remains visible. */}
 
       {/* 2.5D Parallax Stage */}
       <div
