@@ -24,10 +24,7 @@ if (!source.includes(stateMarker)) {
   throw new Error("[persistent-desktop-permission] permission state marker not found; refusing to modify App.tsx.");
 }
 
-const setterMarker = `  const setDesktopPermission = useCallback((level: PermissionLevel) => {
-    setPermissionLevel(level);
-    (window as any).magicDesktop?.setPermission(level);
-  }, []);`;
+const setterPattern = /  const setDesktopPermission = useCallback\(\(level: PermissionLevel\) => \{\r?\n    setPermissionLevel\(level\);\r?\n    \(window as any\)\.magicDesktop\?\.setPermission\(level\);\r?\n  \}, \[\]\);/;
 
 const setterReplacement = `  // [persistent-desktop-permission-v1]
   const setDesktopPermission = useCallback((level: PermissionLevel) => {
@@ -48,13 +45,13 @@ const setterReplacement = `  // [persistent-desktop-permission-v1]
     (window as any).magicDesktop?.setPermission(level);
   }, []);`;
 
-if (!source.includes(setterMarker)) {
+if (!setterPattern.test(source)) {
   throw new Error("[persistent-desktop-permission] desktop permission setter marker not found; refusing to modify App.tsx.");
 }
 
 const updated = source
   .replace(stateMarker, stateReplacement)
-  .replace(setterMarker, setterReplacement);
+  .replace(setterPattern, setterReplacement);
 
 const finalSource = updated.replace(
   '  const setDesktopPermission = useCallback((level: PermissionLevel) => {',
