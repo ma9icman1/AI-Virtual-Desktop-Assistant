@@ -28,12 +28,8 @@ if (!next.includes(browserMarker)) {
   const nextFunction = next.indexOf("async function ", lookupStart + 1);
   if (lookupStart < 0 || lookupEnd < 0 || (nextFunction >= 0 && lookupEnd > nextFunction)) throw new Error("[browser-2d-scaling] Could not safely locate the detectWebpage active-window lookup. Refusing to modify files.");
   const lineStart = next.lastIndexOf("\n", lookupStart) + 1;
-  const originalBlock = next.slice(lineStart, lookupEnd + maximizeToken.length);
-  if (!/getActiveWindowInfo\(\)/.test(originalBlock) || !/maximizeWindow\(info\.hwnd\)/.test(originalBlock)) throw new Error("[browser-2d-scaling] Current detectWebpage active-window block is structurally different. Refusing to modify files.");
   const replacement = `    // [browser-2d-scaling-v3]
-    // The 2.5D avatar can be the foreground Electron window. Do not let that
-    // steal browser detection. Prefer the foreground browser, then locate a
-    // visible browser window by process and use its real HWND/PID.
+    // Prefer a foreground browser, then locate a visible browser window by process.
     let info = await getActiveWindowInfo();
     let process = normalizeProcessName(info.process);
 
@@ -57,7 +53,8 @@ if (!next.includes(browserMarker)) {
 
     if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
       await maximizeWindow(info.hwnd);`;
-  next = next.slice(0, lineStart) + replacement + next.slice(lookupEnd + maximizeToken.length);
+  const maximizeTokenEnd = lookupEnd + maximizeToken.length;
+  next = next.slice(0, lineStart) + replacement + next.slice(maximizeTokenEnd);
 }
 
 if (!next.includes(navFixMarker)) {
@@ -68,9 +65,8 @@ if (!next.includes(navFixMarker)) {
     const debugStart = next.indexOf(debugToken, staleStart);
     if (debugStart < 0) throw new Error("[browser-2d-scaling] Could not locate the canonical desktop-action log after the stale URL handler.");
     const replacement = `  // [browser-2d-nav-fix-v4]
-  // Direct URL handling is implemented by the canonical NAVIGATE_URL branch
-  // below. Never return early here, or named Chrome/Brave/Edge requests would
-  // silently fall back to the Windows default browser.
+  // Direct URL handling is implemented by the canonical NAVIGATE_URL branch below.
+  // Never return early here or named browser requests can fall back to the default browser.
 `;
     next = next.slice(0, staleStart) + replacement + next.slice(debugStart);
   } else {
@@ -83,8 +79,7 @@ if (!next.includes(clickThroughMarker)) {
   const overlayStart = layoutStart >= 0 ? next.indexOf('  if (overlayMode) {', layoutStart) : -1;
   if (layoutStart < 0 || overlayStart < 0) throw new Error("[browser-2d-scaling] Current magic-window-layout block does not match the checked-in source. Refusing to modify files.");
   const replacement = `  // [browser-2d-clickthrough-v3]
-  // The 2.5D avatar is visual only. Forward mouse events so the browser below
-  // remains the real interaction target.
+  // The 2.5D avatar is visual only. Forward mouse events so the browser below remains the real interaction target.
   window.setIgnoreMouseEvents(overlayMode, { forward: true });
   window.setAlwaysOnTop(overlayMode, "screen-saver");
 
@@ -108,24 +103,27 @@ if (fs.existsSync(serverPath)) {
   if (!serverSource.includes(serverMarker)) {
     const navBlock = /if \(actionType === "NAVIGATE_URL"\) \{[\s\S]*?normalized\.params = \{ url \};\n    \}/;
     if (!navBlock.test(serverSource)) throw new Error("[browser-2d-scaling] Could not locate NAVIGATE_URL validation block in server.ts.");
-    const patched = serverSource.replace(navBlock, `if (actionType === "NAVIGATE_URL") {
-      // [browser-2d-browser-param-v4]
-      const url = String(normalized.params.url || "").trim();
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(url);
-      } catch {
-        throw new Error("Planner URL is invalid.");
-      }
-      if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2048) {
-        throw new Error("Planner URL is not allowed.");
-      }
-      const browserRaw = String(normalized.params.browser || normalized.params.browserName || "").trim().toLowerCase();
-      const browser = browserRaw.replace(/\\s+browser$/i, "");
-      const allowedBrowsers = new Set(["", "browser", "chrome", "google chrome", "brave", "brave browser", "edge", "microsoft edge", "opera", "opera browser", "vivaldi", "vivaldi browser"]);
-      if (!allowedBrowsers.has(browser)) throw new Error(`Planner browser is not allowed: \${browser}.`);
-      normalized.params = { url, ...(browser ? { browser } : {}) };
-    }`);
+    const replacementLines = [
+      'if (actionType === "NAVIGATE_URL") {',
+      '      // [browser-2d-browser-param-v4]',
+      '      const url = String(normalized.params.url || "").trim();',
+      '      let parsedUrl: URL;',
+      '      try {',
+      '        parsedUrl = new URL(url);',
+      '      } catch {',
+      '        throw new Error("Planner URL is invalid.");',
+      '      }',
+      '      if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2048) {',
+      '        throw new Error("Planner URL is not allowed.");',
+      '      }',
+      '      const browserRaw = String(normalized.params.browser || normalized.params.browserName || "").trim().toLowerCase();',
+      '      const browser = browserRaw.replace(/\\s+browser$/i, "");',
+      '      const allowedBrowsers = new Set(["", "browser", "chrome", "google chrome", "brave", "brave browser", "edge", "microsoft edge", "opera", "opera browser", "vivaldi", "vivaldi browser"]);',
+      '      if (!allowedBrowsers.has(browser)) throw new Error("Planner browser is not allowed: " + browser + ".");',
+      '      normalized.params = { url, ...(browser ? { browser } : {}) };',
+      '    }',
+    ].join("\n");
+    const patched = serverSource.replace(navBlock, replacementLines);
     fs.writeFileSync(serverPath, patched, "utf8");
   }
 }
@@ -139,9 +137,6 @@ if (fs.existsSync(appPath)) {
     if (!appSource.includes(target)) throw new Error("[browser-2d-scaling] Could not locate VISION_CLICK_TARGET capture block in App.tsx.");
     const replacement = `    if (normalizedType === "VISION_CLICK_TARGET") {
       // [browser-2d-vision-mode-v4]
-      // Enter the small click-through 2.5D assistant view before capturing the
-      // browser. This keeps the assistant out of the page controls and makes
-      // the screenshot/coordinate map represent the real browser surface.
       console.log("[VISION CLICK TARGET] enabling 2.5D browser interaction mode");
       setAvatarMode("2d");
       setExperienceMode("model");
