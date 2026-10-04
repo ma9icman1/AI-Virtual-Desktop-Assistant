@@ -139,13 +139,16 @@ if (text.includes(marker)) {
 
 if (text.includes(oldMarker)) {
   const start = text.indexOf(oldMarker);
-  const endToken = "\n\n  console.log(`[DEBUG ACTION] action=";
-  const end = text.indexOf(endToken, start);
+  // The old v3 block is a generated block and its exact DEBUG ACTION line has
+  // changed across revisions. Find the first ordinary console.log after the
+  // marker instead of depending on one exact template-literal spelling.
+  const consoleAnchor = "\n  console.log(";
+  const end = text.indexOf(consoleAnchor, start);
   if (end < 0) {
     throw new Error("[direct-site-open] existing v3 block end anchor is missing; refusing to modify files.");
   }
-  const blockStart = text.lastIndexOf("  ", start);
-  updated = text.slice(0, blockStart) + patch + text.slice(end);
+  const blockStart = text.lastIndexOf("\n", start) + 1;
+  updated = text.slice(0, blockStart) + patch + text.slice(end + 1);
 } else {
   updated = text.replace(anchor, anchor + "\n" + patch);
 }
