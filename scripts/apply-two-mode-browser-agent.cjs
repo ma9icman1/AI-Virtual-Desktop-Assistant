@@ -6,6 +6,7 @@ const mainPath = path.join(root, "electron", "main.cjs");
 const preloadPath = path.join(root, "electron", "preload.cjs");
 const appPath = path.join(root, "src", "App.tsx");
 const serverPath = path.join(root, "server.ts");
+const cssPath = path.join(root, "src", "index.css");
 
 function read(file) { if (!fs.existsSync(file)) throw new Error("[two-mode-cdp] Missing " + file); return fs.readFileSync(file, "utf8"); }
 function write(file, text) { fs.writeFileSync(file, text, "utf8"); }
@@ -101,4 +102,5 @@ if (server.includes(promptMarker) && !server.includes('"BROWSER_NAVIGATE": { "br
 const plannerList = '- "VISION_CLICK_TARGET": { "targetLabel": string, "targetIntent": "optional intent such as login" } (use for visually/semantically clicking a live webpage control)';
 if (server.includes(plannerList) && !server.includes("Prefer BROWSER_*")) server = server.replace(plannerList, plannerList + '\nPrefer BROWSER_* for browser tasks. Use VISION_CLICK_TARGET only when CDP cannot complete the browser task or the page is not accessible through browser automation.');
 write(serverPath, server);
+let css = read(cssPath);\nconst killCss = "\n/* computer-agent two-mode STOP control */\n.ma9ic-brand-kill { width:42px; height:42px; padding:0; border:0; background:none; cursor:pointer; display:grid; place-items:center; border-radius:12px; }\n.ma9ic-brand-kill:hover .ma9ic-brand-logo { filter:drop-shadow(0 0 16px rgba(255,55,95,.95)); transform:scale(1.04); }\n.ma9ic-brand-kill:active .ma9ic-brand-logo { transform:scale(.96); }\n.ma9ic-brand-title-btn { padding:0; border:0; background:none; color:inherit; cursor:pointer; text-align:left; }\n";\nif (!css.includes(".ma9ic-brand-kill")) write(cssPath, css + killCss);
 console.log("[two-mode-cdp] applied two-mode browser, stop, and help workflow");
