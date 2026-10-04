@@ -1,4 +1,11 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from "react";
+﻿import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import {
   AssistantState,
   ChatMessage,
@@ -447,12 +454,23 @@ export default function App() {
           const bExact = bText.includes(normalizeControlText(targetLabel)) ? 1 : 0;
           return bExact - aExact;
         })[0];
-      let point = target?.center || (target?.boundingBox
+      // [vision-bbox-center-v1]
+      // The model can return a stale/wrong "center" even when its boundingBox
+      // correctly surrounds the control. Always derive the click point from
+      // the bounding box when available.
+      let point = target?.boundingBox
         ? {
-            x: target.boundingBox.x + target.boundingBox.width / 2,
-            y: target.boundingBox.y + target.boundingBox.height / 2,
+            x: Number(target.boundingBox.x) + Number(target.boundingBox.width) / 2,
+            y: Number(target.boundingBox.y) + Number(target.boundingBox.height) / 2,
           }
-        : null);
+        : target?.center || null;
+
+      console.log("[VISION CLICK TARGET] calculated click point", {
+        label: target?.label,
+        boundingBox: target?.boundingBox,
+        modelCenter: target?.center,
+        calculatedPoint: point,
+      });
 
       // Roblox Sign In has a reliable native/browser fallback below. Do not
       // require the vision model to recognize the button before allowing that
@@ -1013,7 +1031,48 @@ export default function App() {
       }
 
       const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];
-      const steps = rawSteps.filter((step: any) => step && typeof step === "object" && String(step.actionType || "").trim());
+
+      // [youtube-executor-direct-v1]
+      // Never let a YouTube search plan fall through to vision clicking.
+      // Convert any YouTube search plan into one deterministic results URL.
+      let normalizedSteps = rawSteps;
+
+      const youtubeStep = rawSteps.find((step: any) =>
+        step &&
+        String(step.actionType || "").toUpperCase() === "NAVIGATE_URL" &&
+        /youtube\.com/i.test(String(step.params?.url || ""))
+      );
+
+      const youtubeSearchText = rawSteps
+        .map((step: any) => String(step?.description || ""))
+        .join(" ");
+
+      if (youtubeStep && /search/i.test(youtubeSearchText)) {
+        const originalUrl = String(youtubeStep.params?.url || "");
+        const searchMatch = originalUrl.match(/[?&]search_query=([^&]+)/i);
+
+        if (searchMatch) {
+          const query = decodeURIComponent(searchMatch[1]);
+          normalizedSteps = [{
+            ...youtubeStep,
+            description: "Open YouTube search results for " + query,
+            params: {
+              url: "https://www.youtube.com/results?search_query=" + encodeURIComponent(query)
+            }
+          }];
+
+          console.log("[PLAN EXECUTOR] YouTube direct-search override", {
+            query,
+            url: normalizedSteps[0].params.url
+          });
+        }
+      }
+
+      const steps = normalizedSteps.filter((step: any) =>
+        step &&
+        typeof step === "object" &&
+        String(step.actionType || "").trim()
+      );
       console.log("[PLAN EXECUTOR] received plan", {
         title: plan?.planTitle || "",
         stepCount: rawSteps.length,
@@ -1083,9 +1142,10 @@ export default function App() {
           // ma9icAI starts with a live understanding of the page it just opened.
           const completedActionType = String(steps[i].actionType).toUpperCase();
           if (["NAVIGATE_URL", "SEARCH_WEB"].includes(completedActionType)) {
-            // Give the live webpage time to finish painting before the first vision scan.
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            await captureScreenRef.current?.();
+            // Navigation/search actions are already verified by the desktop runtime.
+            // Do not automatically invoke vision here; deterministic destinations
+            // should not trigger an unnecessary Ollama screen-analysis pass.
+            await new Promise((resolve) => setTimeout(resolve, 500));
           } else if (completedActionType === "VISION_CLICK_TARGET") {
             // Observe again after a vision-driven click. This gives the assistant
             // a fresh page state for the next command instead of carrying stale
@@ -1432,11 +1492,58 @@ export default function App() {
 
         const spokenText = data?.spokenResponse || data?.spokenReply || "The assistant returned no response. Check the Ollama connection and selected model.";
 
+        // [youtube-ui-direct-v1]
+        // Force YouTube searches to deterministic results URLs.
+        // This prevents the vision agent from clicking the wrong search box.
+        let normalizedAction = data?.action;
+
+        const youtubeCommandMatch = text.trim().match(
+          /^(?:please\s+)?(?:open\s+)?youtube(?:\.com)?(?:\s+and)?\s+(?:search|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+        );
+
+        if (youtubeCommandMatch) {
+          const youtubeQuery = String(youtubeCommandMatch[1] || "")
+            .trim()
+            .replace(/[.!?]+$/g, "");
+
+          if (youtubeQuery) {
+            const youtubeUrl =
+              "https://www.youtube.com/results?search_query=" +
+              encodeURIComponent(youtubeQuery);
+
+            const youtubeSpoken =
+              "Opening YouTube and searching for " + youtubeQuery + ".";
+
+            normalizedAction = {
+              type: "MULTI_STEP_PLAN",
+              description: "Search YouTube for " + youtubeQuery,
+              multiStepPlan: {
+                planTitle: "Search YouTube",
+                spokenIntro: youtubeSpoken,
+                steps: [
+                  {
+                    stepNumber: 1,
+                    description: "Open YouTube search results for " + youtubeQuery,
+                    actionType: "NAVIGATE_URL",
+                    params: { url: youtubeUrl },
+                    status: "pending",
+                    estimatedDurationMs: 1500,
+                  },
+                ],
+                spokenCompletion:
+                  "I searched YouTube for " + youtubeQuery + ".",
+                currentStepIndex: 0,
+                status: "idle",
+              },
+            };
+          }
+        }
+
         const assistantMsg: ChatMessage = {
           id: `msg-asst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           role: "assistant",
           content: spokenText,
-          action: data.action,
+          action: normalizedAction,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         };
 
@@ -1464,10 +1571,10 @@ export default function App() {
         });
 
           // Handle specific actions if present
-          if (data.action?.type === "LAUNCH_APP" || data.action?.type === "OPEN_FILE") {
-          const appName = data.action.app || data.action.parameter || data.action.params?.app;
-            const filePath = data.action.path || data.action.parameter || data.action.params?.path;
-            const actionType = data.action.type;
+          if (normalizedAction?.type === "LAUNCH_APP" || normalizedAction?.type === "OPEN_FILE") {
+          const appName = normalizedAction.app || normalizedAction.parameter || normalizedAction.params?.app;
+            const filePath = normalizedAction.path || normalizedAction.parameter || normalizedAction.params?.path;
+            const actionType = normalizedAction.type;
             const plan: MultiStepPlan = {
               id: `launch-${Date.now()}`,
               planTitle: actionType === "OPEN_FILE" ? `Open ${filePath || "file"}` : `Open ${appName || "application"}`,
@@ -1492,13 +1599,13 @@ export default function App() {
           } else {
             executePlanSequence(plan);
           }
-        } else if (data.action?.type === "REMEMBER" && data.action.parameter) {
-          MemoryService.addMemory("Preference", data.action.parameter, "preference", "persistent");
+        } else if (normalizedAction?.type === "REMEMBER" && normalizedAction.parameter) {
+          MemoryService.addMemory("Preference", normalizedAction.parameter, "preference", "persistent");
           setMemories(MemoryService.getMemories());
-        } else if (data.action?.type === "SCREEN_ANALYSIS") {
+        } else if (normalizedAction?.type === "SCREEN_ANALYSIS") {
           handleCaptureScreen();
-        } else if (data.action?.type === "MULTI_STEP_PLAN" && data.action.multiStepPlan) {
-          const plan = data.action.multiStepPlan as MultiStepPlan;
+        } else if (normalizedAction?.type === "MULTI_STEP_PLAN" && normalizedAction.multiStepPlan) {
+          const plan = normalizedAction.multiStepPlan as MultiStepPlan;
           if (permissionLevel === "none" || permissionLevel === "deny") {
             setPendingPlan(plan);
             setIsPermissionOpen(true);
@@ -2113,4 +2220,11 @@ export default function App() {
     </div>
   );
 }
+
+
+
+
+
+
+
 

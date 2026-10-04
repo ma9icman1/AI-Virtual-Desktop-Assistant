@@ -25,18 +25,6 @@ const port = Number(process.env.MAGIC_PORT || 3210);
 // screen transform used by every pointer action.
 const AI_SCREEN_WIDTH = 1280;
 let desktopPermission = "none";
-let desktopPermissionLeaseTimer = null;
-
-function promoteOneActionPermissionForTask() {
-  if (desktopPermission !== "one_action") return;
-  desktopPermission = "one_session";
-  if (desktopPermissionLeaseTimer) clearTimeout(desktopPermissionLeaseTimer);
-  desktopPermissionLeaseTimer = setTimeout(() => {
-    if (desktopPermission === "one_session") desktopPermission = "none";
-    desktopPermissionLeaseTimer = null;
-  }, 30000);
-}
-
 let desktopKilled = false;
 let magicServerModule = null;
 let serverShutdownStarted = false;
@@ -522,7 +510,7 @@ Start-Sleep -Milliseconds 150
   const raw = await runPowerShell(script, [processName, String(requestedIndex), requestedAutomationId, requestedName]);
   let element;
   try { element = JSON.parse(raw || "{}"); } catch { throw new Error("Could not parse the selected web field."); }
-  promoteOneActionPermissionForTask();
+  if (desktopPermission === "one_action") desktopPermission = "none";
   return { ok: true, verified: true, method: "focus", element };
 }
 
@@ -568,7 +556,7 @@ try{$vp=$target.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Patt
 }
 `;
   const result = await runPowerShell(script, [String(target.pid || 0), String(target.automationId || ""), String(target.name || ""), value]);
-  promoteOneActionPermissionForTask();
+  if (desktopPermission === "one_action") desktopPermission = "none";
   return { ok: true, verified: true, method: result, element: target };
 }
 
@@ -729,30 +717,8 @@ async function detectWebpage(params = {}) {
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
-    // [browser-2d-scaling-v3]
-    // The 2.5D avatar can be the foreground Electron window. Do not let that
-    // steal browser detection. Prefer the foreground browser, then locate a
-    // visible browser window by process and use its real HWND/PID.
-    let info = await getActiveWindowInfo();
-    let process = normalizeProcessName(info.process);
-
-    if (!browserProcesses.has(process) || Number(info.hwnd) <= 0) {
-      const browserNames = Array.from(browserProcesses).map((name) => "'" + name + "'").join(",");
-      const browserWindowScript = [
-        "$names = @(" + browserNames + ")",
-        "$windows = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $names -contains $_.ProcessName.ToLowerInvariant() } | Sort-Object StartTime -Descending",
-        "$target = $windows | Select-Object -First 1",
-        "if ($target) { [pscustomobject]@{ hwnd=[int64]$target.MainWindowHandle; pid=[int]$target.Id; process=[string]$target.ProcessName; title=[string]$target.MainWindowTitle } | ConvertTo-Json -Compress }",
-      ].join("\n");
-      const browserWindowRaw = await runPowerShell(browserWindowScript).catch(() => "");
-      try {
-        const browserWindow = JSON.parse(browserWindowRaw || "{}");
-        if (Number(browserWindow.hwnd) > 0) {
-          info = browserWindow;
-          process = normalizeProcessName(browserWindow.process);
-        }
-      } catch {}
-    }
+    const info = await getActiveWindowInfo();
+    const process = normalizeProcessName(info.process);
 
     if (browserProcesses.has(process) && Number(info.hwnd) > 0) {
       await maximizeWindow(info.hwnd);
@@ -957,122 +923,30 @@ async function captureDesktopRegion(params = {}) {
 }
 
 async function executeDesktopAction(action, params = {}) {
-  // [direct-site-open-v4]
-  // Open website URLs directly through the requested browser when one was
-  // specified. Do not silently fall back to the Windows default browser for
-  // explicit Chrome/Brave/Edge requests.
+  // [direct-site-open-v3]
+  // Open website URLs directly through Electron/Windows instead of treating
+  // them as application names or sending them to web search.
   if (action === "NAVIGATE_URL") {
     const rawUrl = String(params.url || "").trim();
     if (!rawUrl) throw new Error("NAVIGATE_URL requires a URL.");
-
     let url;
     try {
       url = new URL(rawUrl);
     } catch {
       throw new Error("Invalid URL: " + rawUrl);
     }
-    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
-      throw new Error("Only valid HTTP and HTTPS URLs are allowed.");
+    if (!["http:", "https:"].includes(url.protocol)) {
+      throw new Error("Only HTTP and HTTPS URLs are allowed.");
     }
-
-    const requestedBrowser = String(params.browser || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+browser$/i, "");
-    const browserAliases = {
-      "microsoft edge": "edge",
-      "google chrome": "chrome",
-      "brave browser": "brave",
-      "mozilla firefox": "firefox",
-      "opera browser": "opera",
-      "vivaldi browser": "vivaldi",
-    };
-    const targetBrowser = browserAliases[requestedBrowser] || requestedBrowser;
-
-    if (targetBrowser === "firefox") {
-      throw new Error("Firefox browser automation is not supported in this version of ma9icAI. Use Chrome, Brave, or Edge.");
+    const errorMessage = await shell.openExternal(url.toString());
+    if (errorMessage) {
+      throw new Error("Windows could not open the default browser: " + errorMessage);
     }
-
-    let launchedBrowser = "default-browser";
-    if (targetBrowser && targetBrowser !== "browser") {
-      const executable = resolveBrowserExecutable(targetBrowser);
-      if (!executable) {
-        throw new Error("Could not find the requested browser: " + requestedBrowser + ".");
-      }
-
-      const child = spawn(executable, [url.toString()], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
-      });
-      await new Promise((resolve, reject) => {
-        child.once("error", (error) => reject(new Error("Windows could not navigate " + targetBrowser + ": " + error.message)));
-        child.once("spawn", resolve);
-      });
-      child.unref();
-      launchedBrowser = targetBrowser;
-    } else {
-      const errorMessage = await shell.openExternal(url.toString());
-      if (errorMessage) {
-        throw new Error("Windows could not open the default browser: " + errorMessage);
-      }
-    }
-
-    const expectedHost = normalizedHostname(url.toString());
-    let webpage = {
-      ok: true,
-      detected: false,
-      browser: "",
-      title: "",
-      url: "",
-      expectedHost,
-      elapsedMs: 0,
-    };
-    try {
-      webpage = await detectWebpage({
-        timeoutMs: 15000,
-        intervalMs: 350,
-        expectedHost,
-      });
-    } catch (verificationError) {
-      console.warn("[WEB NAV] Browser verification unavailable after launch; continuing with desktop vision.", verificationError);
-    }
-
-    const observedBrowser = normalizeProcessName(webpage.browser);
-    const observedHost = normalizedHostname(webpage.url);
-    const browserMatches = !targetBrowser || targetBrowser === "browser"
-      || !observedBrowser
-      || observedBrowser === targetBrowser;
-    const hostMatches = !observedHost || observedHost === expectedHost;
-
-    if (!webpage.detected || !browserMatches || !hostMatches) {
-      console.warn("[WEB NAV] Soft verification: launch succeeded but live browser verification was incomplete.", {
-        requestedUrl: url.toString(),
-        expectedHost,
-        targetBrowser: launchedBrowser,
-        detected: Boolean(webpage.detected),
-        observedBrowser: observedBrowser || null,
-        observedUrl: webpage.url || null,
-      });
-    }
-
-    promoteOneActionPermissionForTask();
-    return {
-      ok: true,
-      verified: Boolean(webpage.detected && browserMatches && hostMatches),
-      launched: true,
-      url: url.toString(),
-      browser: launchedBrowser,
-      webpage,
-      verification: {
-        expectedHost,
-        observedHost,
-        observedBrowser,
-        browserMatches,
-        hostMatches,
-      },
-    };
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (desktopPermission === "one_action") desktopPermission = "none";
+    return { ok: true, verified: true, launched: true, process: "default-browser", url: url.toString() };
   }
+
   console.log(`[DEBUG ACTION] action=${JSON.stringify(action)} params=${JSON.stringify(params)}`);
   if (desktopKilled || !["one_action", "one_session", "always"].includes(desktopPermission)) {
     throw new Error("Desktop control is not permitted.");
@@ -1115,7 +989,7 @@ async function executeDesktopAction(action, params = {}) {
       });
       child.unref();
       await new Promise((resolve) => setTimeout(resolve, 350));
-      promoteOneActionPermissionForTask();
+      if (desktopPermission === "one_action") desktopPermission = "none";
       return { ok: true, verified: true, process: "default-browser", requested };
     }
 
@@ -1147,7 +1021,7 @@ async function executeDesktopAction(action, params = {}) {
         throw new Error(`${normalizedBrowser} was launched, but Windows could not verify the browser process.`);
       }
 
-      promoteOneActionPermissionForTask();
+      if (desktopPermission === "one_action") desktopPermission = "none";
       return { ok: true, verified: true, process: normalizedBrowser, requested };
     }
 
@@ -1196,7 +1070,7 @@ Start-Sleep -Milliseconds 500
     // Do not run a second no-argument PowerShell script here because runPowerShell
     // initializes $scriptArgs from MAGIC_RUN_ARGS, and an empty argument list can
     // make ConvertFrom-Json fail before the application action completes.
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, process: requested };
   }
   if (action === "FOCUS_APP") {
@@ -1216,7 +1090,7 @@ if (-not [MagicFocus]::SetForegroundWindow($proc.MainWindowHandle)) { throw "Win
     await runPowerShell(script);
     const info = await getActiveWindowInfo();
     if (normalizeProcessName(info.process) !== requested) throw new Error(`Focus verification failed for ${requested}.`);
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, activeWindow: info };
   }
   if (action === "CLOSE_APP") {
@@ -1228,7 +1102,7 @@ if (-not [MagicFocus]::SetForegroundWindow($proc.MainWindowHandle)) { throw "Win
     await new Promise((resolve) => setTimeout(resolve, 250));
     const stillRunning = await verifyProcessRunning(processName);
     if (stillRunning) throw new Error(`Windows could not verify that ${requested} closed.`);
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, process: requested };
   }
   if (action === "OPEN_FOLDER") {
@@ -1237,7 +1111,7 @@ if (-not [MagicFocus]::SetForegroundWindow($proc.MainWindowHandle)) { throw "Win
     if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) throw new Error("Folder does not exist.");
     const errorMessage = await shell.openPath(folderPath);
     if (errorMessage) throw new Error(`Could not open folder: ${errorMessage}`);
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, path: folderPath };
   }
   if (action === "GET_ACTIVE_WINDOW") {
@@ -1307,7 +1181,7 @@ try {
 }
 `;
     const result = await runPowerShell(clickScript, [String(target.name || ""), String(target.automationId || ""), String(target.pid || 0)]);
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, method: result, element: target };
   }
   if (action === "OPEN_FILE") {
@@ -1331,7 +1205,7 @@ try {
 
     const errorMessage = await shell.openPath(resolvedPath);
     if (errorMessage) throw new Error(`Could not open file: ${errorMessage}`);
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return;
   }
   if (action === "NAVIGATE_URL") {
@@ -1406,7 +1280,7 @@ try {
       });
     }
 
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return {
       ok: true,
       verified: Boolean(webpage.detected && browserMatches && hostMatches),
@@ -1431,7 +1305,7 @@ try {
     const errorMessage = await shell.openExternal(searchUrl);
     if (errorMessage) throw new Error(`Could not open web search: ${errorMessage}`);
     const webpage = await detectWebpage({ timeoutMs: 5000 });
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, query, url: searchUrl, webpage };
   }
   if (action === "DETECT_WEBPAGE") {
@@ -1455,7 +1329,7 @@ try {
       "[MagicWindowState]::ShowWindow($proc.MainWindowHandle, " + mode + ") | Out-Null",
     ].join("\n");
     await runPowerShell(psLines);
-    promoteOneActionPermissionForTask();
+    if (desktopPermission === "one_action") desktopPermission = "none";
     return { ok: true, verified: true, process: requested, action };
   }
   if (action === "CAPTURE_REGION" || action === "SCREENSHOT_REGION" || action === "ZOOM") {
@@ -1647,34 +1521,6 @@ public static class MagicPasteInput {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   'KEY_PRESS' {
     $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
     $vk = switch ($key) {
@@ -1727,7 +1573,7 @@ public static class MagicKeyInput {
   console.log(`[DEBUG INPUT] actionArgs=${JSON.stringify(actionArgs)} textParam=${JSON.stringify(params.text)} keyParam=${JSON.stringify(params.key)}`);
   const result = await runPowerShell(script, actionArgs);
   console.log(`[DEBUG INPUT] result=${JSON.stringify(result)}`);
-  promoteOneActionPermissionForTask();
+  if (desktopPermission === "one_action") desktopPermission = "none";
   return result;
 }
 
@@ -2149,12 +1995,6 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
   assertTrustedRenderer(event);
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || typeof overlayMode !== "boolean") return;
-
-  // [browser-2d-clickthrough-v3]
-  // The 2.5D avatar is visual only. Forward mouse events so the browser below
-  // remains the real interaction target.
-  window.setIgnoreMouseEvents(overlayMode, { forward: true });
-  window.setAlwaysOnTop(overlayMode, "screen-saver");
 
   if (overlayMode) {
     const workArea = screen.getPrimaryDisplay().workArea;

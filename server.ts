@@ -642,8 +642,9 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
       },
     };
   }
-  // [wikipedia-direct-search-v1]
-  // Explicit natural-language Wikipedia commands.
+  // [wikipedia-direct-search-v2]
+  // Wikipedia search is deterministic. Use its search URL directly instead
+  // of relying on vision to locate the page search box.
   const wikipediaSearchMatch = commandText.match(
     /^(?:please\s+)?(?:open\s+)?wikipedia(?:\.org)?(?:\s+and)?\s+(?:search|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
   );
@@ -654,7 +655,10 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
       .replace(/[.!?]+$/g, "");
 
     if (query) {
+      const encodedQuery = encodeURIComponent(query);
+      const url = "https://en.wikipedia.org/wiki/Special:Search?search=" + encodedQuery;
       const spoken = "Opening Wikipedia and searching for " + query + ".";
+
       return {
         ...parsed,
         spokenResponse: spoken,
@@ -668,35 +672,11 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
             steps: [
               {
                 stepNumber: 1,
-                description: "Open Wikipedia",
+                description: "Open Wikipedia search results",
                 actionType: "NAVIGATE_URL",
-                params: { url: "https://wikipedia.org/" },
+                params: { url },
                 status: "pending",
-                estimatedDurationMs: 1200
-              },
-              {
-                stepNumber: 2,
-                description: "Find and click the Wikipedia search box",
-                actionType: "VISION_CLICK_TARGET",
-                params: { targetLabel: "search bar", targetIntent: "search" },
-                status: "pending",
-                estimatedDurationMs: 900
-              },
-              {
-                stepNumber: 3,
-                description: "Type " + query,
-                actionType: "TYPE_INPUT",
-                params: { text: query },
-                status: "pending",
-                estimatedDurationMs: 500
-              },
-              {
-                stepNumber: 4,
-                description: "Submit the Wikipedia search",
-                actionType: "KEY_PRESS",
-                params: { key: "ENTER" },
-                status: "pending",
-                estimatedDurationMs: 300
+                estimatedDurationMs: 1500
               }
             ],
             spokenCompletion: "I searched Wikipedia for " + query + ".",
@@ -707,12 +687,102 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
       };
     }
   }
+  // [youtube-direct-search-v2]
+  // ALWAYS use YouTube's deterministic results URL. Never use vision.
+  const youtubeDirectMatch = commandText.match(
+    /(?:open\s+)?youtube(?:\.com)?[\s,]*(?:and\s+)?(?:search|look\s+up)(?:\s+for)?\s+(.+?)$/i
+  );
+
+  if (youtubeDirectMatch) {
+    const query = String(youtubeDirectMatch[1] || "")
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+
+    if (query) {
+      const url = "https://www.youtube.com/results?search_query=" +
+        encodeURIComponent(query);
+
+      const spoken = "Opening YouTube and searching for " + query + ".";
+
+      return {
+        ...parsed,
+        spokenResponse: spoken,
+        spokenReply: spoken,
+        action: {
+          type: "MULTI_STEP_PLAN",
+          description: "Search YouTube for " + query,
+          multiStepPlan: {
+            planTitle: "Search YouTube",
+            spokenIntro: spoken,
+            steps: [
+              {
+                stepNumber: 1,
+                description: "Open YouTube search results",
+                actionType: "NAVIGATE_URL",
+                params: { url },
+                status: "pending",
+                estimatedDurationMs: 1500
+              }
+            ],
+            spokenCompletion: "I searched YouTube for " + query + ".",
+            currentStepIndex: 0,
+            status: "idle"
+          }
+        }
+      };
+    }
+  }
+  // [youtube-direct-search-v1]
+  // YouTube search is deterministic; avoid vision clicking the search box.
+  const youtubeSearchMatch = commandText.match(
+    /^(?:please\s+)?(?:open\s+)?youtube(?:\.com)?(?:\s+and)?\s+(?:search|look\s+up)\s+(?:for\s+)?["']?(.+?)["']?\s*$/i
+  );
+
+  if (youtubeSearchMatch) {
+    const query = String(youtubeSearchMatch[1] || "")
+      .trim()
+      .replace(/[.!?]+$/g, "");
+
+    if (query) {
+      const url = "https://www.youtube.com/results?search_query=" + encodeURIComponent(query);
+      const spoken = "Opening YouTube and searching for " + query + ".";
+
+      return {
+        ...parsed,
+        spokenResponse: spoken,
+        spokenReply: spoken,
+        action: {
+          type: "MULTI_STEP_PLAN",
+          description: "Search YouTube for " + query,
+          multiStepPlan: {
+            planTitle: "Search YouTube",
+            spokenIntro: spoken,
+            steps: [
+              {
+                stepNumber: 1,
+                description: "Open YouTube search results",
+                actionType: "NAVIGATE_URL",
+                params: { url },
+                status: "pending",
+                estimatedDurationMs: 1500
+              }
+            ],
+            spokenCompletion: "I searched YouTube for " + query + ".",
+            currentStepIndex: 0,
+            status: "idle"
+          }
+        }
+      };
+    }
+  }
   // [contextual-site-search] generic site routing installed
   // Handle both explicit commands ('open wikipedia and search for magic') and
   // vision-style transcripts ('Wikipedia search bar. Click it and type magic').
-  const siteAliasMap: Record<string, string> = { wikipedia: "wikipedia.org", roblox: "roblox.com", youtube: "youtube.com", amazon: "amazon.com", ebay: "ebay.com", reddit: "reddit.com", discord: "discord.com", facebook: "facebook.com", instagram: "instagram.com", tiktok: "tiktok.com", twitter: "twitter.com", x: "x.com" };
-  const siteSearchInstructionMatch = commandText.match(/^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)?\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:search\s+(?:bar|box|field)|search|look\s+up)[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
-  const siteSearchNaturalMatch = commandText.match(/^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|youtube|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
+  const siteAliasMap: Record<string, string> = { wikipedia: "wikipedia.org", roblox: "roblox.com", amazon: "amazon.com", ebay: "ebay.com", reddit: "reddit.com", discord: "discord.com", facebook: "facebook.com", instagram: "instagram.com", tiktok: "tiktok.com", twitter: "twitter.com", x: "x.com" };
+  const siteSearchInstructionMatch = commandText.match(/^(?:please\s+)?(?:open|go\s+to|navigate\s+to|visit|load|browse\s+to)?\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:search\s+(?:bar|box|field)|search|look\s+up)[\s\S]*?\b(?:type|enter|search)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
+  const siteSearchNaturalMatch = commandText.match(/^(?:please\s+)?(?:search|look\s+up)\s+(?:on|in|using)\s*((?:www\.)?[a-z0-9-]+\.[a-z]{2,}|wikipedia|roblox|amazon|ebay|reddit|discord|facebook|instagram|tiktok|twitter|x)\s+(?:for\s+)?["']?(.+?)["']?(?:\s+(?:and\s+)?(?:press|hit)\s+enter)?\s*$/i);
   const genericSiteSearchMatch = siteSearchInstructionMatch || siteSearchNaturalMatch;
   if (genericSiteSearchMatch) {
     const rawHost = String(genericSiteSearchMatch[1]).replace(/^www\./i, "").toLowerCase();
@@ -2281,4 +2351,7 @@ export function shutdownServer(): Promise<void> {
 }
 
 start();
+
+
+
 
