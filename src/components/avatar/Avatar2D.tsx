@@ -99,7 +99,7 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
   eyebrows: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
 };
 
-const DIFF_THRESHOLD = 8;
+const DIFF_THRESHOLD = 1;
 const CANVAS_SIZE = 1024;
 
 function sourceUrl(source: NovaSource): string {
@@ -201,6 +201,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [devAutoAnimate, setDevAutoAnimate] = useState(true);
   const [devMouthIndex, setDevMouthIndex] = useState(2);
   const [devEyeIndex, setDevEyeIndex] = useState(0);
+  const [devFaceIndex, setDevFaceIndex] = useState(0);
+  const [devBrowIndex, setDevBrowIndex] = useState(0);
   const [devControls, setDevControls] = useState<DevControls>(DEFAULT_DEV_CONTROLS);
 
   const sources = useMemo(() => {
@@ -250,6 +252,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     setDevControls(DEFAULT_DEV_CONTROLS);
     setDevMouthIndex(2);
     setDevEyeIndex(0);
+    setDevFaceIndex(0);
+    setDevBrowIndex(0);
     setDevAutoAnimate(true);
   }, []);
 
@@ -259,6 +263,15 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   ];
   const eyeSources: NovaSource[] = [
     NOVA_FILES.blinks.open, NOVA_FILES.blinks.half, NOVA_FILES.blinks.closed,
+  ];
+  const faceSources: NovaSource[] = [
+    NOVA_FILES.faceDeform.neutral, NOVA_FILES.faceDeform.smile, NOVA_FILES.faceDeform.frown,
+    NOVA_FILES.faceDeform.cheek, NOVA_FILES.faceDeform.wide,
+  ];
+  const browSources: NovaSource[] = [
+    NOVA_FILES.eyebrows.neutral, NOVA_FILES.eyebrows.up, NOVA_FILES.eyebrows.innerUp,
+    NOVA_FILES.eyebrows.outerUpLeft, NOVA_FILES.eyebrows.outerUpRight, NOVA_FILES.eyebrows.squeeze,
+    NOVA_FILES.eyebrows.down,
   ];
 
   const getMask = useCallback(
@@ -330,21 +343,23 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       }
     }
 
-    drawLayer(NOVA_FILES.eyebrows.neutral, devControls.eyebrows);
+    const browSource = devAutoAnimate ? NOVA_FILES.eyebrows.neutral : browSources[devBrowIndex];
+    drawLayer(browSource, devControls.eyebrows);
 
     // Face deformation goes underneath the mouth plate. This is critical for
     // the 2.5D open-mouth artwork: the deformation must never cover the lips.
     if (devControls.face.visible) {
-      const faceSource =
-        mouthState === "open_wide" ? NOVA_FILES.faceDeform.wide :
-        mouthState === "smile" ? NOVA_FILES.faceDeform.smile : null;
+      const faceSource = devAutoAnimate
+        ? (mouthState === "open_wide" ? NOVA_FILES.faceDeform.wide
+          : mouthState === "smile" ? NOVA_FILES.faceDeform.smile : null)
+        : faceSources[devFaceIndex];
       if (faceSource) drawLayer(faceSource, devControls.face);
     }
 
     // Mouth is the final facial plate so the open/rounded artwork is always
     // visible during speech.
     drawLayer(mouthSource, devControls.mouth);
-  }, [eyeState, mouthState, devAutoAnimate, devMouthIndex, devEyeIndex, devControls, getImage, getMask]);
+  }, [eyeState, mouthState, devAutoAnimate, devMouthIndex, devEyeIndex, devFaceIndex, devBrowIndex, devControls, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
@@ -566,13 +581,13 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       <button
         type="button"
         onClick={() => setShowDevControls((v) => !v)}
-        className="absolute right-3 top-3 z-50 rounded-md border border-cyan-500/40 bg-slate-950/95 px-2 py-1 text-[10px] font-bold text-cyan-300"
+        className="absolute left-3 top-3 z-[100] rounded-lg border-2 border-cyan-400 bg-slate-950 px-3 py-2 text-xs font-black text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.35)] cursor-pointer"
       >
         {showDevControls ? "HIDE DEV" : "2.5D DEV"}
       </button>
 
       {showDevControls && (
-        <div className="absolute right-3 top-10 z-50 w-[320px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
+        <div className="absolute left-3 top-14 z-[99] w-[360px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
             <div><div className="text-xs font-bold text-cyan-300">Nova 2.5D DEV</div><div className="text-[9px] text-slate-500">Live image/layer calibration</div></div>
             <button type="button" onClick={resetDevControls} className="rounded border border-slate-700 px-2 py-1 text-[9px]">RESET</button>
@@ -600,10 +615,21 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </div>
           <div className="rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-violet-300">FACE DEFORM</div>
+            <div className="text-[9px] text-slate-500">{devAutoAnimate ? "Auto state" : ["Neutral","Smile","Frown","Cheek","Wide"][devFaceIndex]}</div>
+            <input className="w-full" type="range" min="0" max="4" step="1" value={devFaceIndex} disabled={devAutoAnimate} onChange={(e)=>setDevFaceIndex(Number(e.target.value))}/>
             <label className="block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.face.x} onChange={(e)=>updateDevLayer("face",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.face.y} onChange={(e)=>updateDevLayer("face",{y:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.face.scale} onChange={(e)=>updateDevLayer("face",{scale:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.face.opacity} onChange={(e)=>updateDevLayer("face",{opacity:Number(e.target.value)})}/></label>
+          </div>
+          <div className="mt-3 rounded bg-slate-900 p-2">
+            <div className="mb-1 text-[10px] font-bold text-amber-300">EYEBROWS</div>
+            <div className="text-[9px] text-slate-500">{devAutoAnimate ? "Neutral" : ["Neutral","Up","Inner Up","Outer Left","Outer Right","Squeeze","Down"][devBrowIndex]}</div>
+            <input className="w-full" type="range" min="0" max="6" step="1" value={devBrowIndex} disabled={devAutoAnimate} onChange={(e)=>setDevBrowIndex(Number(e.target.value))}/>
+            <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.x} onChange={(e)=>updateDevLayer("eyebrows",{x:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.y} onChange={(e)=>updateDevLayer("eyebrows",{y:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.eyebrows.scale} onChange={(e)=>updateDevLayer("eyebrows",{scale:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.eyebrows.opacity} onChange={(e)=>updateDevLayer("eyebrows",{opacity:Number(e.target.value)})}/></label>
           </div>
         </div>
       )}
