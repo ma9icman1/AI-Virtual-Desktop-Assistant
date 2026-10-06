@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
-import { Mic, Volume2, Maximize2, Sparkles, RefreshCw, Layers } from "lucide-react";
+import { Mic, Volume2, Maximize2, Sparkles, RefreshCw, Layers, Settings2, RotateCcw } from "lucide-react";
 
 export type EyeState = "open" | "half" | "closed";
 export type MouthState = "closed" | "smile" | "open_small" | "open_wide" | "o";
@@ -83,6 +83,78 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [eyeState, setEyeState] = useState<EyeState>("open");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [mouthLayerReady, setMouthLayerReady] = useState(true);
+  const [showDevControls, setShowDevControls] = useState(false);
+  const [devAutoAnimate, setDevAutoAnimate] = useState(true);
+  const [devMouthIndex, setDevMouthIndex] = useState(0);
+  const [devEyeIndex, setDevEyeIndex] = useState(0);
+  const [devMouthX, setDevMouthX] = useState(0);
+  const [devMouthY, setDevMouthY] = useState(0);
+  const [devMouthScale, setDevMouthScale] = useState(100);
+  const [devMouthOpacity, setDevMouthOpacity] = useState(100);
+  const [devFaceX, setDevFaceX] = useState(0);
+  const [devFaceY, setDevFaceY] = useState(0);
+  const [devFaceScale, setDevFaceScale] = useState(100);
+  const [devFaceOpacity, setDevFaceOpacity] = useState(100);
+
+  const mouthStates: MouthState[] = ["closed", "smile", "open_small", "open_wide", "o"];
+  const eyeStates: EyeState[] = ["open", "half", "closed"];
+
+  const updateDevNumber = useCallback((setter: React.Dispatch<React.SetStateAction<number>>, min: number, max: number, value: number) => {
+    setter(Math.max(min, Math.min(max, Number.isFinite(value) ? value : min)));
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("nova_avatar_dev_controls") || "{}");
+      if (typeof saved.mouthX === "number") setDevMouthX(saved.mouthX);
+      if (typeof saved.mouthY === "number") setDevMouthY(saved.mouthY);
+      if (typeof saved.mouthScale === "number") setDevMouthScale(saved.mouthScale);
+      if (typeof saved.mouthOpacity === "number") setDevMouthOpacity(saved.mouthOpacity);
+      if (typeof saved.faceX === "number") setDevFaceX(saved.faceX);
+      if (typeof saved.faceY === "number") setDevFaceY(saved.faceY);
+      if (typeof saved.faceScale === "number") setDevFaceScale(saved.faceScale);
+      if (typeof saved.faceOpacity === "number") setDevFaceOpacity(saved.faceOpacity);
+    } catch {
+      // Keep defaults when stored developer calibration is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("nova_avatar_dev_controls", JSON.stringify({
+        mouthX: devMouthX,
+        mouthY: devMouthY,
+        mouthScale: devMouthScale,
+        mouthOpacity: devMouthOpacity,
+        faceX: devFaceX,
+        faceY: devFaceY,
+        faceScale: devFaceScale,
+        faceOpacity: devFaceOpacity,
+      }));
+    } catch {
+      // Calibration still works for the current session.
+    }
+  }, [devMouthX, devMouthY, devMouthScale, devMouthOpacity, devFaceX, devFaceY, devFaceScale, devFaceOpacity]);
+
+  useEffect(() => {
+    const preloadNames = [
+      "body",
+      ...eyeStates.map((state) => `eyes_${state}`),
+      ...mouthStates.map((state) => `mouth_${state}`),
+    ];
+    const images = preloadNames.map((name) => {
+      const image = new Image();
+      image.src = `/avatar2d/${name}.png`;
+      return image;
+    });
+    return () => images.forEach((image) => { image.onload = null; image.onerror = null; });
+  }, []);
+
+  useEffect(() => {
+    if (devAutoAnimate) return;
+    setMouthState(mouthStates[devMouthIndex] || "closed");
+    setEyeState(eyeStates[devEyeIndex] || "open");
+  }, [devAutoAnimate, devMouthIndex, devEyeIndex]);
 
   // Simulated 3D Parallax coordinates (-1 to +1)
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
@@ -94,6 +166,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
   // 1. LipSync Subscription & Mouth State Update
   useEffect(() => {
+    if (!devAutoAnimate) return;
+
     const unsub = LipSyncEngine.getInstance().subscribe((weights) => {
       currentWeightsRef.current = weights;
       console.log("[AVATAR2D DEBUG] LipSyncEngine weights", weights);
@@ -134,6 +208,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   // arriving from the TTS analyser; those can be absent for short speech turns.
   useEffect(() => {
     console.log("[AVATAR2D DEBUG] mouth effect", { isSpeaking, isListening, audioLevel });
+    if (!devAutoAnimate) return;
     const active = isSpeaking || audioLevel > 0.015;
     if (!active) {
       setMouthState(isListening ? "smile" : "closed");
@@ -303,6 +378,10 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               name={`eyes_${eyeState}`}
               alt={`Eyes ${eyeState}`}
               className="absolute inset-0 w-full h-full object-contain"
+              style={{
+                transform: `translate3d(${devFaceX}px, ${devFaceY}px, 0) scale(${devFaceScale / 100})`,
+                opacity: devFaceOpacity / 100,
+              }}
             />
           </div>
 
@@ -317,11 +396,70 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               name={`mouth_${mouthState}`}
               alt={`Mouth ${mouthState}`}
               className="absolute inset-0 w-full h-full object-contain"
-              style={{ zIndex: 30 }}
+              style={{
+                zIndex: 30,
+                transform: `translate3d(${devMouthX}px, ${devMouthY}px, 0) scale(${devMouthScale / 100})`,
+                opacity: devMouthOpacity / 100,
+              }}
             />
           </div>
         </div>
       </div>
+
+      {/* Developer calibration controls */}
+      {showDevControls && (
+        <div className="absolute top-3 right-3 z-[120] w-[310px] max-w-[calc(100vw-24px)] max-h-[calc(100% - 24px)] overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950/95 p-3 text-slate-100 shadow-2xl shadow-black/50 backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+            <div>
+              <div className="text-xs font-bold text-cyan-300">NOVA AVATAR DEV</div>
+              <div className="text-[9px] text-slate-500">Live layer calibration • auto-loaded assets</div>
+            </div>
+            <button type="button" onClick={() => setShowDevControls(false)} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-slate-300 hover:border-cyan-300/50">Close</button>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-cyan-400/20 bg-slate-900/70 p-2.5">
+            <label className="flex items-center justify-between text-[10px] font-semibold">
+              <span>Animation mode</span>
+              <span className="text-cyan-300">{devAutoAnimate ? "AUTO LIP SYNC" : "MANUAL"}</span>
+            </label>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => setDevAutoAnimate(true)} className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${devAutoAnimate ? "bg-cyan-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>Auto</button>
+              <button type="button" onClick={() => setDevAutoAnimate(false)} className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${!devAutoAnimate ? "bg-cyan-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>Manual</button>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-white/10 bg-slate-900/70 p-2.5">
+            <div className="text-[10px] font-bold text-white">MOUTH ANIMATION</div>
+            <div className="mt-2 text-[9px] text-slate-400">Frame: <b className="text-cyan-200">{mouthStates[devMouthIndex]}</b></div>
+            <input aria-label="Mouth animation frame" type="range" min="0" max="4" step="1" value={devMouthIndex} onChange={(e) => updateDevNumber(setDevMouthIndex, 0, 4, Number(e.target.value))} className="w-full accent-cyan-400" />
+            {mouthStates.map((state, index) => (
+              <div key={state} className="mt-1 flex items-center gap-2">
+                <span className="w-20 text-[9px] text-slate-400">{state}</span>
+                <input aria-label={`Mouth ${state} selector`} type="range" min="0" max="100" step="1" value={devMouthIndex === index ? 100 : 0} onChange={() => { setDevMouthIndex(index); setDevAutoAnimate(false); }} className="w-full accent-cyan-400" />
+              </div>
+            ))}
+            <label className="mt-2 block text-[9px] text-slate-400">Mouth X <input type="range" min="-40" max="40" value={devMouthX} onChange={(e) => updateDevNumber(setDevMouthX, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+            <label className="mt-2 block text-[9px] text-slate-400">Mouth Y <input type="range" min="-40" max="40" value={devMouthY} onChange={(e) => updateDevNumber(setDevMouthY, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+            <label className="mt-2 block text-[9px] text-slate-400">Mouth Scale <input type="range" min="85" max="115" value={devMouthScale} onChange={(e) => updateDevNumber(setDevMouthScale, 85, 115, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+            <label className="mt-2 block text-[9px] text-slate-400">Mouth Opacity <input type="range" min="0" max="100" value={devMouthOpacity} onChange={(e) => updateDevNumber(setDevMouthOpacity, 0, 100, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-white/10 bg-slate-900/70 p-2.5">
+            <div className="text-[10px] font-bold text-white">FACE / EYES</div>
+            <div className="mt-2 text-[9px] text-slate-400">Eye frame: <b className="text-cyan-200">{eyeStates[devEyeIndex]}</b></div>
+            <input aria-label="Eye animation frame" type="range" min="0" max="2" step="1" value={devEyeIndex} onChange={(e) => { setDevEyeIndex(Number(e.target.value)); setDevAutoAnimate(false); }} className="w-full accent-cyan-400" />
+            <div className="mt-1 flex justify-between text-[8px] text-slate-500"><span>open</span><span>half</span><span>closed</span></div>
+            <label className="mt-2 block text-[9px] text-slate-400">Face X <input type="range" min="-40" max="40" value={devFaceX} onChange={(e) => updateDevNumber(setDevFaceX, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+            <label className="mt-2 block text-[9px] text-slate-400">Face Y <input type="range" min="-40" max="40" value={devFaceY} onChange={(e) => updateDevNumber(setDevFaceY, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+            <label className="mt-2 block text-[9px] text-slate-400">Face Scale <input type="range" min="85" max="115" value={devFaceScale} onChange={(e) => updateDevNumber(setDevFaceScale, 85, 115, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+            <label className="mt-2 block text-[9px] text-slate-400">Face Opacity <input type="range" min="0" max="100" value={devFaceOpacity} onChange={(e) => updateDevNumber(setDevFaceOpacity, 0, 100, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
+          </div>
+
+          <button type="button" onClick={() => { setDevMouthX(0); setDevMouthY(0); setDevMouthScale(100); setDevMouthOpacity(100); setDevFaceX(0); setDevFaceY(0); setDevFaceScale(100); setDevFaceOpacity(100); setDevMouthIndex(0); setDevEyeIndex(0); setDevAutoAnimate(true); }} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-slate-900 px-2 py-1.5 text-[10px] font-semibold text-slate-300 hover:border-cyan-300/40">
+            <RotateCcw className="h-3 w-3" /> Reset calibration
+          </button>
+        </div>
+      )}
 
       {/* Floating Status & Quick Action Controls Overlay */}
       <div className="avatar2d-debug absolute top-3 left-3 z-[100] rounded-lg border border-cyan-400/50 bg-black/90 px-3 py-2 font-mono text-[11px] text-cyan-200 shadow-xl" style={{ minWidth: "270px" }}>
@@ -341,6 +479,10 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       </div>
 
       <div className="avatar2d-controls absolute flex flex-col items-center z-20">
+        <button type="button" onClick={() => setShowDevControls((open) => !open)} className={`avatar2d-tool rounded-full transition-all cursor-pointer ${showDevControls ? "bg-cyan-600 text-white" : ""}`} title="Open Nova avatar developer controls">
+          <Settings2 className="w-4 h-4" />
+        </button>
+
         {/* Status Pills */}
         <div
           className="relative flex items-center justify-center rounded-full border border-slate-700/80 bg-slate-950/90 shadow-lg shadow-black/30"
