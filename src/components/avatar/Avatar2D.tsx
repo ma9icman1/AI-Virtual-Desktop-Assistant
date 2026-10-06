@@ -15,6 +15,7 @@ interface Avatar2DProps {
   onSwitchMode?: (mode: "avatar" | "avatar2d" | "orb") => void;
   status?: string;
   voiceNotice?: string | null;
+  speechText?: string;
   className?: string;
   enableParallax?: boolean;
 }
@@ -64,10 +65,17 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   onSwitchMode,
   status = "idle",
   voiceNotice = null,
+  speechText = "",
   className = "",
   enableParallax = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const speechTextRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = speechTextRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [speechText]);
 
   // Layer states
   const [eyeState, setEyeState] = useState<EyeState>("open");
@@ -300,9 +308,18 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       {/* Floating Status & Quick Action Controls Overlay */}
       <div className="avatar2d-controls absolute flex flex-col items-center z-20">
         {/* Status Pills */}
-        <div className="avatar2d-status flex items-center gap-2">
+        <div
+          className="relative flex items-center justify-center rounded-full border border-slate-700/80 bg-slate-950/90 shadow-lg shadow-black/30"
+          style={{
+            width: "360px",
+            height: "68px",
+            maxWidth: "calc(100vw - 40px)",
+            overflow: "hidden",
+            boxSizing: "border-box",
+          }}
+        >
           <span
-            className={`avatar2d-status-dot w-2 h-2 rounded-full ${
+            className={`avatar2d-status-dot absolute left-4 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
               isSpeaking
                 ? "bg-cyan-400 animate-ping"
                 : isListening
@@ -310,12 +327,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
                 : "bg-emerald-400"
             }`}
           />
-          <span>
-            {isSpeaking
-              ? "Nova Speaking (Neural TTS)"
-              : isListening
-              ? "Listening..."
-              : voiceNotice || "Nova 2.5D Avatar Ready"}
+          <span className="w-full px-8 text-center break-words">
+            {speechText.trim() || voiceNotice || ""}
           </span>
         </div>
 
@@ -325,7 +338,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={() => { console.log("[2.5D DEBUG] MIC click"); onToggleListening(); }}
-              className={`avatar2d-tool avatar2d-tool-mic transition-all cursor-pointer ${
+              className={`avatar2d-tool avatar2d-tool-mic rounded-full transition-all cursor-pointer ${
                 isListening
                   ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
                   : "text-slate-400 hover:text-slate-100 hover:bg-slate-800"
@@ -340,7 +353,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={() => { console.log("[2.5D DEBUG] SPEAKER click"); onSpeakGreeting(); }}
-              className="avatar2d-tool transition-all cursor-pointer"
+              className="avatar2d-tool rounded-full transition-all cursor-pointer"
               title="Test Voice Greeting"
             >
               <Volume2 className="w-4 h-4" />
@@ -351,7 +364,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={() => { console.log("[2.5D DEBUG] LAYERS click"); onSwitchMode("avatar"); }}
-              className="avatar2d-tool transition-all cursor-pointer"
+              className="avatar2d-tool rounded-full transition-all cursor-pointer"
               title="Switch to 3D Model View"
             >
               <Layers className="w-4 h-4" />
@@ -362,7 +375,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onClick={() => { console.log("[2.5D DEBUG] EXPAND click"); onToggleFullView(); }}
-              className="avatar2d-tool transition-all cursor-pointer"
+              className="avatar2d-tool rounded-full transition-all cursor-pointer"
               title="Toggle Full Desktop View"
             >
               <Maximize2 className="w-4 h-4" />

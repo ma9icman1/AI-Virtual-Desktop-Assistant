@@ -1,0 +1,78 @@
+// Daz Script: Sequence Default Genesis 8 Starter Essentials Visemes / Mouth Morphs
+(function(){
+    var oTimeMgr = App.getTimeMgr();
+    var oScene = MainWindow.getScene();
+    var oNode = oScene.getPrimarySelection();
+    
+    if(!oNode){
+        MessageBox.warning("Please select your Genesis 8 figure in the Scene tab first.", "No Selection", "OK", "");
+        return;
+    }
+
+    // Exact internal Daz property IDs for default G8 Base Expressions/Visemes
+    var aMouthMorphs = [
+        "eCTRJMouthOpen",
+        "eCTRJMouthSmile",
+        "eCTRJMouthFrown",
+        "eCTRJMouthNarrow",
+        "eCTRJMouthWide",
+        "eCTRJMouthAA",
+        "eCTRJMouthEE",
+        "eCTRJMouthIH",
+        "eCTRJMouthOO",
+        "eCTRJMouthOW",
+        "eCTRJMouthMBP",
+        "eCTRJMouthFV",
+        "eCTRJMouthTH",
+        "eCTRJMouthL",
+        "eCTRJMouthW",
+        "eCTRJMouthU"
+    ];
+
+    var tTick = oTimeMgr.getTickLength(); // Exactly 1 frame unit
+    
+    // Step 1: Force reset on frame 0 to clean the timeline canvas
+    oTimeMgr.setTime(0);
+    for (var m = 0; m < aMouthMorphs.length; m++) {
+        var oProp = oNode.findProperty(aMouthMorphs[m]);
+        if (oProp && oProp.isAnimatable()) {
+            oProp.setValue(0, 0.0); 
+        }
+    }
+
+    // Step 2: Loop through each default morph and isolate it to its own frame
+    for (var i = 0; i < aMouthMorphs.length; i++) {
+        var sTargetName = aMouthMorphs[i];
+        var tCurrentTime = i * tTick;
+        
+        // Dynamically append timeline frames if the sequence goes long
+        if (tCurrentTime > oTimeMgr.getDuration()){
+            oTimeMgr.setDuration(tCurrentTime);
+        }
+        
+        oTimeMgr.setTime(tCurrentTime);
+        var oTargetProp = oNode.findProperty(sTargetName);
+        
+        if (oTargetProp && oTargetProp.isAnimatable()) {
+            // Drive target morph to 100% on this specific frame
+            oTargetProp.setValue(tCurrentTime, 1.0); 
+            
+            // Isolate the render frame by making sure all other default shapes are 0 here
+            for (var j = 0; j < aMouthMorphs.length; j++) {
+                if (i !== j) {
+                    var oOtherProp = oNode.findProperty(aMouthMorphs[j]);
+                    if (oOtherProp && oOtherProp.isAnimatable()) {
+                        oOtherProp.setValue(tCurrentTime, 0.0);
+                    }
+                }
+            }
+            print("Successfully baked frame " + i + ": " + sTargetName);
+        } else {
+            print("Could not find default controller named: " + sTargetName);
+        }
+    }
+    
+    // Return timeline playhead safely to start
+    oTimeMgr.setTime(0);
+    MessageBox.information("Genesis 8 default base mouth sequence built successfully!", "Success", "OK");
+})();

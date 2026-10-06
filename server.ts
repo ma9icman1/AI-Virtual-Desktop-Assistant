@@ -2009,6 +2009,41 @@ Find the active application and visible actionable controls. Follow the target-s
 
         const parsed = parseLooseJson(rawContent);
 
+        if ((!parsed || typeof parsed !== "object") && prompt.toLowerCase().includes("actual page input")) {
+          try {
+            const retryContent = await callOllamaChat({
+              model: activeOllamaVisionModel,
+              systemPrompt: `Return ONLY valid minified JSON. Find the requested input control in the screenshot. Use exactly: {"detectedElements":[{"type":"input","label":"username email phone","boundingBox":{"x":0,"y":0,"width":0,"height":0},"center":{"x":0,"y":0}}]}. Coordinates must be pixels in the exact ${visionWidth}x${visionHeight} screenshot. If the field is visible, return it. No markdown, no explanation.`,
+              messages: [{
+                role: "user",
+                content: `${prompt}\nReturn only the requested input control JSON.`,
+                images: [cleanBase64],
+              }],
+              formatJson: false,
+              timeoutMs: 30000,
+              options: { temperature: 0, num_ctx: 2048, num_predict: 180 },
+            });
+            const retryParsed = parseLooseJson(retryContent);
+            if (retryParsed && typeof retryParsed === "object") {
+              console.log("[Ollama] Vision compact retry succeeded.");
+              const detectedElements = Array.isArray((retryParsed as any).detectedElements)
+                ? (retryParsed as any).detectedElements.slice(0, 8).filter((item: any) => item && typeof item === "object")
+                : [];
+              return res.json({
+                ...coordinateMetadata,
+                summary: String((retryParsed as any).summary || "Screen examined successfully."),
+                activeApplication: String((retryParsed as any).activeApplication || "Browser"),
+                detectedElements,
+                extractedText: String((retryParsed as any).extractedText || ""),
+                provider: "ollama",
+                model: activeOllamaVisionModel,
+              });
+            }
+          } catch (retryErr: any) {
+            console.warn("[Ollama] Vision compact retry failed:", retryErr?.message || retryErr);
+          }
+        }
+
         if (parsed && typeof parsed === "object") {
           const detectedElements = Array.isArray(parsed.detectedElements)
             ? parsed.detectedElements.slice(0, 8).filter((item: any) => item && typeof item === "object")
@@ -2024,6 +2059,56 @@ Find the active application and visible actionable controls. Follow the target-s
             provider: "ollama",
             model: activeOllamaVisionModel,
           });
+        }
+
+        // MiniCPM vision can occasionally emit malformed JSON even with formatJson=true.
+        // Retry once with a much smaller target-only prompt before giving up. This is
+        // especially important for Roblox login fields, where an empty detection causes
+        // the credential flow to stop even though the screenshot itself is valid.
+        console.warn("[Ollama] Vision JSON parse failed; retrying target detection with compact schema.");
+        try {
+          const retryContent = await callOllamaChat({
+            model: activeOllamaVisionModel,
+            systemPrompt:
+              `You are a pixel-accurate UI locator. Return ONLY one JSON object and nothing else. ` +
+              `Schema: {"detectedElements":[{"type":"input","label":"target","boundingBox":{"x":0,"y":0,"width":0,"height":0},"center":{"x":0,"y":0}}]}. ` +
+              `Find only the requested visible control. Coordinates must be pixels in the exact ${visionWidth}x${visionHeight} screenshot. ` +
+              `If the control is not visible, return {"detectedElements":[]}.`,
+            messages: [{
+              role: "user",
+              content: `${prompt}\nReturn exactly one JSON object. Do not use markdown. Do not explain.`,
+              images: [cleanBase64],
+            }],
+            formatJson: false,
+            timeoutMs: 30000,
+            options: {
+              temperature: 0,
+              num_ctx: 1024,
+              num_predict: 180,
+            },
+          });
+          const retryParsed = parseLooseJson(retryContent);
+          if (retryParsed && typeof retryParsed === "object") {
+            const retryElements = Array.isArray((retryParsed as any).detectedElements)
+              ? (retryParsed as any).detectedElements.slice(0, 8).filter((item: any) => item && typeof item === "object")
+              : [];
+            if (retryElements.length > 0) {
+              console.log("[Ollama] Vision compact retry succeeded.", { detectedElements: retryElements.length });
+              return res.json({
+                ...coordinateMetadata,
+                summary: String((retryParsed as any).summary || "Target control located."),
+                openWindows: [],
+                activeApplication: "Browser",
+                detectedElements: retryElements,
+                extractedText: "",
+                suggestedActions: [],
+                provider: "ollama",
+                model: activeOllamaVisionModel,
+              });
+            }
+          }
+        } catch (retryError: any) {
+          console.warn("[Ollama] Vision compact retry failed:", retryError?.message || retryError);
         }
 
         console.warn("[Ollama] Vision response could not be parsed; returning a safe fallback instead of blocking X-Ray.");

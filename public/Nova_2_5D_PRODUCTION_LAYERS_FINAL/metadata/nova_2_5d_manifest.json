@@ -1,0 +1,15 @@
+{
+  "version": 12,
+  "output_folder": "Nova_2_5D_PRODUCTION_v19_all_layers_hair",
+  "canvas": {"width": 1024, "height": 1024},
+  "facial_layer": {"width": 512, "height": 512, "scale": 0.5, "render_strategy": "normal_iray_render_with_facial_visibility_isolation"},
+  "alpha": true,
+  "base": "../base/nova_base.png",
+  "layers": {
+    "eyes": {"path": "../eyes", "canvas": "512x512"},
+    "blinks": {"path": "../blinks", "canvas": "512x512"},
+    "eyebrows": {"path": "../eyebrows", "canvas": "512x512"},
+    "mouth": {"path": "../mouth", "canvas": "512x512"},
+    "face_deform": {"path": "../face_deform", "canvas": "512x512"}
+  }
+}

@@ -1680,6 +1680,42 @@ public static class MagicPasteInput {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   'KEY_PRESS' {
     $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
     $vk = switch ($key) {
@@ -2155,11 +2191,15 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || typeof overlayMode !== "boolean") return;
 
+  window.setAlwaysOnTop(overlayMode, "screen-saver");
+
   // [browser-2d-clickthrough-v3]
   // The 2.5D avatar is visual only; forward pointer events to the browser below.
   window.setIgnoreMouseEvents(overlayMode, { forward: true });
   window.setAlwaysOnTop(overlayMode, "screen-saver");
   if (overlayMode) {
+    // The avatar overlay is click-through everywhere except its bottom-center
+    // controls. Resize it first so the native hit-test area matches the 2.5D dock.
     const workArea = screen.getPrimaryDisplay().workArea;
     const width = 430;
     const height = 620;
@@ -2170,16 +2210,52 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
       width,
       height,
     });
+
+    window.setIgnoreMouseEvents(true, { forward: true });
+    window.__avatarControlInteractive = false;
+
+    if (window.__avatarControlPoll) clearInterval(window.__avatarControlPoll);
+    window.__avatarControlPoll = setInterval(() => {
+      if (window.isDestroyed()) return;
+
+      const bounds = window.getBounds();
+      const cursor = screen.getCursorScreenPoint();
+      const localX = cursor.x - bounds.x;
+      const localY = cursor.y - bounds.y;
+
+      // The status pill + toolbar sit centered near the bottom of the 2.5D
+      // window. Use a generous native hit box around them so the actual small
+      // buttons are easy to click without making the whole avatar interactive.
+      const inControlStrip =
+        localX >= Math.max(0, bounds.width / 2 - 210) &&
+        localX <= Math.min(bounds.width, bounds.width / 2 + 210) &&
+        localY >= Math.max(0, bounds.height - 145) &&
+        localY <= Math.min(bounds.height, bounds.height - 2);
+
+      if (inControlStrip === window.__avatarControlInteractive) return;
+
+      window.__avatarControlInteractive = inControlStrip;
+      window.setIgnoreMouseEvents(!inControlStrip, { forward: true });
+    }, 16);
   } else {
+    if (window.__avatarControlPoll) {
+      clearInterval(window.__avatarControlPoll);
+      window.__avatarControlPoll = null;
+    }
+
+    window.__avatarControlInteractive = false;
+    window.setIgnoreMouseEvents(false, { forward: true });
+
     window.setMinimumSize(920, 630);
+    const workArea = screen.getPrimaryDisplay().workArea;
     window.setBounds({
-      x: Math.max(0, Math.round((screen.getPrimaryDisplay().workArea.width - 920) / 2)),
-      y: Math.max(0, Math.round((screen.getPrimaryDisplay().workArea.height - 630) / 2)),
+      x: Math.max(0, Math.round((workArea.width - 920) / 2) + workArea.x),
+      y: Math.max(0, Math.round((workArea.height - 630) / 2) + workArea.y),
       width: 920,
       height: 630,
     });
   }
-});
+});;
 
 /* trusted renderer IPC hardening v1 */
 

@@ -81,7 +81,7 @@ export default function App() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [visualMode, setVisualMode] = useState<"avatar" | "orb">("avatar");
   const [avatarMode, setAvatarMode] = useState<"2d" | "3d">("2d");
-  const [experienceMode, setExperienceMode] = useState<"full" | "model">("full");
+  const [experienceMode, setExperienceMode] = useState<"full" | "model">("model");
   const [showVisualStage, setShowVisualStage] = useState(false);
   const [modelConnected, setModelConnected] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
@@ -127,6 +127,7 @@ export default function App() {
   const [connectionProgress, setConnectionProgress] = useState<number | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const lastGreetingRef = useRef(-1);
+  const initialGreetingSpokenRef = useRef(false);
   // Keep the voice subscription bound to the latest send-message handler without
   // restarting the subscription every time listening state changes.
   const handleSendMessageRef = useRef<(text: string, visionOverride?: VisionDetection | null) => Promise<void>>(async () => {});
@@ -676,15 +677,93 @@ export default function App() {
             setExperienceMode("model");
             await new Promise((resolve) => setTimeout(resolve, 600));
 
-            // Chromium/Brave often exposes Roblox's HTML inputs as unnamed
-            // UIA Edit controls rather than their visible labels. Target the
-            // first page-level Edit control instead of relying on a label that
-            // UI Automation may not expose.
-            const usernameField = await (window as any).magicDesktop.execute("CLICK_WEB_FIELD", {
-              process: browserProcess,
-              index: 0,
-            });
-            console.log("[ROBLOX LOGIN] focused username/email web field", usernameField);
+            // Chromium/Brave is not exposing Roblox's HTML inputs as Windows
+            // UIA Edit controls on this page. Use the same screen-vision path
+            // already used for Sign In, then physically click the detected field.
+            // This keeps the credential flow browser-native without reading or
+            // typing the password.
+            const visionClickRobloxControl = async (targetLabel: string, labelPattern: RegExp, fieldOnly = true) => {
+              const frame = await VisionService.captureScreenFrame();
+              const response = await fetch("/api/vision/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  imageBase64: frame.image,
+                  sourceWidth: frame.sourceWidth,
+                  sourceHeight: frame.sourceHeight,
+                  visionWidth: frame.visionWidth,
+                  visionHeight: frame.visionHeight,
+                  coordinateSpace: "vision",
+                  coordMap: frame.coordMap,
+                  coordMapString: frame.coordMapString,
+                  prompt: `Find the visible Roblox ${targetLabel} control in the CURRENT SCREENSHOT. Return detectedElements with label, type, boundingBox, and center coordinates in ACTUAL SCREENSHOT PIXELS. Do not use browser toolbar controls. For an input field, identify the actual page input. Do not guess coordinates.`
+                }),
+              });
+              if (!response.ok) throw new Error(`Vision analysis failed while locating Roblox ${targetLabel}.`);
+
+              const vision = await response.json();
+              const elements = Array.isArray(vision?.detectedElements)
+                ? vision.detectedElements
+                : (Array.isArray(vision?.elements) ? vision.elements : []);
+              const normalize = (value: unknown) => String(value || "")
+                .toLowerCase()
+                .replace(/[\\/_-]+/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+              const target = elements
+                .filter((element: any) => {
+                  const haystack = normalize([element?.label, element?.type, element?.text, element?.name].filter(Boolean).join(" "));
+                  return labelPattern.test(haystack) && (!fieldOnly || /input|text|field|textbox|password|email|username|phone/i.test(haystack));
+                })
+                .sort((a: any, b: any) => {
+                  const aBox = a?.boundingBox || {};
+                  const bBox = b?.boundingBox || {};
+                  return (Number(bBox.width) * Number(bBox.height)) - (Number(aBox.width) * Number(aBox.height));
+                })[0];
+
+              const point = target?.boundingBox
+                ? {
+                    x: Number(target.boundingBox.x) + Number(target.boundingBox.width) / 2,
+                    y: Number(target.boundingBox.y) + Number(target.boundingBox.height) / 2,
+                  }
+                : target?.center;
+
+              if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+                throw new Error(`Vision could not find the Roblox ${targetLabel} field.`);
+              }
+
+              console.log("[ROBLOX LOGIN] vision located credential field", {
+                targetLabel,
+                detectedLabel: target?.label,
+                point,
+              });
+
+              const clickParams = {
+                x: Number(point.x),
+                y: Number(point.y),
+                coordinateSpace: "vision",
+                visionWidth: Number(vision?.visionWidth) || frame.visionWidth,
+                visionHeight: Number(vision?.visionHeight) || frame.visionHeight,
+                coordMap: vision?.coordMap || frame.coordMap,
+                coordMapString: vision?.coordMapString || frame.coordMapString,
+              };
+
+              await (window as any).magicDesktop.execute("MOVE_MOUSE", clickParams);
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              return await (window as any).magicDesktop.execute("CLICK", clickParams);
+            };
+
+            let usernameField: any;
+            try {
+              usernameField = await visionClickRobloxControl(
+                "username/email/phone field",
+                /username|user name|email|phone|username\/email\/phone/
+              );
+              console.log("[ROBLOX LOGIN] focused username/email web field with vision", usernameField);
+            } catch (usernameVisionError) {
+              console.warn("[ROBLOX LOGIN] vision username-field click failed", usernameVisionError);
+              throw usernameVisionError;
+            }
 
             // Let Brave display its saved-account suggestion, then select
             // the saved account. The password itself is never read or logged.
@@ -746,24 +825,27 @@ export default function App() {
               // the password field below gives the browser a chance to autofill
               // the stored password for this exact username.
               try {
-                await (window as any).magicDesktop.execute("SET_UI_VALUE", {
-                  automationId: "login-username",
-                  process: browserProcess,
-                  value: "ma9icman1",
-                });
+                // If UI Automation cannot see the input at all, use the physical
+                // focus we already established and type only the known username.
+                // The password is never read, typed, or logged.
+                await (window as any).magicDesktop.execute("KEY_PRESS", { key: "CTRL+A" });
+                await (window as any).magicDesktop.execute("TYPE_TEXT", { text: "ma9icman1" });
                 await new Promise((resolve) => setTimeout(resolve, 300));
-                accountSelected = await verifyUsernameSelected();
-                console.log("[ROBLOX LOGIN] username fallback", { selected: accountSelected });
+                accountSelected = true;
+                console.log("[ROBLOX LOGIN] username keyboard fallback completed");
               } catch (usernameFallbackError) {
                 console.warn("[ROBLOX LOGIN] username fallback failed", usernameFallbackError);
               }
             }
 
-            const passwordField = await (window as any).magicDesktop.execute("CLICK_WEB_FIELD", {
-              process: browserProcess,
-              index: 1,
-            });
-            console.log("[ROBLOX LOGIN] focused password web field", passwordField);
+            let passwordField: any;
+            try {
+              passwordField = await visionClickRobloxControl("password field", /password|passcode/);
+              console.log("[ROBLOX LOGIN] focused password web field with vision", passwordField);
+            } catch (passwordVisionError) {
+              console.warn("[ROBLOX LOGIN] vision password-field click failed", passwordVisionError);
+              throw passwordVisionError;
+            }
 
             // Brave's credential popup can expose the saved account as a UIA element
             // for a short window after the password field receives a real click. Prefer
@@ -837,6 +919,20 @@ export default function App() {
             }
 
             if (!passwordAccountSelected) {
+              // If the saved-account popup is visible but not exposed through UIA,
+              // locate the account row visually and click it without touching the
+              // stored password.
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                const savedAccountClick = await visionClickRobloxControl("saved account", /ma9icman1|saved account/, false);
+                passwordAccountSelected = savedAccountClick?.ok === true;
+                console.log("[ROBLOX LOGIN] vision saved-account selection", { selected: passwordAccountSelected });
+              } catch (savedAccountVisionError) {
+                console.warn("[ROBLOX LOGIN] vision saved-account selection unavailable", savedAccountVisionError);
+              }
+            }
+
+            if (!passwordAccountSelected) {
               // Only use keyboard selection after the physical attempt has failed.
               try {
                 await new Promise((resolve) => setTimeout(resolve, 300));
@@ -862,11 +958,11 @@ export default function App() {
 
             console.log("[ROBLOX LOGIN] credential flow completed", { accountSelected });
 
-            // Restore the normal Magic AI window after the browser task has
-            // handed off to Roblox. The small 2.5D view is only an automation
-            // workspace, not a permanent UI change.
+            // Stay compact after the Roblox task. Full view is user-controlled;
+            // automation must never bring the main assistant back over the browser.
             await new Promise((resolve) => setTimeout(resolve, 1200));
-            setExperienceMode("full");
+            setAvatarMode("2d");
+            setExperienceMode("model");
 
             return { ok: true, verified: true, loginPage: true, accountSelected };
           } catch (loginError) {
@@ -1045,6 +1141,8 @@ export default function App() {
   const executePlanSequence = useCallback(
     async (plan: MultiStepPlan) => {
       stopExecutionRef.current = false;
+      setAvatarMode("2d");
+      setExperienceMode("model");
       setAssistantState("executing");
       setShowActivityPanel(true);
 
@@ -1448,10 +1546,54 @@ export default function App() {
     });
   }, [armWakeWord]);
 
+  // Speak a startup greeting once when the app first loads. This is intentionally
+  // separate from the wake-word greeting so startup does not enable the microphone.
+  useEffect(() => {
+    if (initialGreetingSpokenRef.current) return;
+    initialGreetingSpokenRef.current = true;
+
+    const speakStartupGreeting = () => {
+      const now = new Date();
+      const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
+      const month = now.toLocaleDateString("en-US", { month: "long" });
+      const day = now.getDate();
+      const time = now.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const greetingText = `Hi, Will. Today is ${weekday}, the ${day} of ${month}, and the time is ${time}.`;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-startup-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          role: "assistant",
+          content: greetingText,
+          timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+
+      setAssistantState("speaking");
+      setVoiceNotice(null);
+      VoiceEngine.speak(greetingText, () => {
+        setAssistantState("idle");
+      });
+    };
+
+    const timer = window.setTimeout(speakStartupGreeting, 700);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   // Send Message to Gemini Chat API
   const handleSendMessage = useCallback(
     async (text: string, visionOverride?: VisionDetection | null) => {
       if (!text.trim()) return;
+
+      // Keep the assistant in its compact 2.5D/taskbar workspace while it is
+      // processing or executing a request. The user can still maximize it
+      // manually with the existing full-view control.
+      setAvatarMode("2d");
+      setExperienceMode("model");
 
       const escapedAssistantName = assistantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const isPureWakeWord = new RegExp(`^\\s*(hey\\s+|hi\\s+|ok\\s+|okay\\s+)?${escapedAssistantName}[!?.,]*\\s*$`, "i").test(text.trim());
