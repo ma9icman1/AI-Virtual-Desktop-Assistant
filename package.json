@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "postinstall": "npm run build",
-    "build": "node scripts/fix-persistent-desktop-permission.cjs && node scripts/fix-wakeword.cjs && node scripts/fix-desktop-actions.cjs && node scripts/repair-desktop-actions.cjs && node scripts/fix-type-input.cjs && node scripts/fix-multi-action.cjs && node scripts/fix-focus-verification.cjs && node scripts/fix-vision-click-v2.cjs && node scripts/fix-site-search.cjs && node scripts/fix-site-search-runtime.cjs && node scripts/fix-contextual-site-search.cjs && node scripts/fix-direct-site-open.cjs && node scripts/apply-computer-agent-upgrade.cjs && node scripts/harden-desktop-runtime.cjs && node scripts/performance-pass.cjs && node scripts/fix-browser-2d-scaling.cjs && node scripts/fix-desktop-permission-lease.cjs && node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "node scripts/fix-persistent-desktop-permission.cjs && node scripts/fix-wakeword.cjs && node scripts/fix-desktop-actions.cjs && node scripts/repair-desktop-actions.cjs && node scripts/fix-type-input.cjs && node scripts/fix-multi-action.cjs && node scripts/fix-focus-verification.cjs && node scripts/fix-vision-click-v2.cjs && node scripts/fix-site-search.cjs && node scripts/fix-site-search-runtime.cjs && node scripts/fix-contextual-site-search.cjs && node scripts/fix-direct-site-open.cjs && node scripts/apply-computer-agent-upgrade.cjs && node scripts/harden-desktop-runtime.cjs && node scripts/performance-pass.cjs && node scripts/fix-browser-2d-scaling.cjs && node scripts/fix-desktop-permission-lease.cjs && node scripts/fix-avatar-2d-final.cjs && node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "desktop:dev": "npm run build && electron .",
     "desktop:package": "npm run build && npx electron-builder --win nsis portable",
@@ -30,7 +30,7 @@
     "kokoro-js": "^1.2.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
-    "msedge-tts": "^2.0.8",
+    "msedge-tts": "^2.0.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "three": "^0.186.0"
