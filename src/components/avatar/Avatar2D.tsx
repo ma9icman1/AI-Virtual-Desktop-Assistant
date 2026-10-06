@@ -342,7 +342,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         mouthState === "smile" ? NOVA_FILES.faceDeform.smile : null;
       if (faceSource) drawLayer(faceSource, devControls.face);
     }
-  }, [eyeState, mouthState, getImage, getMask]);
+  }, [eyeState, mouthState, devAutoAnimate, devMouthIndex, devEyeIndex, devControls, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
