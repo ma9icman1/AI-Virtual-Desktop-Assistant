@@ -65,7 +65,7 @@ import {
   FolderOpen,
   Minus,
   Square,
-} from "lucide-react";
+, SlidersHorizontal } from "lucide-react";
 
 function describeError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error || "");
@@ -2113,7 +2113,23 @@ export default function App() {
                   </section>
                 </div>
               ) : activeSection === 'Avatar 2.5D' ? (
-                <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-slate-950 flex flex-col items-center justify-center p-2">
+                <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-slate-950 flex flex-col p-2">
+                  <div className="relative z-[120] flex shrink-0 items-center justify-between gap-3 rounded-xl border-2 border-cyan-500/70 bg-slate-950/95 px-4 py-3 shadow-[0_0_24px_rgba(0,180,255,.25)]">
+                    <div className="min-w-0">
+                      <div className="text-sm font-black tracking-wide text-cyan-300">NOVA 2.5D PRODUCTION DEVELOPER GUI</div>
+                      <div className="text-[10px] text-slate-400">Mouth • Eyes • Face Deform • Eyebrows — live controls linked to the production image layers</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent("nova-production-dev-gui-toggle"))}
+                      className="shrink-0 inline-flex items-center gap-2 rounded-lg border-2 border-cyan-400 bg-cyan-500 px-4 py-2 text-xs font-black tracking-wide text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:bg-cyan-300"
+                      title="Open the Nova 2.5D Production Developer GUI"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                      DEV GUI — ANIMATION CONTROLS
+                    </button>
+                  </div>
+                  <div className="relative flex-1 min-h-0 w-full overflow-hidden">
                   <Avatar2D
                     isSpeaking={assistantState === "speaking"}
                     isListening={isListening}
@@ -2131,6 +2147,7 @@ export default function App() {
                     status={assistantState}
                     voiceNotice={voiceNotice}
                   />
+                  </div>
                 </div>
               ) : activeSection === 'Chat' ? (
                 <div className="ma9ic-chat-page"><ChatFeed messages={messages} assistantName={assistantName} onSpeak={handleSpeakText} onQuickPrompt={handleSendMessage} onOpenVisionDetail={() => setIsVisionModalOpen(true)} onVisionTargetClick={handleXRayTargetClick} /></div>
