@@ -65,7 +65,8 @@ import {
   FolderOpen,
   Minus,
   Square,
-, SlidersHorizontal } from "lucide-react";
+  SlidersHorizontal,
+} from "lucide-react";
 
 function describeError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error || "");
