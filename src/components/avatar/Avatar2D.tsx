@@ -518,18 +518,25 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
   useEffect(() => {
     let blinkTimeout = 0;
+    let blinkHalfTimeout = 0;
+    let blinkClosedTimeout = 0;
+    let blinkReturnTimeout = 0;
+    let cancelled = false;
 
     const executeBlink = (onComplete: () => void) => {
-      if (!devAutoAnimate) {
+      if (cancelled || !devAutoAnimate) {
         onComplete();
         return;
       }
       setEyeState("half");
-      window.setTimeout(() => {
+      blinkHalfTimeout = window.setTimeout(() => {
+        if (cancelled || !devAutoAnimate) return onComplete();
         setEyeState("closed");
-        window.setTimeout(() => {
+        blinkClosedTimeout = window.setTimeout(() => {
+          if (cancelled || !devAutoAnimate) return onComplete();
           setEyeState("half");
-          window.setTimeout(() => {
+          blinkReturnTimeout = window.setTimeout(() => {
+            if (cancelled || !devAutoAnimate) return onComplete();
             setEyeState("open");
             onComplete();
           }, 45);
@@ -553,8 +560,15 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     scheduleNextBlink();
 
-    return () => window.clearTimeout(blinkTimeout);
-  }, []);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(blinkTimeout);
+      window.clearTimeout(blinkHalfTimeout);
+      window.clearTimeout(blinkClosedTimeout);
+      window.clearTimeout(blinkReturnTimeout);
+      setEyeState("open");
+    };
+  }, [devAutoAnimate]);
 
   useEffect(() => {
     if (!enableParallax) return;
@@ -653,7 +667,19 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             </button>
           </div>
           <label className="mb-2 flex items-center justify-between rounded bg-slate-900 p-1.5 text-[10px]">
-            Auto animation <input type="checkbox" checked={devAutoAnimate} onChange={(e) => setDevAutoAnimate(e.target.checked)} />
+            <span>Auto animation</span>
+            <input
+              type="checkbox"
+              checked={devAutoAnimate}
+              onChange={(e) => {
+                const enabled = e.currentTarget.checked;
+                setDevAutoAnimate(enabled);
+                if (!enabled) {
+                  setEyeState("open");
+                  setMouthState("closed");
+                }
+              }}
+            />
           </label>
           <div className="mb-2 rounded bg-slate-900 p-1.5">
             <div className="mb-1 text-[10px] font-bold text-pink-300">MOUTH IMAGE</div>
