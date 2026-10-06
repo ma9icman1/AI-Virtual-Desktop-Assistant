@@ -645,11 +645,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
       {showDevControls && (
         <div
-          className="absolute z-[99] w-[300px] max-w-[calc(100vw-24px)] max-h-[46vh] min-h-0 overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/90 p-2 shadow-2xl backdrop-blur-md"
+          className="absolute z-[9999] pointer-events-auto w-[300px] max-w-[calc(100vw-24px)] max-h-[46vh] min-h-0 overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/90 p-2 shadow-2xl backdrop-blur-md"
           style={{ left: devPanelPosition.x, top: devPanelPosition.y }}
         >
           <div
-            className="mb-1 flex items-center justify-between gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/30 px-2 py-1.5 cursor-grab active:cursor-grabbing touch-none"
+            className="mb-1 flex items-center justify-between gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/30 px-2 py-1.5 cursor-grab active:cursor-grabbing touch-none pointer-events-auto"
             onPointerDown={handleDevPanelPointerDown}
             title="Drag to move the Nova 2.5D developer GUI"
           >
@@ -660,15 +660,16 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             <button
               type="button"
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={resetDevControls}
+              onClick={(event) => { event.stopPropagation(); resetDevControls(); }}
               className="shrink-0 rounded border border-slate-700 px-2 py-1 text-[9px]"
             >
               RESET
             </button>
           </div>
-          <label className="mb-2 flex items-center justify-between rounded bg-slate-900 p-1.5 text-[10px]">
+          <label className="mb-2 flex items-center justify-between rounded bg-slate-900 p-1.5 text-[10px] pointer-events-auto">
             <span>Auto animation</span>
             <input
+              onPointerDown={(e)=>e.stopPropagation()}
               type="checkbox"
               checked={devAutoAnimate}
               onChange={(e) => {
@@ -684,7 +685,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           <div className="mb-2 rounded bg-slate-900 p-1.5">
             <div className="mb-1 text-[10px] font-bold text-pink-300">MOUTH IMAGE</div>
             <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Lip-sync" : ["Closed","Smile","Open Small","Open Wide","O"][devMouthIndex]}</span><span className="truncate text-cyan-400/70">{mouthSources[devMouthIndex]}</span></div>
-            <input className="w-full" type="range" min="0" max="4" step="1" value={devMouthIndex} disabled={devAutoAnimate} onChange={(e) => setDevMouthIndex(Number(e.target.value))} />
+            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="4" step="1" value={devMouthIndex} disabled={devAutoAnimate} onChange={(e) => setDevMouthIndex(Number(e.target.value))} />
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.x} onChange={(e)=>updateDevLayer("mouth",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.y} onChange={(e)=>updateDevLayer("mouth",{y:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.mouth.scale} onChange={(e)=>updateDevLayer("mouth",{scale:Number(e.target.value)})}/></label>
@@ -693,7 +694,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           <div className="mb-3 rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-cyan-300">EYES / BLINK</div>
             <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? eyeState : ["Open","Half","Closed"][devEyeIndex]}</span><span className="truncate text-cyan-400/70">{eyeSources[devEyeIndex]}</span></div>
-            <input className="w-full" type="range" min="0" max="2" step="1" value={devEyeIndex} disabled={devAutoAnimate} onChange={(e)=>setDevEyeIndex(Number(e.target.value))}/>
+            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="2" step="1" value={devEyeIndex} disabled={devAutoAnimate} onChange={(e)=>setDevEyeIndex(Number(e.target.value))}/>
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.x} onChange={(e)=>updateDevLayer("eyes",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.y} onChange={(e)=>updateDevLayer("eyes",{y:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.eyes.scale} onChange={(e)=>updateDevLayer("eyes",{scale:Number(e.target.value)})}/></label>
@@ -702,7 +703,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           <div className="rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-violet-300">FACE DEFORM</div>
             <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Auto state" : ["Neutral","Smile","Frown","Cheek","Wide"][devFaceIndex]}</span><span className="truncate text-cyan-400/70">{faceSources[devFaceIndex]}</span></div>
-            <input className="w-full" type="range" min="0" max="4" step="1" value={devFaceIndex} disabled={devAutoAnimate} onChange={(e)=>setDevFaceIndex(Number(e.target.value))}/>
+            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="4" step="1" value={devFaceIndex} disabled={devAutoAnimate} onChange={(e)=>setDevFaceIndex(Number(e.target.value))}/>
             <label className="block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.face.x} onChange={(e)=>updateDevLayer("face",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.face.y} onChange={(e)=>updateDevLayer("face",{y:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.face.scale} onChange={(e)=>updateDevLayer("face",{scale:Number(e.target.value)})}/></label>
@@ -711,7 +712,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           <div className="mt-2 rounded bg-slate-900 p-1.5">
             <div className="mb-1 text-[10px] font-bold text-amber-300">EYEBROWS</div>
             <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Neutral" : ["Neutral","Up","Inner Up","Outer Left","Outer Right","Squeeze","Down"][devBrowIndex]}</span><span className="truncate text-cyan-400/70">{browSources[devBrowIndex]}</span></div>
-            <input className="w-full" type="range" min="0" max="6" step="1" value={devBrowIndex} disabled={devAutoAnimate} onChange={(e)=>setDevBrowIndex(Number(e.target.value))}/>
+            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="6" step="1" value={devBrowIndex} disabled={devAutoAnimate} onChange={(e)=>setDevBrowIndex(Number(e.target.value))}/>
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.x} onChange={(e)=>updateDevLayer("eyebrows",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.y} onChange={(e)=>updateDevLayer("eyebrows",{y:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.eyebrows.scale} onChange={(e)=>updateDevLayer("eyebrows",{scale:Number(e.target.value)})}/></label>
