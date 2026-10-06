@@ -204,11 +204,52 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [devFaceIndex, setDevFaceIndex] = useState(0);
   const [devBrowIndex, setDevBrowIndex] = useState(0);
   const [devControls, setDevControls] = useState<DevControls>(DEFAULT_DEV_CONTROLS);
+  const [devPanelPosition, setDevPanelPosition] = useState({ x: 16, y: 16 });
+  const devPanelDragRef = useRef({ dragging: false, offsetX: 0, offsetY: 0 });
 
   useEffect(() => {
     const toggleProductionDevGui = () => setShowDevControls((current) => !current);
     window.addEventListener("nova-production-dev-gui-toggle", toggleProductionDevGui);
     return () => window.removeEventListener("nova-production-dev-gui-toggle", toggleProductionDevGui);
+  }, []);
+
+  const handleDevPanelPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const panel = event.currentTarget.parentElement;
+    const shell = event.currentTarget.closest(".avatar2d-shell");
+    if (!panel || !shell) return;
+
+    const shellRect = shell.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+
+    devPanelDragRef.current = {
+      dragging: true,
+      offsetX: event.clientX - panelRect.left,
+      offsetY: event.clientY - panelRect.top,
+    };
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      if (!devPanelDragRef.current.dragging) return;
+      const nextX = moveEvent.clientX - shellRect.left - devPanelDragRef.current.offsetX;
+      const nextY = moveEvent.clientY - shellRect.top - devPanelDragRef.current.offsetY;
+      const maxX = Math.max(8, shellRect.width - panelRect.width - 8);
+      const maxY = Math.max(8, shellRect.height - panelRect.height - 8);
+      setDevPanelPosition({
+        x: Math.max(8, Math.min(maxX, nextX)),
+        y: Math.max(8, Math.min(maxY, nextY)),
+      });
+    };
+
+    const handleUp = () => {
+      devPanelDragRef.current.dragging = false;
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
   }, []);
 
   const sources = useMemo(() => {
@@ -585,10 +626,27 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       </div>
 
       {showDevControls && (
-        <div className="absolute right-3 bottom-20 z-[99] w-[360px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
-          <div className="mb-2 flex items-center justify-between">
-            <div><div className="text-xs font-bold text-cyan-300">Nova 2.5D PRODUCTION DEV</div><div className="text-[9px] text-slate-500">Live controls linked directly to production animation images</div></div>
-            <button type="button" onClick={resetDevControls} className="rounded border border-slate-700 px-2 py-1 text-[9px]">RESET</button>
+        <div
+          className="absolute z-[99] w-[360px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md"
+          style={{ left: devPanelPosition.x, top: devPanelPosition.y }}
+        >
+          <div
+            className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/30 px-2 py-1.5 cursor-grab active:cursor-grabbing touch-none"
+            onPointerDown={handleDevPanelPointerDown}
+            title="Drag to move the Nova 2.5D developer GUI"
+          >
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-cyan-300">Nova 2.5D PRODUCTION DEV</div>
+              <div className="text-[9px] text-slate-500">Drag this header to move • Live controls linked directly to production animation images</div>
+            </div>
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={resetDevControls}
+              className="shrink-0 rounded border border-slate-700 px-2 py-1 text-[9px]"
+            >
+              RESET
+            </button>
           </div>
           <label className="mb-3 flex items-center justify-between rounded bg-slate-900 p-2 text-[10px]">
             Auto animation <input type="checkbox" checked={devAutoAnimate} onChange={(e) => setDevAutoAnimate(e.target.checked)} />
