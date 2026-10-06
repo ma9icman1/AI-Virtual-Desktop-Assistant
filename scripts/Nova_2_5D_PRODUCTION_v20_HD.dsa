@@ -1,0 +1,369 @@
+// DAZ Studio Script
+// NOVA 2.5D PRODUCTION BUILDER - v20 HD
+// Genesis 9 / DAZ Studio 4.24 / NVIDIA Iray
+//
+// HD production pass based on the proven v19 DirectToFile + RenderMgr.doRender() path.
+// IMPORTANT: 2048x2048 source plates. No DUF save. Facial state, render settings,
+// environment visibility, and Iray scheduling are restored before exit.
+// Hair is retained in every layer.
+
+function novaMain() {
+    var WIDTH = 2048;
+    var HEIGHT = 2048;
+    var PRODUCTION_MAX_SAMPLES = 64;
+    var PRODUCTION_MAX_TIME = 30.0;
+    var VISEME_STRENGTH = 100.0;
+    var EYE_STRENGTH = 100.0;
+    var BROW_STRENGTH = 100.0;
+    var EXPRESSION_STRENGTH = 100.0;
+    var CPU_LOAD_FRACTION = 0.50;
+
+    var DO_BASE = true;
+    var DO_EYES = true;
+    var DO_BLINKS = true;
+    var DO_EYEBROWS = true;
+    var DO_MOUTH = true;
+    var DO_FACE_DEFORM = true;
+    var DO_VISEME_EYE_MATRIX = false;
+
+    App.writeToLog("Nova v20 HD PRODUCTION script loaded.", true);
+
+    function info(s) { MessageBox.information(s, "Nova 2.5D PRODUCTION v20 HD", "&OK"); }
+    function fail(s) { MessageBox.critical(s, "Nova 2.5D PRODUCTION v20 HD", "&OK"); }
+    function safeFileName(s) { return String(s).replace(/[\\\/:*?"<>|]/g, "_"); }
+    function getValue(p) { try { return p ? p.getValue() : 0; } catch (e) { return 0; } }
+    function setValue(p, v) { if (!p) return; try { p.setValue(v); } catch (e) {} }
+
+    function findPropertyByLabel(list, label) {
+        var t = String(label).toLowerCase();
+        for (var i = 0; i < list.length; i++) {
+            try { if (String(list[i].getLabel()).toLowerCase() === t) return list[i]; } catch (e) {}
+        }
+        return null;
+    }
+    function findPropertyContains(list, text) {
+        var t = String(text).toLowerCase();
+        for (var i = 0; i < list.length; i++) {
+            try { if (String(list[i].getLabel()).toLowerCase().indexOf(t) >= 0) return list[i]; } catch (e) {}
+        }
+        return null;
+    }
+    function ensureDir(parentPath, name) {
+        var p = parentPath + "/" + name;
+        var d = new DzDir(p);
+        if (!d.exists()) {
+            var parent = new DzDir(parentPath);
+            if (!parent.exists()) return null;
+            try { parent.mkdir(name); } catch (e) { return null; }
+        }
+        return new DzDir(p).exists() ? new DzDir(p) : null;
+    }
+
+    var camera = null;
+    try { camera = Scene.findCameraByLabel("Nova_Camera"); } catch (e) {}
+    if (!camera) { try { var cams = Scene.getCameraList(); if (cams && cams.length) camera = cams[0]; } catch (e2) {} }
+    if (!camera) { fail("No camera was found."); return; }
+
+    var genesis = Scene.findNodeByLabel("Genesis 9");
+    if (!genesis) genesis = Scene.getPrimarySelection();
+    if (!genesis) { fail("Genesis 9 was not found. Select the Genesis 9 figure and run again."); return; }
+    var head = genesis.findNodeChildByLabel("Head", true);
+    if (!head) { fail("Genesis 9 Head was not found."); return; }
+
+    var renderMgr = App.getRenderMgr();
+    if (!renderMgr) { fail("DAZ Render Manager was not available."); return; }
+    var renderer = renderMgr.getActiveRenderer();
+    if (!renderer) { fail("No active renderer was available."); return; }
+    var renderOptions = renderMgr.getRenderOptions();
+    if (!renderOptions) { fail("DAZ Render Options were not available."); return; }
+
+    var sceneFile = Scene.getFilename();
+    if (!sceneFile) { fail("Save Nova_Master.duf first, then run this script."); return; }
+    var scenePath = String(sceneFile).replace(/\\/g, "/");
+    var slash = scenePath.lastIndexOf("/");
+    if (slash <= 2) { fail("Could not determine the scene folder.\n\n" + scenePath); return; }
+    var basePath = scenePath.substring(0, slash);
+    var rootName = "Nova_2_5D_PRODUCTION_v20_HD_2048";
+    var rootPath = basePath + "/" + rootName;
+    var run = 1;
+    while (new DzDir(rootPath).exists()) {
+        run++;
+        rootName = "Nova_2_5D_PRODUCTION_v20_HD_2048_run" + run;
+        rootPath = basePath + "/" + rootName;
+    }
+    var root = ensureDir(basePath, rootName);
+    var baseDir = ensureDir(rootPath, "base");
+    var eyesDir = ensureDir(rootPath, "eyes");
+    var blinksDir = ensureDir(rootPath, "blinks");
+    var browsDir = ensureDir(rootPath, "eyebrows");
+    var mouthDir = ensureDir(rootPath, "mouth");
+    var faceDir = ensureDir(rootPath, "face_deform");
+    var metaDir = ensureDir(rootPath, "metadata");
+    if (!root || !baseDir || !eyesDir || !blinksDir || !browsDir || !mouthDir || !faceDir || !metaDir) {
+        fail("Could not create HD output folders.\n\n" + rootPath); return;
+    }
+
+    var savedVisibility = [];
+    var nodes = Scene.getNodeList();
+    function isFacial(node) {
+        if (!node) return false;
+        var l = "";
+        try { l = String(node.getLabel()).toLowerCase(); } catch (e) {}
+        var k = ["head","face","eye","eyebrow","brow","eyelash","lash","cornea","iris","pupil","sclera","tear","lacrimal","mouth","lip","jaw","teeth","tooth","tongue","gum","gums"];
+        for (var i = 0; i < k.length; i++) if (l.indexOf(k[i]) >= 0) return true;
+        return false;
+    }
+    function isHair(node) {
+        if (!node) return false;
+        var l = "";
+        try { l = String(node.getLabel()).toLowerCase(); } catch (e) {}
+        return l.indexOf("hair") >= 0 || l.indexOf("hairstyle") >= 0 || l.indexOf("haircap") >= 0;
+    }
+    function setVis(node, v) { try { node.setVisibleInRender(v); } catch (e) {} }
+    function isolate() {
+        savedVisibility = [];
+        nodes = Scene.getNodeList();
+        for (var i = 0; i < nodes.length; i++) {
+            try { savedVisibility.push({ node:nodes[i], visible:nodes[i].isVisibleInRender() }); } catch (e) {}
+            setVis(nodes[i], false);
+        }
+        setVis(camera, true);
+        for (var j = 0; j < nodes.length; j++) {
+            var n = nodes[j], keep = false;
+            try { if (n.inherits("DzLight")) keep = true; } catch (e1) {}
+            if (n === genesis || n === head) keep = true;
+            try { if (!keep && n.isNodeDescendantOf(head, true)) keep = true; } catch (e2) {}
+            try { if (!keep && isFacial(n) && n.isNodeDescendantOf(genesis, true)) keep = true; } catch (e3) {}
+            if (!keep && isFacial(n)) keep = true;
+            if (!keep && isHair(n)) keep = true;
+            if (keep) setVis(n, true);
+        }
+    }
+    function restoreVisibility() {
+        for (var i = 0; i < savedVisibility.length; i++) setVis(savedVisibility[i].node, savedVisibility[i].visible);
+        savedVisibility = [];
+    }
+    function renderFile(path, facial) {
+        try {
+            if (facial) isolate();
+            renderer.setRenderCamera(camera);
+            renderOptions.imageSize = new Size(WIDTH, HEIGHT);
+            renderOptions.isAspectConstrained = true;
+            renderOptions.setAspectRatio(1, 1);
+            renderOptions.isCurrentFrameRender = true;
+            renderOptions.renderImgToId = DzRenderOptions.DirectToFile;
+            renderOptions.renderImgFilename = String(path).replace(/\\/g, "/");
+            App.writeToLog("Nova v20 HD: " + (facial ? "FACIAL" : "FULL") + " -> " + renderOptions.renderImgFilename, true);
+            var ok = renderMgr.doRender(renderOptions);
+            if (!ok) throw new Error("RenderMgr.doRender returned false.");
+            return true;
+        } finally { if (facial) restoreVisibility(); }
+    }
+
+    function getElementProps(element) {
+        try {
+            var g = element.getPropertyGroups();
+            if (g && typeof g.getAllProperties === "function") return g.getAllProperties();
+        } catch (e) {}
+        return [];
+    }
+    function findRenderSetting(label) {
+        var elements = [];
+        try { elements = renderMgr.getRenderElementObjects(); } catch (e) {}
+        var t = String(label).toLowerCase();
+        for (var i = 0; i < elements.length; i++) {
+            var props = getElementProps(elements[i]);
+            for (var p = 0; p < props.length; p++) {
+                try { if (String(props[p].getLabel()).toLowerCase() === t) return props[p]; } catch (e1) {}
+            }
+        }
+        return null;
+    }
+    var drawDome = findRenderSetting("Draw Dome");
+    var drawGround = findRenderSetting("Draw Ground");
+    var oldDome = drawDome ? getValue(drawDome) : null;
+    var oldGround = drawGround ? getValue(drawGround) : null;
+    if (drawDome) setValue(drawDome, 0);
+    if (drawGround) setValue(drawGround, 0);
+
+    var maxSamples = findRenderSetting("Max Samples");
+    var maxTime = findRenderSetting("Max Time");
+    var oldSamples = maxSamples ? getValue(maxSamples) : null;
+    var oldTime = maxTime ? getValue(maxTime) : null;
+    if (maxSamples) setValue(maxSamples, PRODUCTION_MAX_SAMPLES);
+    if (maxTime) setValue(maxTime, PRODUCTION_MAX_TIME);
+
+    var props = head.getPropertyList();
+    var eyeSide = findPropertyByLabel(props, "Eye Look Side-Side") || findPropertyContains(props, "Eye Look Side-Side");
+    var eyeUpDown = findPropertyByLabel(props, "Eye Look Up-Down") || findPropertyContains(props, "Eye Look Up-Down");
+    var eyeBlink = findPropertyByLabel(props, "Eye Blink") || findPropertyContains(props, "Eye Blink");
+
+    var visemes = [];
+    var mouthDrivers = [];
+    var browProperties = [];
+    for (var i = 0; i < props.length; i++) {
+        var label = "";
+        try { label = String(props[i].getLabel()); } catch (e) {}
+        var low = label.toLowerCase();
+        if (low.indexOf("viseme") >= 0) visemes.push(props[i]);
+        var mouth = low.indexOf("mouth") >= 0 || low.indexOf("lip") >= 0 || low.indexOf("jaw") >= 0 || low.indexOf("phoneme") >= 0 || low.indexOf("viseme") >= 0;
+        if (mouth && low.indexOf("brow") < 0 && mouthDrivers.length < 32) {
+            var dup = false;
+            for (var md = 0; md < mouthDrivers.length; md++) if (mouthDrivers[md] === props[i]) dup = true;
+            if (!dup) mouthDrivers.push(props[i]);
+        }
+        if (low.indexOf("brow") >= 0 || low.indexOf("eyebrow") >= 0) {
+            var bdup = false;
+            for (var bd = 0; bd < browProperties.length; bd++) if (browProperties[bd] === props[i]) bdup = true;
+            if (!bdup) browProperties.push(props[i]);
+        }
+    }
+
+    var expressionNames = ["smile","frown","angry","surprised","sad","mouth open","mouth wide","cheek","lip","jaw"];
+    var expressions = [];
+    for (var e = 0; e < expressionNames.length; e++) {
+        var ep = findPropertyContains(props, expressionNames[e]);
+        if (ep) {
+            var edup = false;
+            for (var ed = 0; ed < expressions.length; ed++) if (expressions[ed].property === ep) edup = true;
+            if (!edup) expressions.push({ name:safeFileName(expressionNames[e]), property:ep });
+        }
+    }
+
+    var savedProps = [];
+    var saveList = [];
+    if (eyeSide) saveList.push(eyeSide);
+    if (eyeUpDown) saveList.push(eyeUpDown);
+    if (eyeBlink) saveList.push(eyeBlink);
+    for (var s=0;s<browProperties.length;s++) saveList.push(browProperties[s]);
+    for (var v=0;v<visemes.length;v++) saveList.push(visemes[v]);
+    for (var m=0;m<mouthDrivers.length;m++) saveList.push(mouthDrivers[m]);
+    for (var x=0;x<expressions.length;x++) saveList.push(expressions[x].property);
+    for (var q=0;q<saveList.length;q++) {
+        var same=false;
+        for (var z=0;z<savedProps.length;z++) if (savedProps[z].property===saveList[q]) same=true;
+        if (!same) savedProps.push({property:saveList[q], value:getValue(saveList[q])});
+    }
+    function resetFace() {
+        setValue(eyeSide,0); setValue(eyeUpDown,0); setValue(eyeBlink,0);
+        for (var i=0;i<browProperties.length;i++) setValue(browProperties[i],0);
+        for (var j=0;j<visemes.length;j++) setValue(visemes[j],0);
+        for (var k=0;k<mouthDrivers.length;k++) setValue(mouthDrivers[k],0);
+        for (var n=0;n<expressions.length;n++) setValue(expressions[n].property,0);
+    }
+
+    var oldImageSize = renderOptions.imageSize;
+    var oldFrame = renderOptions.isCurrentFrameRender;
+    var oldTarget = renderOptions.renderImgToId;
+    var oldFilename = renderOptions.renderImgFilename;
+    var oldType = renderOptions.renderType;
+    var irayScheduling = false;
+    var oldCPU=0, oldGPU=0, oldFallback=false, oldAffinity=false;
+    if (typeof renderer.getCPULoadLimit === "function" && typeof renderer.setCPULoadLimit === "function") {
+        try {
+            oldCPU = renderer.getCPULoadLimit();
+            renderer.setCPULoadLimit(Math.max(1.0, oldCPU * CPU_LOAD_FRACTION));
+            if (typeof renderer.getGPULoadLimit === "function") { oldGPU=renderer.getGPULoadLimit(); renderer.setGPULoadLimit(oldGPU); }
+            if (typeof renderer.getAllowCPUFallback === "function") { oldFallback=renderer.getAllowCPUFallback(); renderer.setAllowCPUFallback(true); }
+            if (typeof renderer.getCPUThreadAffinityEnabled === "function") oldAffinity=renderer.getCPUThreadAffinityEnabled();
+            irayScheduling=true;
+        } catch (eIray) { App.writeToLog("Nova v20 HD: Iray scheduling override unavailable: "+eIray, true); }
+    }
+
+    var rendered=0, failed=0, stopped=false;
+    function doOne(path, facial) {
+        if(stopped) return false;
+        try {
+            if(renderFile(path,facial)){rendered++;return true;}
+        } catch(e) {
+            failed++; stopped=true;
+            MessageBox.warning("Render failed:\n\n"+e+"\n\n"+path,"Nova v20 HD Render Warning","&OK");
+        }
+        return false;
+    }
+
+    try {
+        info("NOVA 2.5D PRODUCTION v20 HD\n\n"+
+            "Resolution: "+WIDTH+" x "+HEIGHT+"\n"+
+            "Max Samples: "+PRODUCTION_MAX_SAMPLES+"\n"+
+            "Max Time: "+PRODUCTION_MAX_TIME+" seconds\n\n"+
+            "This is the FULL HD source render pass — not the old half-resolution test.\n\n"+
+            "The proven normal DirectToFile Iray pipeline is retained.\n"+
+            "Click OK to render the production source library.");
+
+        if (DO_BASE) { resetFace(); doOne(baseDir.path()+"/nova_base.png",false); }
+        if (DO_EYES && eyeSide && eyeUpDown && !stopped) {
+            var eyeStates=[{name:"center",side:0,up:0}];
+            for(var ei=0;ei<eyeStates.length&&!stopped;ei++){resetFace();setValue(eyeSide,eyeStates[ei].side);setValue(eyeUpDown,eyeStates[ei].up);doOne(eyesDir.path()+"/"+eyeStates[ei].name+".png",true);}
+        }
+        if (DO_BLINKS && eyeBlink && !stopped) {
+            var bl=[{name:"open",v:0},{name:"half",v:50},{name:"closed",v:100}];
+            for(var bi=0;bi<bl.length&&!stopped;bi++){resetFace();setValue(eyeBlink,bl[bi].v);doOne(blinksDir.path()+"/"+bl[bi].name+".png",true);}
+        }
+        if (DO_EYEBROWS && browProperties.length && !stopped) {
+            for(var br=0;br<browProperties.length&&!stopped;br++){resetFace();setValue(browProperties[br],BROW_STRENGTH);doOne(browsDir.path()+"/"+safeFileName(browProperties[br].getLabel())+".png",true);}
+        }
+        var allMouth=[];
+        for(var a=0;a<visemes.length;a++) allMouth.push(visemes[a]);
+        if(!allMouth.length) for(var b=0;b<mouthDrivers.length;b++) allMouth.push(mouthDrivers[b]);
+        if(DO_MOUTH && allMouth.length && !stopped){
+            for(var c=0;c<allMouth.length&&!stopped;c++){resetFace();setValue(allMouth[c],VISEME_STRENGTH);doOne(mouthDir.path()+"/"+safeFileName(allMouth[c].getLabel())+".png",true);}
+        }
+        if(DO_FACE_DEFORM && expressions.length && !stopped){
+            for(var d=0;d<expressions.length&&!stopped;d++){resetFace();setValue(expressions[d].property,EXPRESSION_STRENGTH);doOne(faceDir.path()+"/"+expressions[d].name+".png",true);}
+        }
+    } finally {
+        for(var r=0;r<savedProps.length;r++) setValue(savedProps[r].property,savedProps[r].value);
+        if(drawDome && oldDome!==null) setValue(drawDome,oldDome);
+        if(drawGround && oldGround!==null) setValue(drawGround,oldGround);
+        if(maxSamples && oldSamples!==null) setValue(maxSamples,oldSamples);
+        if(maxTime && oldTime!==null) setValue(maxTime,oldTime);
+        try{renderOptions.imageSize=oldImageSize;}catch(e1){}
+        try{renderOptions.isCurrentFrameRender=oldFrame;}catch(e2){}
+        try{renderOptions.renderImgToId=oldTarget;}catch(e3){}
+        try{renderOptions.renderImgFilename=oldFilename;}catch(e4){}
+        try{renderOptions.renderType=oldType;}catch(e5){}
+        if(irayScheduling){
+            try{
+                renderer.setCPULoadLimit(oldCPU);
+                if(typeof renderer.setGPULoadLimit==="function"&&oldGPU>0)renderer.setGPULoadLimit(oldGPU);
+                if(typeof renderer.setAllowCPUFallback==="function")renderer.setAllowCPUFallback(oldFallback);
+                if(typeof renderer.setCPUThreadAffinityEnabled==="function")renderer.setCPUThreadAffinityEnabled(oldAffinity);
+            }catch(e6){}
+        }
+    }
+
+    var manifestPath=metaDir.path()+"/nova_2_5d_manifest.json";
+    try{
+        var f=new DzFile(manifestPath);
+        if(f.open(DzFile.WriteOnly|DzFile.Truncate|DzFile.Text)){
+            f.writeLine("{");
+            f.writeLine('  "version": 20,');
+            f.writeLine('  "output_folder": "'+rootName+'",');
+            f.writeLine('  "canvas": {"width": '+WIDTH+', "height": '+HEIGHT+'},');
+            f.writeLine('  "facial_layer": {"width": '+WIDTH+', "height": '+HEIGHT+', "scale": 1.0, "render_strategy": "normal_iray_render_with_facial_visibility_isolation"},');
+            f.writeLine('  "alpha": '+(!!drawDome && !!drawGround)+',');
+            f.writeLine('  "base": "../base/nova_base.png",');
+            f.writeLine('  "layers": {');
+            f.writeLine('    "eyes": {"path": "../eyes", "canvas": "'+WIDTH+'x'+HEIGHT+'"},');
+            f.writeLine('    "blinks": {"path": "../blinks", "canvas": "'+WIDTH+'x'+HEIGHT+'"},');
+            f.writeLine('    "eyebrows": {"path": "../eyebrows", "canvas": "'+WIDTH+'x'+HEIGHT+'"},');
+            f.writeLine('    "mouth": {"path": "../mouth", "canvas": "'+WIDTH+'x'+HEIGHT+'"},');
+            f.writeLine('    "face_deform": {"path": "../face_deform", "canvas": "'+WIDTH+'x'+HEIGHT+'" }');
+            f.writeLine('  },');
+            f.writeLine('  "discovered_controls": {"eyebrows": '+browProperties.length+', "visemes": '+visemes.length+', "mouthDrivers": '+mouthDrivers.length+', "faceDeform": '+expressions.length+',');
+            f.writeLine('    "note": "Mouth plates are actual Genesis facial-driver source renders; map them to phoneme classes in the compositor after visual inspection."');
+            f.writeLine('  }');
+            f.writeLine('}');
+            f.close();
+        }
+    }catch(eManifest){App.writeToLog("Nova v20 HD manifest failed: "+eManifest,true);}
+
+    info((stopped?"NOVA 2.5D HD BUILD STOPPED":"NOVA 2.5D HD BUILD COMPLETE")+"\n\n"+
+        "Rendered: "+rendered+"\nFailed: "+failed+"\n\n"+
+        "Resolution: "+WIDTH+" x "+HEIGHT+"\n"+
+        "Output:\n"+rootPath+"\n\n"+
+        "The scene was not saved. Facial/render/Iray settings were restored.");
+}
+
+novaMain();
