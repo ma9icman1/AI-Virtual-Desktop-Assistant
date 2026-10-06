@@ -29,6 +29,7 @@ export class VoiceEngine {
   private static wakeWordListeners: Array<(w: string) => void> = [];
   private static audioLevelListeners: Array<(lvl: number) => void> = [];
   private static errorListeners: Array<(message: string) => void> = [];
+  private static speakingStateListeners: Array<(isSpeaking: boolean) => void> = [];
 
   public static getInstance(): VoiceEngine {
     if (!this.instance) {
@@ -53,7 +54,9 @@ export class VoiceEngine {
           },
           onWakeWordDetected: (w) => this.wakeWordListeners.forEach((l) => l(w)),
           onAudioLevel: (lvl) => this.audioLevelListeners.forEach((l) => l(lvl)),
-          onSpeakingStateChange: () => {},
+          onSpeakingStateChange: (isSpeaking) => {
+            this.speakingStateListeners.forEach((listener) => listener(isSpeaking));
+          },
           onError: (e) => console.warn(e),
         }
       );
@@ -126,6 +129,13 @@ export class VoiceEngine {
     this.errorListeners.push(cb);
     return () => {
       this.errorListeners = this.errorListeners.filter((listener) => listener !== cb);
+    };
+  }
+
+  public static onSpeakingStateChange(cb: (isSpeaking: boolean) => void) {
+    this.speakingStateListeners.push(cb);
+    return () => {
+      this.speakingStateListeners = this.speakingStateListeners.filter((listener) => listener !== cb);
     };
   }
 
