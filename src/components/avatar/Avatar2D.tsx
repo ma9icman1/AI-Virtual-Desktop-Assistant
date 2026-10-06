@@ -581,13 +581,13 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       <button
         type="button"
         onClick={() => setShowDevControls((v) => !v)}
-        className="absolute left-3 top-3 z-[100] rounded-lg border-2 border-cyan-400 bg-slate-950 px-3 py-2 text-xs font-black text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.35)] cursor-pointer"
+        className="hidden"
       >
         {showDevControls ? "HIDE DEV" : "2.5D DEV"}
       </button>
 
       {showDevControls && (
-        <div className="absolute left-3 top-14 z-[99] w-[360px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
+        <div className="absolute right-3 bottom-20 z-[99] w-[360px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
             <div><div className="text-xs font-bold text-cyan-300">Nova 2.5D DEV</div><div className="text-[9px] text-slate-500">Live image/layer calibration</div></div>
             <button type="button" onClick={resetDevControls} className="rounded border border-slate-700 px-2 py-1 text-[9px]">RESET</button>
@@ -707,6 +707,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               <Maximize2 className="w-4 h-4" />
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setShowDevControls((v) => !v)}
+            className="avatar2d-tool rounded-full transition-all cursor-pointer text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950"
+            title="Nova 2.5D Developer Controls"
+          >
+            <span className="text-[9px] font-black">DEV</span>
+          </button>
         </div>
       </div>
     </div>
