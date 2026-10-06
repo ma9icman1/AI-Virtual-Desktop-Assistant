@@ -46,7 +46,9 @@ const AvatarLayerImage: React.FC<AvatarLayerImageProps> = ({
       draggable={false}
       className={className}
       style={style}
+      onLoad={() => console.log("[AVATAR2D DEBUG] image loaded", name, src)}
       onError={() => {
+        console.error("[AVATAR2D DEBUG] image FAILED", name, src);
         if (src.endsWith(".png")) {
           setSrc(`/avatar2d/${name}.svg`);
         }
@@ -93,6 +95,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   useEffect(() => {
     const unsub = LipSyncEngine.getInstance().subscribe((weights) => {
       currentWeightsRef.current = weights;
+      console.log("[AVATAR2D DEBUG] LipSyncEngine weights", weights);
 
       if (!isSpeaking) {
         if ((weights.mouthSmileLeft ?? 0) > 0.2 || isListening) {
@@ -129,6 +132,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   // Reliable fallback lip animation. Do not depend on viseme callbacks
   // arriving from the TTS analyser; those can be absent for short speech turns.
   useEffect(() => {
+    console.log("[AVATAR2D DEBUG] mouth effect", { isSpeaking, isListening, audioLevel });
     const active = isSpeaking || audioLevel > 0.015;
     if (!active) {
       setMouthState(isListening ? "smile" : "closed");
@@ -146,6 +150,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         setMouthState(index % 2 === 0 ? "open_small" : "open_wide");
       } else {
         setMouthState(cycle[index % cycle.length]);
+      console.log("[AVATAR2D DEBUG] fallback mouth", { level, next: cycle[index % cycle.length] });
       }
       index += 1;
     };
@@ -317,6 +322,22 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       </div>
 
       {/* Floating Status & Quick Action Controls Overlay */}
+      <div className="avatar2d-debug absolute top-3 left-3 z-[100] rounded-lg border border-cyan-400/50 bg-black/90 px-3 py-2 font-mono text-[11px] text-cyan-200 shadow-xl" style={{ minWidth: "270px" }}>
+        <div className="font-bold text-cyan-300">AVATAR DEBUG</div>
+        <div>speaking: <b>{String(isSpeaking)}</b></div>
+        <div>listening: <b>{String(isListening)}</b></div>
+        <div>audioLevel: <b>{audioLevel.toFixed(3)}</b></div>
+        <div>mouthState: <b>{mouthState}</b></div>
+        <div>jawOpen: <b>{(currentWeightsRef.current.jawOpen ?? 0).toFixed(3)}</b></div>
+        <div>viseme_O: <b>{(currentWeightsRef.current.viseme_O ?? 0).toFixed(3)}</b></div>
+        <div>viseme_AA: <b>{(currentWeightsRef.current.viseme_aa ?? 0).toFixed(3)}</b></div>
+        <div className="mt-1 flex gap-1 flex-wrap">
+          {(["closed","smile","open_small","open_wide","o"] as MouthState[]).map((m) => (
+            <button key={m} type="button" onClick={() => { setMouthState(m); console.log("[AVATAR2D DEBUG] FORCE MOUTH", m); }} className="rounded bg-slate-800 px-1.5 py-0.5 hover:bg-cyan-800">{m}</button>
+          ))}
+        </div>
+      </div>
+
       <div className="avatar2d-controls absolute flex flex-col items-center z-20">
         {/* Status Pills */}
         <div
