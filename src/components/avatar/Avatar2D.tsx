@@ -385,7 +385,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     if (devControls.eyes.visible) {
       drawLayer(NOVA_FILES.eyes.center, devControls.eyes);
-      if (eyeState === "half" || eyeState === "closed" || !devAutoAnimate) {
+      if (eyeState !== "open" || !devAutoAnimate) {
         drawLayer(eyeSource, devControls.eyes);
       }
     }
@@ -520,6 +520,10 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     let blinkTimeout = 0;
 
     const executeBlink = (onComplete: () => void) => {
+      if (!devAutoAnimate) {
+        onComplete();
+        return;
+      }
       setEyeState("half");
       window.setTimeout(() => {
         setEyeState("closed");
