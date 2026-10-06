@@ -82,6 +82,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   // Layer states
   const [eyeState, setEyeState] = useState<EyeState>("open");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
+  const [mouthLayerReady, setMouthLayerReady] = useState(true);
 
   // Simulated 3D Parallax coordinates (-1 to +1)
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
@@ -316,6 +317,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               name={`mouth_${mouthState}`}
               alt={`Mouth ${mouthState}`}
               className="absolute inset-0 w-full h-full object-contain"
+              style={{ zIndex: 30 }}
             />
           </div>
         </div>
