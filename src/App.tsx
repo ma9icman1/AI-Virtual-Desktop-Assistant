@@ -65,7 +65,6 @@ import {
   FolderOpen,
   Minus,
   Square,
-  SlidersHorizontal,
 } from "lucide-react";
 
 function describeError(error: unknown, fallback: string): string {
@@ -2387,11 +2386,3 @@ export default function App() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
