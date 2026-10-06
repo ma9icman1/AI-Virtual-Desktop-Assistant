@@ -1,9 +1,14 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
-import { Mic, Volume2, Maximize2, Sparkles, RefreshCw, Layers, Settings2, RotateCcw } from "lucide-react";
+import { Mic, Volume2, Maximize2, Layers } from "lucide-react";
 
 export type EyeState = "open" | "half" | "closed";
-export type MouthState = "closed" | "smile" | "open_small" | "open_wide" | "o";
+export type MouthState =
+  | "closed"
+  | "smile"
+  | "open_small"
+  | "open_wide"
+  | "o";
 
 interface Avatar2DProps {
   isSpeaking: boolean;
@@ -20,42 +25,126 @@ interface Avatar2DProps {
   enableParallax?: boolean;
 }
 
-interface AvatarLayerImageProps {
-  name: string;
-  alt: string;
-  className?: string;
-  style?: React.CSSProperties;
+const NOVA_ROOT = "/Nova_2_5D_PRODUCTION_LAYERS_FINAL";
+
+const NOVA_FILES = {
+  base: "base/nova_base.png",
+  eyes: {
+    center: "eyes/center.png",
+  },
+  blinks: {
+    open: "blinks/open.png",
+    half: "blinks/half.png",
+    closed: "blinks/closed.png",
+  },
+  eyebrows: {
+    neutral: "eyebrows/Brow Down.png",
+    up: "eyebrows/Brow Up.png",
+    innerUp: "eyebrows/Brow Inner Up.png",
+    outerUpLeft: "eyebrows/Brow Outer Up Left.png",
+    outerUpRight: "eyebrows/Brow Outer Up Right.png",
+    squeeze: "eyebrows/Brow Squeeze.png",
+    down: "eyebrows/Brow Down.png",
+  },
+  mouth: {
+    closed: "mouth/Mouth Press.png",
+    smile: "mouth/Mouth Smile.png",
+    openSmall: "mouth/Mouth Stretch.png",
+    openWide: "mouth/Mouth Upper Up.png",
+    o: "mouth/Mouth Pucker.png",
+  },
+  faceDeform: {
+    neutral: "face_deform/lip.png",
+    smile: "face_deform/smile.png",
+    frown: "face_deform/frown.png",
+    cheek: "face_deform/cheek.png",
+    wide: "face_deform/mouth wide.png",
+  },
+} as const;
+
+type NovaSource =
+  | typeof NOVA_FILES.base
+  | (typeof NOVA_FILES.eyes)[keyof typeof NOVA_FILES.eyes]
+  | (typeof NOVA_FILES.blinks)[keyof typeof NOVA_FILES.blinks]
+  | (typeof NOVA_FILES.eyebrows)[keyof typeof NOVA_FILES.eyebrows]
+  | (typeof NOVA_FILES.mouth)[keyof typeof NOVA_FILES.mouth]
+  | (typeof NOVA_FILES.faceDeform)[keyof typeof NOVA_FILES.faceDeform];
+
+type RGBAImage = {
+  source: NovaSource;
+  image: HTMLImageElement;
+};
+
+const DIFF_THRESHOLD = 8;
+const CANVAS_SIZE = 1024;
+
+function sourceUrl(source: NovaSource): string {
+  return `${NOVA_ROOT}/${source}`;
 }
 
-const AvatarLayerImage: React.FC<AvatarLayerImageProps> = ({
-  name,
-  alt,
-  className = "absolute inset-0 w-full h-full object-contain",
-  style,
-}) => {
-  const [src, setSrc] = useState<string>(`/avatar2d/${name}.png`);
+function loadImage(source: NovaSource): Promise<RGBAImage> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve({ source, image });
+    image.onerror = () => reject(new Error(`Nova image failed to load: ${source}`));
+    image.src = sourceUrl(source);
+  });
+}
 
-  useEffect(() => {
-    setSrc(`/avatar2d/${name}.png`);
-  }, [name]);
+function imageKey(source: NovaSource): string {
+  return source;
+}
 
-  return (
-    <img
-      src={src}
-      alt={alt}
-      draggable={false}
-      className={className}
-      style={style}
-      onLoad={() => console.log("[AVATAR2D DEBUG] image loaded", name, src)}
-      onError={() => {
-        console.error("[AVATAR2D DEBUG] image FAILED", name, src);
-        if (src.endsWith(".png")) {
-          setSrc(`/avatar2d/${name}.svg`);
-        }
-      }}
-    />
-  );
-};
+function buildDifferenceMask(
+  base: HTMLImageElement,
+  overlay: HTMLImageElement,
+  threshold: number,
+): HTMLCanvasElement {
+  const baseCanvas = document.createElement("canvas");
+  const overlayCanvas = document.createElement("canvas");
+  const maskCanvas = document.createElement("canvas");
+
+  baseCanvas.width = overlayCanvas.width = maskCanvas.width = CANVAS_SIZE;
+  baseCanvas.height = overlayCanvas.height = maskCanvas.height = CANVAS_SIZE;
+
+  const baseCtx = baseCanvas.getContext("2d", { willReadFrequently: true });
+  const overlayCtx = overlayCanvas.getContext("2d", { willReadFrequently: true });
+  const maskCtx = maskCanvas.getContext("2d");
+
+  if (!baseCtx || !overlayCtx || !maskCtx) {
+    throw new Error("Nova compositor could not create canvas contexts.");
+  }
+
+  baseCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  overlayCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  baseCtx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  overlayCtx.drawImage(overlay, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+  const a = baseCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  const b = overlayCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+  const out = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
+
+  for (let i = 0; i < a.data.length; i += 4) {
+    const dr = Math.abs(a.data[i] - b.data[i]);
+    const dg = Math.abs(a.data[i + 1] - b.data[i + 1]);
+    const db = Math.abs(a.data[i + 2] - b.data[i + 2]);
+    const da = Math.abs(a.data[i + 3] - b.data[i + 3]);
+
+    const changed = Math.max(dr, dg, db, da) >= threshold;
+
+    if (changed) {
+      out.data[i] = b.data[i];
+      out.data[i + 1] = b.data[i + 1];
+      out.data[i + 2] = b.data[i + 2];
+      out.data[i + 3] = b.data[i + 3];
+    }
+  }
+
+  maskCtx.putImageData(out, 0, 0);
+  return maskCanvas;
+}
 
 export const Avatar2D: React.FC<Avatar2DProps> = ({
   isSpeaking,
@@ -71,117 +160,163 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   className = "",
   enableParallax = true,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const speechTextRef = useRef<HTMLDivElement>(null);
+  const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const maskCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const renderFrameRef = useRef<number | null>(null);
+  const currentWeightsRef = useRef<Partial<VisemeWeights>>({});
+  const targetParallax = useRef({ x: 0, y: 0 });
+
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [eyeState, setEyeState] = useState<EyeState>("open");
+  const [mouthState, setMouthState] = useState<MouthState>("closed");
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+
+  const sources = useMemo(() => {
+    const values: NovaSource[] = [
+      NOVA_FILES.base,
+      NOVA_FILES.eyes.center,
+      ...Object.values(NOVA_FILES.blinks),
+      ...Object.values(NOVA_FILES.eyebrows),
+      ...Object.values(NOVA_FILES.mouth),
+      ...Object.values(NOVA_FILES.faceDeform),
+    ];
+    return [...new Set(values)];
+  }, []);
+
+  const getImage = useCallback((source: NovaSource) => {
+    return imagesRef.current.get(imageKey(source)) ?? null;
+  }, []);
+
+  const getMask = useCallback(
+    (source: NovaSource): HTMLCanvasElement | null => {
+      const cached = maskCacheRef.current.get(imageKey(source));
+      if (cached) return cached;
+
+      const base = getImage(NOVA_FILES.base);
+      const overlay = getImage(source);
+
+      if (!base || !overlay) return null;
+      if (source === NOVA_FILES.base) return null;
+
+      const mask = buildDifferenceMask(base, overlay, DIFF_THRESHOLD);
+      maskCacheRef.current.set(imageKey(source), mask);
+      return mask;
+    },
+    [getImage],
+  );
+
+  const renderNova = useCallback(() => {
+    const canvas = canvasRef.current;
+    const base = getImage(NOVA_FILES.base);
+    if (!canvas || !base) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = CANVAS_SIZE;
+    canvas.height = CANVAS_SIZE;
+    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // The DAZ plates share the exact same 1024x1024 camera/canvas.
+    // Render the base first, then difference masks for the active states.
+    ctx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    const activeSources: NovaSource[] = [
+      NOVA_FILES.eyes.center,
+      NOVA_FILES.blinks[eyeState],
+      NOVA_FILES.eyebrows.neutral,
+      NOVA_FILES.mouth[
+        mouthState === "o"
+          ? "o"
+          : mouthState === "open_wide"
+            ? "openWide"
+            : mouthState === "open_small"
+              ? "openSmall"
+              : mouthState === "smile"
+                ? "smile"
+                : "closed"
+      ],
+      NOVA_FILES.faceDeform[
+        mouthState === "open_wide"
+          ? "wide"
+          : mouthState === "smile"
+            ? "smile"
+            : "neutral"
+      ],
+    ];
+
+    for (const source of activeSources) {
+      const mask = getMask(source);
+      if (mask) {
+        ctx.drawImage(mask, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      }
+    }
+  }, [eyeState, mouthState, getImage, getMask]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all(sources.map(loadImage))
+      .then((loaded) => {
+        if (cancelled) return;
+        for (const item of loaded) {
+          imagesRef.current.set(imageKey(item.source), item.image);
+        }
+        setReady(true);
+        setLoadError(null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("[Nova 2.5D] image load failed", error);
+        setLoadError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sources]);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    if (renderFrameRef.current !== null) {
+      cancelAnimationFrame(renderFrameRef.current);
+    }
+
+    renderFrameRef.current = requestAnimationFrame(() => {
+      renderNova();
+      renderFrameRef.current = null;
+    });
+
+    return () => {
+      if (renderFrameRef.current !== null) {
+        cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = null;
+      }
+    };
+  }, [ready, renderNova]);
 
   useEffect(() => {
     const el = speechTextRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [speechText]);
 
-  // Layer states
-  const [eyeState, setEyeState] = useState<EyeState>("open");
-  const [mouthState, setMouthState] = useState<MouthState>("closed");
-  const [mouthLayerReady, setMouthLayerReady] = useState(true);
-  const [showDevControls, setShowDevControls] = useState(false);
-  const [devAutoAnimate, setDevAutoAnimate] = useState(true);
-  const [devMouthIndex, setDevMouthIndex] = useState(0);
-  const [devEyeIndex, setDevEyeIndex] = useState(0);
-  const [devMouthX, setDevMouthX] = useState(0);
-  const [devMouthY, setDevMouthY] = useState(0);
-  const [devMouthScale, setDevMouthScale] = useState(100);
-  const [devMouthOpacity, setDevMouthOpacity] = useState(100);
-  const [devFaceX, setDevFaceX] = useState(0);
-  const [devFaceY, setDevFaceY] = useState(0);
-  const [devFaceScale, setDevFaceScale] = useState(100);
-  const [devFaceOpacity, setDevFaceOpacity] = useState(100);
-
-  const mouthStates: MouthState[] = ["closed", "smile", "open_small", "open_wide", "o"];
-  const eyeStates: EyeState[] = ["open", "half", "closed"];
-
-  const updateDevNumber = useCallback((setter: React.Dispatch<React.SetStateAction<number>>, min: number, max: number, value: number) => {
-    setter(Math.max(min, Math.min(max, Number.isFinite(value) ? value : min)));
-  }, []);
-
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("nova_avatar_dev_controls") || "{}");
-      if (typeof saved.mouthX === "number") setDevMouthX(saved.mouthX);
-      if (typeof saved.mouthY === "number") setDevMouthY(saved.mouthY);
-      if (typeof saved.mouthScale === "number") setDevMouthScale(saved.mouthScale);
-      if (typeof saved.mouthOpacity === "number") setDevMouthOpacity(saved.mouthOpacity);
-      if (typeof saved.faceX === "number") setDevFaceX(saved.faceX);
-      if (typeof saved.faceY === "number") setDevFaceY(saved.faceY);
-      if (typeof saved.faceScale === "number") setDevFaceScale(saved.faceScale);
-      if (typeof saved.faceOpacity === "number") setDevFaceOpacity(saved.faceOpacity);
-    } catch {
-      // Keep defaults when stored developer calibration is unavailable.
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("nova_avatar_dev_controls", JSON.stringify({
-        mouthX: devMouthX,
-        mouthY: devMouthY,
-        mouthScale: devMouthScale,
-        mouthOpacity: devMouthOpacity,
-        faceX: devFaceX,
-        faceY: devFaceY,
-        faceScale: devFaceScale,
-        faceOpacity: devFaceOpacity,
-      }));
-    } catch {
-      // Calibration still works for the current session.
-    }
-  }, [devMouthX, devMouthY, devMouthScale, devMouthOpacity, devFaceX, devFaceY, devFaceScale, devFaceOpacity]);
-
-  useEffect(() => {
-    const preloadNames = [
-      "body",
-      ...eyeStates.map((state) => `eyes_${state}`),
-      ...mouthStates.map((state) => `mouth_${state}`),
-    ];
-    const images = preloadNames.map((name) => {
-      const image = new Image();
-      image.src = `/avatar2d/${name}.png`;
-      return image;
-    });
-    return () => images.forEach((image) => { image.onload = null; image.onerror = null; });
-  }, []);
-
-  useEffect(() => {
-    if (devAutoAnimate) return;
-    setMouthState(mouthStates[devMouthIndex] || "closed");
-    setEyeState(eyeStates[devEyeIndex] || "open");
-  }, [devAutoAnimate, devMouthIndex, devEyeIndex]);
-
-  // Simulated 3D Parallax coordinates (-1 to +1)
-  const [parallax, setParallax] = useState({ x: 0, y: 0 });
-  const targetParallax = useRef({ x: 0, y: 0 });
-  const animFrameRef = useRef<number | null>(null);
-
-  // Viseme weights from LipSyncEngine
-  const currentWeightsRef = useRef<Partial<VisemeWeights>>({});
-
-  // 1. LipSync Subscription & Mouth State Update
-  useEffect(() => {
-    if (!devAutoAnimate) return;
-
     const unsub = LipSyncEngine.getInstance().subscribe((weights) => {
       currentWeightsRef.current = weights;
-      console.log("[AVATAR2D DEBUG] LipSyncEngine weights", weights);
 
       if (!isSpeaking) {
-        if ((weights.mouthSmileLeft ?? 0) > 0.2 || isListening) {
-          setMouthState("smile");
-        } else {
-          setMouthState("closed");
-        }
+        setMouthState(
+          (weights.mouthSmileLeft ?? 0) > 0.2 || isListening
+            ? "smile"
+            : "closed",
+        );
         return;
       }
 
-      // Determine active mouth phoneme from visemes
       const jaw = weights.jawOpen ?? 0;
       const visO = weights.viseme_O ?? 0;
       const visU = weights.viseme_U ?? 0;
@@ -202,67 +337,35 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     });
 
     return () => unsub();
-  }, [isSpeaking, isListening, devAutoAnimate]);
+  }, [isSpeaking, isListening]);
 
-  // Reliable fallback lip animation. Do not depend on viseme callbacks
-  // arriving from the TTS analyser; those can be absent for short speech turns.
   useEffect(() => {
-    console.log("[AVATAR2D DEBUG] mouth effect", { isSpeaking, isListening, audioLevel });
-    if (!devAutoAnimate) return;
-    const active = isSpeaking || audioLevel > 0.015;
-    if (!active) {
-      setMouthState(isListening ? "smile" : "closed");
-      return;
-    }
+    if (!isSpeaking) return;
 
     let index = 0;
-    const cycle: MouthState[] = ["open_small", "open_wide", "open_small", "o", "open_wide", "smile"];
+    const cycle: MouthState[] = [
+      "open_small",
+      "open_wide",
+      "open_small",
+      "o",
+      "smile",
+    ];
 
-    const animateMouth = () => {
-      const level = Math.max(0, Math.min(1, audioLevel));
-      if (level > 0.42) {
-        setMouthState(index % 3 === 0 ? "open_wide" : "o");
-      } else if (level > 0.08) {
-        setMouthState(index % 2 === 0 ? "open_small" : "open_wide");
-      } else {
-        setMouthState(cycle[index % cycle.length]);
-      console.log("[AVATAR2D DEBUG] fallback mouth", { level, next: cycle[index % cycle.length] });
+    const interval = window.setInterval(() => {
+      const jaw = currentWeightsRef.current.jawOpen ?? 0;
+      if (jaw === 0) {
+        index = (index + 1) % cycle.length;
+        setMouthState(cycle[index]);
       }
-      index += 1;
-    };
+    }, 140);
 
-    animateMouth();
-    const interval = window.setInterval(animateMouth, 105);
     return () => window.clearInterval(interval);
-  }, [isSpeaking, isListening, audioLevel]);
+  }, [isSpeaking]);
 
-  // 2. Natural Blinking Loop with Double-Blink Simulation
   useEffect(() => {
-    if (!devAutoAnimate) {
-      setEyeState(eyeStates[devEyeIndex] || "open");
-      return;
-    }
-
-    let blinkTimeout: number;
-
-    const scheduleNextBlink = () => {
-      // Human average: blink every 3.5 to 6.5 seconds
-      const delay = Math.random() * 3000 + 3500;
-
-      blinkTimeout = window.setTimeout(() => {
-        executeBlink(() => {
-          // 25% chance of a rapid double-blink
-          if (Math.random() < 0.25) {
-            window.setTimeout(() => executeBlink(scheduleNextBlink), 120);
-          } else {
-            scheduleNextBlink();
-          }
-        });
-      }, delay);
-    };
+    let blinkTimeout = 0;
 
     const executeBlink = (onComplete: () => void) => {
-      // 0ms: half -> 40ms: closed -> 90ms: half -> 140ms: open
       setEyeState("half");
       window.setTimeout(() => {
         setEyeState("closed");
@@ -276,219 +379,98 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       }, 40);
     };
 
-    scheduleNextBlink();
-    return () => window.clearTimeout(blinkTimeout);
-  }, [devAutoAnimate, devEyeIndex]);
-
-  // TEMP DEBUG: trace whether native mouse events reach the transparent 2.5D renderer.
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement | null;
-      const hit = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-      console.log("[2.5D DEBUG] pointerdown", {
-        x: event.clientX,
-        y: event.clientY,
-        target: target?.tagName,
-        targetClass: target?.className,
-        hit: hit?.tagName,
-        hitClass: hit?.className,
-        controls: Boolean(hit?.closest?.(".avatar2d-controls")),
-      });
+    const scheduleNextBlink = () => {
+      const delay = Math.random() * 3000 + 3500;
+      blinkTimeout = window.setTimeout(() => {
+        executeBlink(() => {
+          if (Math.random() < 0.25) {
+            window.setTimeout(() => executeBlink(scheduleNextBlink), 120);
+          } else {
+            scheduleNextBlink();
+          }
+        });
+      }, delay);
     };
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    return () => window.removeEventListener("pointerdown", handlePointerDown, true);
+
+    scheduleNextBlink();
+
+    return () => window.clearTimeout(blinkTimeout);
   }, []);
 
-  // 3. Simulated 3D Parallax Mouse Tracker
   useEffect(() => {
     if (!enableParallax) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const { innerWidth, innerHeight } = window;
-      const nx = (e.clientX / innerWidth) * 2 - 1; // -1 to +1
-      const ny = (e.clientY / innerHeight) * 2 - 1; // -1 to +1
+    const handleMouseMove = (event: MouseEvent) => {
+      const nx = (event.clientX / window.innerWidth) * 2 - 1;
+      const ny = (event.clientY / window.innerHeight) * 2 - 1;
       targetParallax.current = {
         x: Math.max(-1, Math.min(1, nx)),
         y: Math.max(-1, Math.min(1, ny)),
       };
     };
 
-    const updateParallax = () => {
-      setParallax((prev) => {
-        const dx = targetParallax.current.x - prev.x;
-        const dy = targetParallax.current.y - prev.y;
-        return {
-          x: prev.x + dx * 0.08, // smooth spring interpolation
-          y: prev.y + dy * 0.08,
-        };
-      });
-      animFrameRef.current = requestAnimationFrame(updateParallax);
+    let frame = 0;
+    const update = () => {
+      setParallax((previous) => ({
+        x: previous.x + (targetParallax.current.x - previous.x) * 0.08,
+        y: previous.y + (targetParallax.current.y - previous.y) * 0.08,
+      }));
+      frame = requestAnimationFrame(update);
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    animFrameRef.current = requestAnimationFrame(updateParallax);
+    frame = requestAnimationFrame(update);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      cancelAnimationFrame(frame);
     };
   }, [enableParallax]);
 
-  // Derived 3D rotation angles
-  const rotY = parallax.x * 12; // -12deg to +12deg
-  const rotX = -parallax.y * 10; // -10deg to +10deg
+  const rotY = parallax.x * 12;
+  const rotX = -parallax.y * 10;
 
   return (
     <div
-      ref={containerRef}
       className={`avatar2d-shell relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent select-none ${className}`}
       style={{ perspective: "1000px" }}
     >
-      {/* Ambient glow disabled in 2.5D overlay so the real Windows desktop remains visible. */}
-
-      {/* 2.5D Parallax Stage */}
       <div
-        className="avatar2d-stage relative w-full flex items-center justify-center transition-transform duration-75 ease-out"
+        className="avatar2d-stage relative w-full h-full flex items-center justify-center"
         style={{
           transformStyle: "preserve-3d",
           transform: `rotateY(${rotY}deg) rotateX(${rotX}deg)`,
         }}
       >
-        {/* Breathing & Micro-Motion Container */}
         <div
-          className="relative w-full h-full animate-[avatarBreathing_4s_ease-in-out_infinite]"
-          style={{
-            transformStyle: "preserve-3d",
-          }}
+          className="relative w-full h-full flex items-center justify-center animate-[avatarBreathing_4s_ease-in-out_infinite]"
+          style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Layer 1: Body, Torso, Hair, Face Base */}
-          <AvatarLayerImage
-            name="body"
-            alt="Nova Avatar Base"
+          <canvas
+            ref={canvasRef}
+            aria-label="Nova 2.5D avatar"
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             style={{
-              transform: "translateZ(0px)",
+              transform: `translateZ(0px)`,
               filter: "drop-shadow(0 20px 30px rgba(0,0,0,0.5))",
             }}
           />
 
-          {/* Layer 2: Eyes (With forward depth parallax) */}
-          <div
-            className="absolute inset-0 w-full h-full pointer-events-none transition-transform duration-75"
-            style={{
-              transform: `translateZ(20px) translate3d(${parallax.x * 3}px, ${parallax.y * 3}px, 0)`,
-            }}
-          >
-            <AvatarLayerImage
-              name={`eyes_${eyeState}`}
-              alt={`Eyes ${eyeState}`}
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{
-                transform: `translate3d(${devFaceX}px, ${devFaceY}px, 0) scale(${devFaceScale / 100})`,
-                opacity: devFaceOpacity / 100,
-              }}
-            />
-          </div>
-
-          {/* Layer 3: Mouth (With forward depth parallax & viseme swap) */}
-          <div
-            className="absolute inset-0 w-full h-full pointer-events-none transition-transform duration-75"
-            style={{
-              transform: `translateZ(18px) translate3d(${parallax.x * 2.5}px, ${parallax.y * 2.5}px, 0)`,
-            }}
-          >
-            <AvatarLayerImage
-              name={`mouth_${mouthState}`}
-              alt={`Mouth ${mouthState}`}
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{
-                zIndex: 30,
-                transform: `translate3d(${devMouthX}px, ${devMouthY}px, 0) scale(${devMouthScale / 100})`,
-                opacity: devMouthOpacity / 100,
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Developer calibration controls */}
-      {showDevControls && (
-        <div className="absolute top-3 right-3 z-[120] w-[310px] max-w-[calc(100vw-24px)] max-h-[calc(100% - 24px)] overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950/95 p-3 text-slate-100 shadow-2xl shadow-black/50 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
-            <div>
-              <div className="text-xs font-bold text-cyan-300">NOVA AVATAR DEV</div>
-              <div className="text-[9px] text-slate-500">Live layer calibration • auto-loaded assets</div>
+          {!ready && !loadError && (
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 pointer-events-none">
+              Loading Nova…
             </div>
-            <button type="button" onClick={() => setShowDevControls(false)} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-slate-300 hover:border-cyan-300/50">Close</button>
-          </div>
+          )}
 
-          <div className="mt-3 rounded-lg border border-cyan-400/20 bg-slate-900/70 p-2.5">
-            <label className="flex items-center justify-between text-[10px] font-semibold">
-              <span>Animation mode</span>
-              <span className="text-cyan-300">{devAutoAnimate ? "AUTO LIP SYNC" : "MANUAL"}</span>
-            </label>
-            <div className="mt-2 flex gap-2">
-              <button type="button" onClick={() => setDevAutoAnimate(true)} className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${devAutoAnimate ? "bg-cyan-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>Auto</button>
-              <button type="button" onClick={() => setDevAutoAnimate(false)} className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${!devAutoAnimate ? "bg-cyan-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>Manual</button>
+          {loadError && (
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 max-w-md rounded-lg border border-red-500/30 bg-slate-950/90 px-4 py-3 text-xs text-red-300 pointer-events-none">
+              Nova 2.5D load error: {loadError}
             </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-white/10 bg-slate-900/70 p-2.5">
-            <div className="text-[10px] font-bold text-white">MOUTH ANIMATION</div>
-            <div className="mt-2 text-[9px] text-slate-400">Frame: <b className="text-cyan-200">{mouthStates[devMouthIndex]}</b></div>
-            <input aria-label="Mouth animation frame" type="range" min="0" max="4" step="1" value={devMouthIndex} onChange={(e) => updateDevNumber(setDevMouthIndex, 0, 4, Number(e.target.value))} className="w-full accent-cyan-400" />
-            {mouthStates.map((state, index) => (
-              <div key={state} className="mt-1 flex items-center gap-2">
-                <span className="w-20 text-[9px] text-slate-400">{state}</span>
-                <input aria-label={`Mouth ${state} selector`} type="range" min="0" max="100" step="1" value={devMouthIndex === index ? 100 : 0} onChange={() => { setDevMouthIndex(index); setDevAutoAnimate(false); }} className="w-full accent-cyan-400" />
-              </div>
-            ))}
-            <label className="mt-2 block text-[9px] text-slate-400">Mouth X <input type="range" min="-40" max="40" value={devMouthX} onChange={(e) => updateDevNumber(setDevMouthX, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-            <label className="mt-2 block text-[9px] text-slate-400">Mouth Y <input type="range" min="-40" max="40" value={devMouthY} onChange={(e) => updateDevNumber(setDevMouthY, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-            <label className="mt-2 block text-[9px] text-slate-400">Mouth Scale <input type="range" min="85" max="115" value={devMouthScale} onChange={(e) => updateDevNumber(setDevMouthScale, 85, 115, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-            <label className="mt-2 block text-[9px] text-slate-400">Mouth Opacity <input type="range" min="0" max="100" value={devMouthOpacity} onChange={(e) => updateDevNumber(setDevMouthOpacity, 0, 100, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-white/10 bg-slate-900/70 p-2.5">
-            <div className="text-[10px] font-bold text-white">FACE / EYES</div>
-            <div className="mt-2 text-[9px] text-slate-400">Eye frame: <b className="text-cyan-200">{eyeStates[devEyeIndex]}</b></div>
-            <input aria-label="Eye animation frame" type="range" min="0" max="2" step="1" value={devEyeIndex} onChange={(e) => { setDevEyeIndex(Number(e.target.value)); setDevAutoAnimate(false); }} className="w-full accent-cyan-400" />
-            <div className="mt-1 flex justify-between text-[8px] text-slate-500"><span>open</span><span>half</span><span>closed</span></div>
-            <label className="mt-2 block text-[9px] text-slate-400">Face X <input type="range" min="-40" max="40" value={devFaceX} onChange={(e) => updateDevNumber(setDevFaceX, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-            <label className="mt-2 block text-[9px] text-slate-400">Face Y <input type="range" min="-40" max="40" value={devFaceY} onChange={(e) => updateDevNumber(setDevFaceY, -40, 40, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-            <label className="mt-2 block text-[9px] text-slate-400">Face Scale <input type="range" min="85" max="115" value={devFaceScale} onChange={(e) => updateDevNumber(setDevFaceScale, 85, 115, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-            <label className="mt-2 block text-[9px] text-slate-400">Face Opacity <input type="range" min="0" max="100" value={devFaceOpacity} onChange={(e) => updateDevNumber(setDevFaceOpacity, 0, 100, Number(e.target.value))} className="w-full accent-cyan-400" /></label>
-          </div>
-
-          <button type="button" onClick={() => { setDevMouthX(0); setDevMouthY(0); setDevMouthScale(100); setDevMouthOpacity(100); setDevFaceX(0); setDevFaceY(0); setDevFaceScale(100); setDevFaceOpacity(100); setDevMouthIndex(0); setDevEyeIndex(0); setDevAutoAnimate(true); }} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-slate-900 px-2 py-1.5 text-[10px] font-semibold text-slate-300 hover:border-cyan-300/40">
-            <RotateCcw className="h-3 w-3" /> Reset calibration
-          </button>
-        </div>
-      )}
-
-      {/* Floating Status & Quick Action Controls Overlay */}
-      <div className="avatar2d-debug absolute top-3 left-3 z-[100] rounded-lg border border-cyan-400/50 bg-black/90 px-3 py-2 font-mono text-[11px] text-cyan-200 shadow-xl" style={{ minWidth: "270px" }}>
-        <div className="font-bold text-cyan-300">AVATAR DEBUG</div>
-        <div>speaking: <b>{String(isSpeaking)}</b></div>
-        <div>listening: <b>{String(isListening)}</b></div>
-        <div>audioLevel: <b>{audioLevel.toFixed(3)}</b></div>
-        <div>mouthState: <b>{mouthState}</b></div>
-        <div>jawOpen: <b>{(currentWeightsRef.current.jawOpen ?? 0).toFixed(3)}</b></div>
-        <div>viseme_O: <b>{(currentWeightsRef.current.viseme_O ?? 0).toFixed(3)}</b></div>
-        <div>viseme_AA: <b>{(currentWeightsRef.current.viseme_aa ?? 0).toFixed(3)}</b></div>
-        <div className="mt-1 flex gap-1 flex-wrap">
-          {(["closed","smile","open_small","open_wide","o"] as MouthState[]).map((m) => (
-            <button key={m} type="button" onClick={() => { setMouthState(m); console.log("[AVATAR2D DEBUG] FORCE MOUTH", m); }} className="rounded bg-slate-800 px-1.5 py-0.5 hover:bg-cyan-800">{m}</button>
-          ))}
+          )}
         </div>
       </div>
 
       <div className="avatar2d-controls absolute flex flex-col items-center z-20">
-        <button type="button" onClick={() => setShowDevControls((open) => !open)} className={`avatar2d-tool rounded-full transition-all cursor-pointer ${showDevControls ? "bg-cyan-600 text-white" : ""}`} title="Open Nova avatar developer controls">
-          <Settings2 className="w-4 h-4" />
-        </button>
-
-        {/* Status Pills */}
         <div
           className="relative flex items-center justify-center rounded-full border border-slate-700/80 bg-slate-950/90 shadow-lg shadow-black/30"
           style={{
@@ -504,8 +486,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               isSpeaking
                 ? "bg-cyan-400 animate-ping"
                 : isListening
-                ? "bg-purple-400 animate-pulse"
-                : "bg-emerald-400"
+                  ? "bg-purple-400 animate-pulse"
+                  : "bg-emerald-400"
             }`}
           />
           <span className="w-full px-8 text-center break-words">
@@ -513,12 +495,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </span>
         </div>
 
-        {/* Quick Toolbar */}
         <div className="avatar2d-toolbar flex items-center">
           {onToggleListening && (
             <button
               type="button"
-              onClick={() => { console.log("[2.5D DEBUG] MIC click"); onToggleListening(); }}
+              onClick={onToggleListening}
               className={`avatar2d-tool avatar2d-tool-mic rounded-full transition-all cursor-pointer ${
                 isListening
                   ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
@@ -533,7 +514,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onSpeakGreeting && (
             <button
               type="button"
-              onClick={() => { console.log("[2.5D DEBUG] SPEAKER click"); onSpeakGreeting(); }}
+              onClick={onSpeakGreeting}
               className="avatar2d-tool rounded-full transition-all cursor-pointer"
               title="Test Voice Greeting"
             >
@@ -544,7 +525,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onSwitchMode && (
             <button
               type="button"
-              onClick={() => { console.log("[2.5D DEBUG] LAYERS click"); onSwitchMode("avatar"); }}
+              onClick={() => onSwitchMode("avatar")}
               className="avatar2d-tool rounded-full transition-all cursor-pointer"
               title="Switch to 3D Model View"
             >
@@ -555,7 +536,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           {onToggleFullView && (
             <button
               type="button"
-              onClick={() => { console.log("[2.5D DEBUG] EXPAND click"); onToggleFullView(); }}
+              onClick={onToggleFullView}
               className="avatar2d-tool rounded-full transition-all cursor-pointer"
               title="Toggle Full Desktop View"
             >

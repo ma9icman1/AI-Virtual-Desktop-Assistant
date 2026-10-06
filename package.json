@@ -45,6 +45,7 @@
     "electron-builder": "^26.0.12",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.0.0"
   },
   "main": "electron/main.cjs",
