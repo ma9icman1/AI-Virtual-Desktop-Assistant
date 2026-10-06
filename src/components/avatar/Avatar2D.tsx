@@ -202,7 +202,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     });
 
     return () => unsub();
-  }, [isSpeaking, isListening]);
+  }, [isSpeaking, isListening, devAutoAnimate]);
 
   // Reliable fallback lip animation. Do not depend on viseme callbacks
   // arriving from the TTS analyser; those can be absent for short speech turns.
