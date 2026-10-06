@@ -75,6 +75,30 @@ type RGBAImage = {
   image: HTMLImageElement;
 };
 
+type DevLayerSettings = {
+  x: number;
+  y: number;
+  scale: number;
+  opacity: number;
+  visible: boolean;
+};
+
+type DevControls = {
+  mouth: DevLayerSettings;
+  face: DevLayerSettings;
+  eyes: DevLayerSettings;
+  eyebrows: DevLayerSettings;
+};
+
+const DEV_STORAGE_KEY = "nova_avatar_dev_controls_v2";
+
+const DEFAULT_DEV_CONTROLS: DevControls = {
+  mouth: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
+  face: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
+  eyes: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
+  eyebrows: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
+};
+
 const DIFF_THRESHOLD = 8;
 const CANVAS_SIZE = 1024;
 
@@ -173,6 +197,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [eyeState, setEyeState] = useState<EyeState>("open");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  const [showDevControls, setShowDevControls] = useState(true);
+  const [devAutoAnimate, setDevAutoAnimate] = useState(true);
+  const [devMouthIndex, setDevMouthIndex] = useState(2);
+  const [devEyeIndex, setDevEyeIndex] = useState(0);
+  const [devControls, setDevControls] = useState<DevControls>(DEFAULT_DEV_CONTROLS);
 
   const sources = useMemo(() => {
     const values: NovaSource[] = [
@@ -189,6 +218,48 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const getImage = useCallback((source: NovaSource) => {
     return imagesRef.current.get(imageKey(source)) ?? null;
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DEV_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<DevControls>;
+        setDevControls((current) => ({
+          ...current,
+          ...parsed,
+          mouth: { ...current.mouth, ...(parsed.mouth ?? {}) },
+          face: { ...current.face, ...(parsed.face ?? {}) },
+          eyes: { ...current.eyes, ...(parsed.eyes ?? {}) },
+          eyebrows: { ...current.eyebrows, ...(parsed.eyebrows ?? {}) },
+        }));
+      }
+    } catch (error) {
+      console.warn("[Nova 2.5D] dev control restore failed", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(devControls)); } catch {}
+  }, [devControls]);
+
+  const updateDevLayer = useCallback((layer: keyof DevControls, patch: Partial<DevLayerSettings>) => {
+    setDevControls((current) => ({ ...current, [layer]: { ...current[layer], ...patch } }));
+  }, []);
+
+  const resetDevControls = useCallback(() => {
+    setDevControls(DEFAULT_DEV_CONTROLS);
+    setDevMouthIndex(2);
+    setDevEyeIndex(0);
+    setDevAutoAnimate(true);
+  }, []);
+
+  const mouthSources: NovaSource[] = [
+    NOVA_FILES.mouth.closed, NOVA_FILES.mouth.smile, NOVA_FILES.mouth.openSmall,
+    NOVA_FILES.mouth.openWide, NOVA_FILES.mouth.o,
+  ];
+  const eyeSources: NovaSource[] = [
+    NOVA_FILES.blinks.open, NOVA_FILES.blinks.half, NOVA_FILES.blinks.closed,
+  ];
 
   const getMask = useCallback(
     (source: NovaSource): HTMLCanvasElement | null => {
@@ -224,35 +295,52 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     // Render the base first, then difference masks for the active states.
     ctx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    const activeSources: NovaSource[] = [
-      NOVA_FILES.eyes.center,
-      NOVA_FILES.blinks[eyeState],
-      NOVA_FILES.eyebrows.neutral,
-      NOVA_FILES.mouth[
-        mouthState === "o"
-          ? "o"
-          : mouthState === "open_wide"
-            ? "openWide"
-            : mouthState === "open_small"
-              ? "openSmall"
-              : mouthState === "smile"
-                ? "smile"
-                : "closed"
-      ],
-      NOVA_FILES.faceDeform[
-        mouthState === "open_wide"
-          ? "wide"
-          : mouthState === "smile"
-            ? "smile"
-            : "neutral"
-      ],
-    ];
+    const mouthSource = devAutoAnimate
+      ? (mouthState === "o"
+        ? NOVA_FILES.mouth.o
+        : mouthState === "open_wide"
+          ? NOVA_FILES.mouth.openWide
+          : mouthState === "open_small"
+            ? NOVA_FILES.mouth.openSmall
+            : mouthState === "smile"
+              ? NOVA_FILES.mouth.smile
+              : NOVA_FILES.mouth.closed)
+      : mouthSources[devMouthIndex];
 
-    for (const source of activeSources) {
+    const eyeSource = devAutoAnimate
+      ? NOVA_FILES.blinks[eyeState]
+      : eyeSources[devEyeIndex];
+
+    const drawLayer = (source: NovaSource, settings: DevLayerSettings) => {
+      if (!settings.visible) return;
       const mask = getMask(source);
-      if (mask) {
-        ctx.drawImage(mask, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      if (!mask) return;
+      ctx.save();
+      ctx.globalAlpha = settings.opacity;
+      const size = CANVAS_SIZE * settings.scale;
+      const offset = (CANVAS_SIZE - size) / 2;
+      ctx.drawImage(mask, offset + settings.x, offset + settings.y, size, size);
+      ctx.restore();
+    };
+
+    if (devControls.eyes.visible) {
+      drawLayer(NOVA_FILES.eyes.center, devControls.eyes);
+      if (eyeState === "half" || eyeState === "closed" || !devAutoAnimate) {
+        drawLayer(eyeSource, devControls.eyes);
       }
+    }
+
+    drawLayer(NOVA_FILES.eyebrows.neutral, devControls.eyebrows);
+
+    // Do not paint the neutral face plate over the mouth. The mouth plate is the
+    // visible opening artwork used by the lip-sync states.
+    drawLayer(mouthSource, devControls.mouth);
+
+    if (devControls.face.visible) {
+      const faceSource =
+        mouthState === "open_wide" ? NOVA_FILES.faceDeform.wide :
+        mouthState === "smile" ? NOVA_FILES.faceDeform.smile : null;
+      if (faceSource) drawLayer(faceSource, devControls.face);
     }
   }, [eyeState, mouthState, getImage, getMask]);
 
@@ -308,6 +396,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     const unsub = LipSyncEngine.getInstance().subscribe((weights) => {
       currentWeightsRef.current = weights;
 
+      if (!devAutoAnimate) return;
+
       if (!isSpeaking) {
         setMouthState(
           (weights.mouthSmileLeft ?? 0) > 0.2 || isListening
@@ -337,7 +427,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     });
 
     return () => unsub();
-  }, [isSpeaking, isListening]);
+  }, [isSpeaking, isListening, devAutoAnimate]);
 
   useEffect(() => {
     if (!isSpeaking) return;
@@ -380,7 +470,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     };
 
     const scheduleNextBlink = () => {
-      const delay = Math.random() * 3000 + 3500;
+      // Frequent, visible blinks: 2.5–5.5 seconds between blinks.
+      const delay = Math.random() * 3000 + 2500;
       blinkTimeout = window.setTimeout(() => {
         executeBlink(() => {
           if (Math.random() < 0.25) {
@@ -469,6 +560,51 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           )}
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowDevControls((v) => !v)}
+        className="absolute right-3 top-3 z-50 rounded-md border border-cyan-500/40 bg-slate-950/95 px-2 py-1 text-[10px] font-bold text-cyan-300"
+      >
+        {showDevControls ? "HIDE DEV" : "2.5D DEV"}
+      </button>
+
+      {showDevControls && (
+        <div className="absolute right-3 top-10 z-50 w-[320px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between">
+            <div><div className="text-xs font-bold text-cyan-300">Nova 2.5D DEV</div><div className="text-[9px] text-slate-500">Live image/layer calibration</div></div>
+            <button type="button" onClick={resetDevControls} className="rounded border border-slate-700 px-2 py-1 text-[9px]">RESET</button>
+          </div>
+          <label className="mb-3 flex items-center justify-between rounded bg-slate-900 p-2 text-[10px]">
+            Auto animation <input type="checkbox" checked={devAutoAnimate} onChange={(e) => setDevAutoAnimate(e.target.checked)} />
+          </label>
+          <div className="mb-3 rounded bg-slate-900 p-2">
+            <div className="mb-1 text-[10px] font-bold text-pink-300">MOUTH IMAGE</div>
+            <div className="text-[9px] text-slate-500">{devAutoAnimate ? "Lip-sync" : ["Closed","Smile","Open Small","Open Wide","O"][devMouthIndex]}</div>
+            <input className="w-full" type="range" min="0" max="4" step="1" value={devMouthIndex} disabled={devAutoAnimate} onChange={(e) => setDevMouthIndex(Number(e.target.value))} />
+            <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.x} onChange={(e)=>updateDevLayer("mouth",{x:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.y} onChange={(e)=>updateDevLayer("mouth",{y:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.mouth.scale} onChange={(e)=>updateDevLayer("mouth",{scale:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.mouth.opacity} onChange={(e)=>updateDevLayer("mouth",{opacity:Number(e.target.value)})}/></label>
+          </div>
+          <div className="mb-3 rounded bg-slate-900 p-2">
+            <div className="mb-1 text-[10px] font-bold text-cyan-300">EYES / BLINK</div>
+            <div className="text-[9px] text-slate-500">{devAutoAnimate ? eyeState : ["Open","Half","Closed"][devEyeIndex]}</div>
+            <input className="w-full" type="range" min="0" max="2" step="1" value={devEyeIndex} disabled={devAutoAnimate} onChange={(e)=>setDevEyeIndex(Number(e.target.value))}/>
+            <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.x} onChange={(e)=>updateDevLayer("eyes",{x:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.y} onChange={(e)=>updateDevLayer("eyes",{y:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.eyes.scale} onChange={(e)=>updateDevLayer("eyes",{scale:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.eyes.opacity} onChange={(e)=>updateDevLayer("eyes",{opacity:Number(e.target.value)})}/></label>
+          </div>
+          <div className="rounded bg-slate-900 p-2">
+            <div className="mb-1 text-[10px] font-bold text-violet-300">FACE DEFORM</div>
+            <label className="block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.face.x} onChange={(e)=>updateDevLayer("face",{x:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.face.y} onChange={(e)=>updateDevLayer("face",{y:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.face.scale} onChange={(e)=>updateDevLayer("face",{scale:Number(e.target.value)})}/></label>
+            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.face.opacity} onChange={(e)=>updateDevLayer("face",{opacity:Number(e.target.value)})}/></label>
+          </div>
+        </div>
+      )}
 
       <div className="avatar2d-controls absolute flex flex-col items-center z-20">
         <div
