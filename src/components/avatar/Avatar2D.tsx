@@ -511,7 +511,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         index = (index + 1) % cycle.length;
         setMouthState(cycle[index]);
       }
-    }, 140);
+    }, 280);
 
     return () => window.clearInterval(interval);
   }, [isSpeaking]);
@@ -539,9 +539,9 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             if (cancelled || !devAutoAnimate) return onComplete();
             setEyeState("open");
             onComplete();
-          }, 45);
-        }, 50);
-      }, 40);
+          }, 110);
+        }, 140);
+      }, 90);
     };
 
     const scheduleNextBlink = () => {
