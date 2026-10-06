@@ -702,14 +702,16 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           <button
             type="button"
             onClick={() => setShowDevControls((v) => !v)}
-            className={`avatar2d-tool rounded-full transition-all cursor-pointer ${
+            className={`avatar2d-tool !flex !flex-row !gap-1.5 !px-3 !text-[11px] !font-black !tracking-wide ${
               showDevControls
-                ? "bg-cyan-600 text-white shadow-lg shadow-cyan-600/30"
-                : "text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950"
+                ? "!bg-cyan-600 !text-white shadow-lg shadow-cyan-600/30"
+                : "!text-cyan-300 hover:!text-cyan-100 hover:!bg-cyan-950"
             }`}
             title={showDevControls ? "Hide Nova 2.5D Production Developer GUI" : "Open Nova 2.5D Production Developer GUI"}
+            aria-label="Open Nova 2.5D Production Developer GUI"
           >
-            <SlidersHorizontal className="w-4 h-4" />
+            <SlidersHorizontal className="!h-4 !w-4" />
+            <span>DEV GUI</span>
           </button>
         </div>
       </div>
