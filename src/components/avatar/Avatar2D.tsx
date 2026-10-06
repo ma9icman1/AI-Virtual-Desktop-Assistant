@@ -332,16 +332,18 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     drawLayer(NOVA_FILES.eyebrows.neutral, devControls.eyebrows);
 
-    // Do not paint the neutral face plate over the mouth. The mouth plate is the
-    // visible opening artwork used by the lip-sync states.
-    drawLayer(mouthSource, devControls.mouth);
-
+    // Face deformation goes underneath the mouth plate. This is critical for
+    // the 2.5D open-mouth artwork: the deformation must never cover the lips.
     if (devControls.face.visible) {
       const faceSource =
         mouthState === "open_wide" ? NOVA_FILES.faceDeform.wide :
         mouthState === "smile" ? NOVA_FILES.faceDeform.smile : null;
       if (faceSource) drawLayer(faceSource, devControls.face);
     }
+
+    // Mouth is the final facial plate so the open/rounded artwork is always
+    // visible during speech.
+    drawLayer(mouthSource, devControls.mouth);
   }, [eyeState, mouthState, devAutoAnimate, devMouthIndex, devEyeIndex, devControls, getImage, getMask]);
 
   useEffect(() => {
