@@ -205,6 +205,12 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [devBrowIndex, setDevBrowIndex] = useState(0);
   const [devControls, setDevControls] = useState<DevControls>(DEFAULT_DEV_CONTROLS);
 
+  useEffect(() => {
+    const toggleProductionDevGui = () => setShowDevControls((current) => !current);
+    window.addEventListener("nova-production-dev-gui-toggle", toggleProductionDevGui);
+    return () => window.removeEventListener("nova-production-dev-gui-toggle", toggleProductionDevGui);
+  }, []);
+
   const sources = useMemo(() => {
     const values: NovaSource[] = [
       NOVA_FILES.base,
