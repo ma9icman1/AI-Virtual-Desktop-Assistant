@@ -126,23 +126,34 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     return () => unsub();
   }, [isSpeaking, isListening]);
 
-  // Fallback mouth animation if speaking but no visemes fired
+  // Reliable fallback lip animation. Do not depend on viseme callbacks
+  // arriving from the TTS analyser; those can be absent for short speech turns.
   useEffect(() => {
-    if (!isSpeaking) return;
-    let timer: number;
+    const active = isSpeaking || audioLevel > 0.015;
+    if (!active) {
+      setMouthState(isListening ? "smile" : "closed");
+      return;
+    }
+
     let index = 0;
-    const cycle: MouthState[] = ["open_small", "open_wide", "open_small", "o", "smile"];
+    const cycle: MouthState[] = ["open_small", "open_wide", "open_small", "o", "open_wide", "smile"];
 
-    const interval = window.setInterval(() => {
-      const jaw = currentWeightsRef.current.jawOpen ?? 0;
-      if (jaw === 0) {
-        index = (index + 1) % cycle.length;
-        setMouthState(cycle[index]);
+    const animateMouth = () => {
+      const level = Math.max(0, Math.min(1, audioLevel));
+      if (level > 0.42) {
+        setMouthState(index % 3 === 0 ? "open_wide" : "o");
+      } else if (level > 0.08) {
+        setMouthState(index % 2 === 0 ? "open_small" : "open_wide");
+      } else {
+        setMouthState(cycle[index % cycle.length]);
       }
-    }, 140);
+      index += 1;
+    };
 
+    animateMouth();
+    const interval = window.setInterval(animateMouth, 105);
     return () => window.clearInterval(interval);
-  }, [isSpeaking]);
+  }, [isSpeaking, isListening, audioLevel]);
 
   // 2. Natural Blinking Loop with Double-Blink Simulation
   useEffect(() => {
