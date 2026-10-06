@@ -64,73 +64,79 @@ function novaMain() {
     if (!camera) { try { var cams = Scene.getCameraList(); if (cams && cams.length) camera = cams[0]; } catch (e2) {} }
     if (!camera) { fail("No camera was found."); return; }
 
-    // Accept either the Head node or the Genesis 9 figure as the current selection.
-    // If Head is selected, walk upward to find Genesis 9 instead of requiring
-    // Scene.findNodeByLabel("Genesis 9") to succeed.
-    var selected = null;
-    try { selected = Scene.getPrimarySelection(); } catch (eSel) {}
-
-    var genesis = Scene.findNodeByLabel("Genesis 9");
+    // Fully automatic figure/head discovery. Selection is NOT required.
+    // Prefer Genesis 9 by label, then find its Head. If labels differ, scan
+    // the scene for a Head node and walk upward to its figure.
+    var genesis = null;
     var head = null;
+    var nodesForDiscovery = [];
 
     function labelOf(node) {
         try { return node ? String(node.getLabel()) : ""; } catch (e) { return ""; }
     }
 
-    // Case 1: the user selected the Head directly.
-    if (selected && labelOf(selected).toLowerCase() === "head") {
-        head = selected;
-        var p = null;
-        try { p = selected.getNodeParent(); } catch (eParent) {}
-        while (p) {
-            if (labelOf(p).toLowerCase() === "genesis 9") {
-                genesis = p;
-                break;
-            }
-            try { p = p.getNodeParent(); } catch (eWalk) { p = null; }
-        }
-    }
+    try { genesis = Scene.findNodeByLabel("Genesis 9"); } catch (eGenesis) {}
 
-    // Case 2: the user selected Genesis 9 directly.
-    if (!head && selected && labelOf(selected).toLowerCase() === "genesis 9") {
-        genesis = selected;
-    }
-
-    // Case 3: use the discovered Genesis 9 figure and find its Head.
-    if (!head && genesis) {
+    if (genesis) {
         try { head = genesis.findNodeChildByLabel("Head", true); } catch (eHead) {}
     }
 
-    // Case 4: if the selected node is somewhere under the Head, walk upward.
-    if (!head && selected) {
-        var walk = selected;
-        while (walk) {
-            if (labelOf(walk).toLowerCase() === "head") {
-                head = walk;
-                break;
+    if (!head) {
+        try { nodesForDiscovery = Scene.getNodeList(); } catch (eNodes) { nodesForDiscovery = []; }
+
+        // First pass: exact Head label.
+        for (var di = 0; di < nodesForDiscovery.length && !head; di++) {
+            if (labelOf(nodesForDiscovery[di]).toLowerCase() === "head") {
+                head = nodesForDiscovery[di];
             }
-            try { walk = walk.getNodeParent(); } catch (eWalk2) { walk = null; }
+        }
+
+        // Second pass: any node whose label contains "head".
+        if (!head) {
+            for (var dj = 0; dj < nodesForDiscovery.length && !head; dj++) {
+                if (labelOf(nodesForDiscovery[dj]).toLowerCase().indexOf("head") >= 0) {
+                    head = nodesForDiscovery[dj];
+                }
+            }
         }
     }
 
-    if (!genesis && head) {
-        var gp = null;
-        try { gp = head.getNodeParent(); } catch (eGp) {}
-        while (gp) {
-            if (labelOf(gp).toLowerCase() === "genesis 9") {
-                genesis = gp;
+    // If Head was found but Genesis 9 was not, walk upward to the figure.
+    if (head && !genesis) {
+        var parentNode = null;
+        try { parentNode = head.getNodeParent(); } catch (eParent) {}
+        while (parentNode) {
+            var parentLabel = labelOf(parentNode).toLowerCase();
+            if (parentLabel === "genesis 9" || parentLabel.indexOf("genesis 9") >= 0) {
+                genesis = parentNode;
                 break;
             }
-            try { gp = gp.getNodeParent(); } catch (eGpWalk) { gp = null; }
+            try { parentNode = parentNode.getNodeParent(); } catch (eWalk) { parentNode = null; }
         }
+    }
+
+    // Last fallback: find the Genesis 9 figure by scanning labels.
+    if (!genesis) {
+        for (var dk = 0; dk < nodesForDiscovery.length; dk++) {
+            var nl = labelOf(nodesForDiscovery[dk]).toLowerCase();
+            if (nl === "genesis 9" || nl.indexOf("genesis 9") >= 0) {
+                genesis = nodesForDiscovery[dk];
+                break;
+            }
+        }
+    }
+
+    // If Genesis 9 was found during fallback, try its Head one more time.
+    if (!head && genesis) {
+        try { head = genesis.findNodeChildByLabel("Head", true); } catch (eHead2) {}
     }
 
     if (!genesis || !head) {
-        fail("Could not find Genesis 9 / Head.\n\nSelect the Genesis 9 Head node (your current selection) and run the script again.");
+        fail("Nova could not automatically find the Genesis 9 figure and Head.\n\nMake sure the Genesis 9 character is loaded in the scene.");
         return;
     }
 
-    App.writeToLog("Nova v20 HD: Using Genesis=" + labelOf(genesis) + " | Head=" + labelOf(head), true);
+    App.writeToLog("Nova v20 HD AUTO-DISCOVERY: Genesis=" + labelOf(genesis) + " | Head=" + labelOf(head), true);
 
     var renderMgr = App.getRenderMgr();
     if (!renderMgr) { fail("DAZ Render Manager was not available."); return; }
