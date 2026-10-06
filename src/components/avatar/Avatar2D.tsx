@@ -238,6 +238,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
   // 2. Natural Blinking Loop with Double-Blink Simulation
   useEffect(() => {
+    if (!devAutoAnimate) {
+      setEyeState(eyeStates[devEyeIndex] || "open");
+      return;
+    }
+
     let blinkTimeout: number;
 
     const scheduleNextBlink = () => {
@@ -273,7 +278,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     scheduleNextBlink();
     return () => window.clearTimeout(blinkTimeout);
-  }, []);
+  }, [devAutoAnimate, devEyeIndex]);
 
   // TEMP DEBUG: trace whether native mouse events reach the transparent 2.5D renderer.
   useEffect(() => {
