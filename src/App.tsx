@@ -77,6 +77,10 @@ export default function App() {
 
   // Assistant core state
   const [assistantState, setAssistantState] = useState<AssistantState>("idle");
+  // Drive the 2.5D avatar from the actual audio playback event, not from the
+  // earlier "speaking" UI state. This prevents lip animation from starting
+  // while TTS audio is still being generated/downloaded.
+  const [isVoiceSpeaking, setIsVoiceSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [visualMode, setVisualMode] = useState<"avatar" | "orb">("avatar");
@@ -271,6 +275,11 @@ export default function App() {
     return () => { if (typeof unsubscribe === "function") unsubscribe(); };
   }, [refreshOllamaConfig]);
 
+
+  useEffect(() => {
+    const unsubscribe = VoiceEngine.onSpeakingStateChange(setIsVoiceSpeaking);
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     VoiceEngine.setAssistantName(assistantName);
@@ -2018,7 +2027,7 @@ export default function App() {
       {experienceMode === "model" ? (
         avatarMode === "2d" ? (
           <Avatar2D
-            isSpeaking={assistantState === "speaking"}
+            isSpeaking={isVoiceSpeaking}
             isListening={isListening}
             audioLevel={audioLevel}
             onSpeakGreeting={triggerMagicGreeting}
@@ -2115,7 +2124,7 @@ export default function App() {
               ) : activeSection === 'Avatar 2.5D' ? (
                 <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-slate-950 p-2">
                   <Avatar2D
-                    isSpeaking={assistantState === "speaking"}
+                    isSpeaking={isVoiceSpeaking}
                     isListening={isListening}
                     audioLevel={audioLevel}
                     onSpeakGreeting={triggerMagicGreeting}
