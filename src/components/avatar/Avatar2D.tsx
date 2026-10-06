@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
-import { Mic, Volume2, Maximize2, Layers } from "lucide-react";
+import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
 export type EyeState = "open" | "half" | "closed";
 export type MouthState =
@@ -197,7 +197,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [eyeState, setEyeState] = useState<EyeState>("open");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
-  const [showDevControls, setShowDevControls] = useState(true);
+  const [showDevControls, setShowDevControls] = useState(false);
   const [devAutoAnimate, setDevAutoAnimate] = useState(true);
   const [devMouthIndex, setDevMouthIndex] = useState(2);
   const [devEyeIndex, setDevEyeIndex] = useState(0);
@@ -578,18 +578,10 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setShowDevControls((v) => !v)}
-        className="hidden"
-      >
-        {showDevControls ? "HIDE DEV" : "2.5D DEV"}
-      </button>
-
       {showDevControls && (
         <div className="absolute right-3 bottom-20 z-[99] w-[360px] max-w-[calc(100vw-24px)] max-h-[78vh] overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/95 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
-            <div><div className="text-xs font-bold text-cyan-300">Nova 2.5D DEV</div><div className="text-[9px] text-slate-500">Live image/layer calibration</div></div>
+            <div><div className="text-xs font-bold text-cyan-300">Nova 2.5D PRODUCTION DEV</div><div className="text-[9px] text-slate-500">Live controls linked directly to production animation images</div></div>
             <button type="button" onClick={resetDevControls} className="rounded border border-slate-700 px-2 py-1 text-[9px]">RESET</button>
           </div>
           <label className="mb-3 flex items-center justify-between rounded bg-slate-900 p-2 text-[10px]">
@@ -597,7 +589,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </label>
           <div className="mb-3 rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-pink-300">MOUTH IMAGE</div>
-            <div className="text-[9px] text-slate-500">{devAutoAnimate ? "Lip-sync" : ["Closed","Smile","Open Small","Open Wide","O"][devMouthIndex]}</div>
+            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Lip-sync" : ["Closed","Smile","Open Small","Open Wide","O"][devMouthIndex]}</span><span className="truncate text-cyan-400/70">{mouthSources[devMouthIndex]}</span></div>
             <input className="w-full" type="range" min="0" max="4" step="1" value={devMouthIndex} disabled={devAutoAnimate} onChange={(e) => setDevMouthIndex(Number(e.target.value))} />
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.x} onChange={(e)=>updateDevLayer("mouth",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.y} onChange={(e)=>updateDevLayer("mouth",{y:Number(e.target.value)})}/></label>
@@ -606,7 +598,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </div>
           <div className="mb-3 rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-cyan-300">EYES / BLINK</div>
-            <div className="text-[9px] text-slate-500">{devAutoAnimate ? eyeState : ["Open","Half","Closed"][devEyeIndex]}</div>
+            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? eyeState : ["Open","Half","Closed"][devEyeIndex]}</span><span className="truncate text-cyan-400/70">{eyeSources[devEyeIndex]}</span></div>
             <input className="w-full" type="range" min="0" max="2" step="1" value={devEyeIndex} disabled={devAutoAnimate} onChange={(e)=>setDevEyeIndex(Number(e.target.value))}/>
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.x} onChange={(e)=>updateDevLayer("eyes",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.y} onChange={(e)=>updateDevLayer("eyes",{y:Number(e.target.value)})}/></label>
@@ -615,7 +607,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </div>
           <div className="rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-violet-300">FACE DEFORM</div>
-            <div className="text-[9px] text-slate-500">{devAutoAnimate ? "Auto state" : ["Neutral","Smile","Frown","Cheek","Wide"][devFaceIndex]}</div>
+            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Auto state" : ["Neutral","Smile","Frown","Cheek","Wide"][devFaceIndex]}</span><span className="truncate text-cyan-400/70">{faceSources[devFaceIndex]}</span></div>
             <input className="w-full" type="range" min="0" max="4" step="1" value={devFaceIndex} disabled={devAutoAnimate} onChange={(e)=>setDevFaceIndex(Number(e.target.value))}/>
             <label className="block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.face.x} onChange={(e)=>updateDevLayer("face",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.face.y} onChange={(e)=>updateDevLayer("face",{y:Number(e.target.value)})}/></label>
@@ -624,7 +616,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </div>
           <div className="mt-3 rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-amber-300">EYEBROWS</div>
-            <div className="text-[9px] text-slate-500">{devAutoAnimate ? "Neutral" : ["Neutral","Up","Inner Up","Outer Left","Outer Right","Squeeze","Down"][devBrowIndex]}</div>
+            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Neutral" : ["Neutral","Up","Inner Up","Outer Left","Outer Right","Squeeze","Down"][devBrowIndex]}</span><span className="truncate text-cyan-400/70">{browSources[devBrowIndex]}</span></div>
             <input className="w-full" type="range" min="0" max="6" step="1" value={devBrowIndex} disabled={devAutoAnimate} onChange={(e)=>setDevBrowIndex(Number(e.target.value))}/>
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.x} onChange={(e)=>updateDevLayer("eyebrows",{x:Number(e.target.value)})}/></label>
             <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.y} onChange={(e)=>updateDevLayer("eyebrows",{y:Number(e.target.value)})}/></label>
@@ -710,10 +702,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           <button
             type="button"
             onClick={() => setShowDevControls((v) => !v)}
-            className="avatar2d-tool rounded-full transition-all cursor-pointer text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950"
-            title="Nova 2.5D Developer Controls"
+            className={`avatar2d-tool rounded-full transition-all cursor-pointer ${
+              showDevControls
+                ? "bg-cyan-600 text-white shadow-lg shadow-cyan-600/30"
+                : "text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950"
+            }`}
+            title={showDevControls ? "Hide Nova 2.5D Production Developer GUI" : "Open Nova 2.5D Production Developer GUI"}
           >
-            <span className="text-[9px] font-black">DEV</span>
+            <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
       </div>
