@@ -25,7 +25,7 @@ interface Avatar2DProps {
   enableParallax?: boolean;
 }
 
-const NOVA_ROOT = "/Nova_2_5D_PRODUCTION_LAYERS_FINAL";
+const NOVA_ROOT = "/Nova_2_5D_FINAL_PRODUCTION_v21_all_renders";
 
 const NOVA_FILES = {
   base: "base/nova_base.png",
@@ -38,27 +38,27 @@ const NOVA_FILES = {
     closed: "blinks/closed.png",
   },
   eyebrows: {
-    neutral: "eyebrows/Brow Down.png",
-    up: "eyebrows/Brow Up.png",
-    innerUp: "eyebrows/Brow Inner Up.png",
-    outerUpLeft: "eyebrows/Brow Outer Up Left.png",
-    outerUpRight: "eyebrows/Brow Outer Up Right.png",
-    squeeze: "eyebrows/Brow Squeeze.png",
-    down: "eyebrows/Brow Down.png",
+    neutral: "eyebrows/Brow Down_100.png",
+    up: "eyebrows/Brow Up_100.png",
+    innerUp: "eyebrows/Brow Inner Up_100.png",
+    outerUpLeft: "eyebrows/Brow Outer Up Left_100.png",
+    outerUpRight: "eyebrows/Brow Outer Up Right_100.png",
+    squeeze: "eyebrows/Brow Squeeze_100.png",
+    down: "eyebrows/Brow Down_100.png",
   },
   mouth: {
-    closed: "mouth/Mouth Press.png",
-    smile: "mouth/Mouth Smile.png",
-    openSmall: "mouth/Mouth Stretch.png",
-    openWide: "mouth/Mouth Upper Up.png",
-    o: "mouth/Mouth Pucker.png",
+    closed: "mouth/Mouth Press_100.png",
+    smile: "mouth/Mouth Smile_100.png",
+    openSmall: "mouth/Mouth Stretch_100.png",
+    openWide: "mouth/Mouth Upper Up_100.png",
+    o: "mouth/Mouth Pucker_100.png",
   },
   faceDeform: {
-    neutral: "face_deform/lip.png",
-    smile: "face_deform/smile.png",
-    frown: "face_deform/frown.png",
-    cheek: "face_deform/cheek.png",
-    wide: "face_deform/mouth wide.png",
+    neutral: "face_deform/lip_100.png",
+    smile: "face_deform/smile_100.png",
+    frown: "face_deform/frown_100.png",
+    cheek: "face_deform/cheek_100.png",
+    wide: "face_deform/mouth wide_100.png",
   },
 } as const;
 
@@ -97,7 +97,7 @@ const DIFF_THRESHOLD = 1;
 const CANVAS_SIZE = 2048;
 
 function sourceUrl(source: NovaSource): string {
-  return `${NOVA_ROOT}/${source}`;
+  return `${NOVA_ROOT}/${source}?v=v21-production-20261008`;
 }
 
 function loadImage(source: NovaSource): Promise<RGBAImage> {
@@ -260,7 +260,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       "mouth/Mouth Pucker_60.png","mouth/Mouth Pucker_80.png","mouth/Mouth Pucker_100.png",
       "speech/phoneme_TH_80.png","speech/phoneme_SH_CH_J_80.png","speech/vowel_U_80.png",
       "face_deform/smile_50.png","face_deform/mouth wide_75.png",
-      "eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png","eyebrows/Brow Down_50.png","eyebrows/Brow Squeeze_50.png"
+      "eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png","eyebrows/Brow Down_50.png","eyebrows/Brow Squeeze_50.png",
+      ...Object.values(NOVA_FILES.eyes),
+      ...Object.values(NOVA_FILES.blinks),
+      ...Object.values(NOVA_FILES.eyebrows),
+      ...Object.values(NOVA_FILES.mouth),
+      ...Object.values(NOVA_FILES.faceDeform),
+      "expressions/lip_100.png", "expressions/smile_100.png", "expressions/frown_100.png",
+      "expressions/cheek_100.png", "expressions/mouth wide_100.png"
     ];
     return [...new Set(values)];
   }, []);
@@ -426,18 +433,30 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all(sources.map(loadImage))
+    // V21 has optional animation plates that can vary between render batches.
+    // Load plates independently so one missing expression cannot hide Nova.
+    Promise.all(
+      sources.map((source) =>
+        loadImage(source).catch((error) => {
+          console.debug("[Nova v21] optional plate unavailable:", source, error);
+          return null;
+        }),
+      ),
+    )
       .then((loaded) => {
         if (cancelled) return;
         for (const item of loaded) {
-          imagesRef.current.set(imageKey(item.source), item.image);
+          if (item) imagesRef.current.set(imageKey(item.source), item.image);
+        }
+        if (!imagesRef.current.has(NOVA_FILES.base)) {
+          throw new Error(`Required Nova v21 base image is missing: ${sourceUrl(NOVA_FILES.base)}`);
         }
         setReady(true);
         setLoadError(null);
       })
       .catch((error) => {
         if (cancelled) return;
-        console.error("[Nova 2.5D] image load failed", error);
+        console.error("[Nova v21] base image load failed", error);
         setLoadError(error instanceof Error ? error.message : String(error));
       });
 
