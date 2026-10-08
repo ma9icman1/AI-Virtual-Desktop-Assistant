@@ -359,12 +359,16 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
     ctx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
+    // Animation PNGs are complete render plates, not isolated transparent
+    // overlays. Drawing a plate directly paints its hair/head over the base.
+    // Composite only pixels that differ from the neutral base render.
     const draw = (source: NovaSource, opacity = 1) => {
-      const image = getImage(source);
-      if (!image) return;
+      if (source === NOVA_FILES.base) return;
+      const mask = getMask(source);
+      if (!mask) return;
       ctx.save();
       ctx.globalAlpha = opacity;
-      ctx.drawImage(image, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      ctx.drawImage(mask, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
       ctx.restore();
     };
 
@@ -428,7 +432,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
-  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage]);
+  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
