@@ -62,13 +62,7 @@ const NOVA_FILES = {
   },
 } as const;
 
-type NovaSource =
-  | typeof NOVA_FILES.base
-  | (typeof NOVA_FILES.eyes)[keyof typeof NOVA_FILES.eyes]
-  | (typeof NOVA_FILES.blinks)[keyof typeof NOVA_FILES.blinks]
-  | (typeof NOVA_FILES.eyebrows)[keyof typeof NOVA_FILES.eyebrows]
-  | (typeof NOVA_FILES.mouth)[keyof typeof NOVA_FILES.mouth]
-  | (typeof NOVA_FILES.faceDeform)[keyof typeof NOVA_FILES.faceDeform];
+type NovaSource = string;
 
 type RGBAImage = {
   source: NovaSource;
@@ -100,7 +94,7 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
 };
 
 const DIFF_THRESHOLD = 1;
-const CANVAS_SIZE = 1024;
+const CANVAS_SIZE = 2048;
 
 function sourceUrl(source: NovaSource): string {
   return `${NOVA_ROOT}/${source}`;
@@ -255,11 +249,18 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const sources = useMemo(() => {
     const values: NovaSource[] = [
       NOVA_FILES.base,
-      NOVA_FILES.eyes.center,
-      ...Object.values(NOVA_FILES.blinks),
-      ...Object.values(NOVA_FILES.eyebrows),
-      ...Object.values(NOVA_FILES.mouth),
-      ...Object.values(NOVA_FILES.faceDeform),
+      "eyes/center.png","eyes/left.png","eyes/right.png","eyes/up.png","eyes/down.png",
+      "eyes/up_left.png","eyes/up_right.png","eyes/down_left.png","eyes/down_right.png",
+      "blinks/open.png","blinks/quarter.png","blinks/half.png","blinks/three_quarter.png","blinks/closed.png",
+      "idle_listening/slight_smile.png","idle_listening/annoyed.png",
+      "mouth/Mouth Press_20.png","mouth/Mouth Press_40.png","mouth/Mouth Press_60.png","mouth/Mouth Press_80.png","mouth/Mouth Press_100.png",
+      "mouth/Mouth Smile_100.png","mouth/Mouth Smile Widen_60.png",
+      "mouth/Mouth Stretch_40.png","mouth/Mouth Stretch_60.png","mouth/Mouth Stretch_80.png",
+      "mouth/Mouth Upper Up_60.png","mouth/Mouth Upper Up_80.png","mouth/Mouth Upper Up_100.png",
+      "mouth/Mouth Pucker_60.png","mouth/Mouth Pucker_80.png","mouth/Mouth Pucker_100.png",
+      "speech/phoneme_TH_80.png","speech/phoneme_SH_CH_J_80.png","speech/vowel_U_80.png",
+      "face_deform/smile_50.png","face_deform/mouth wide_75.png",
+      "eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png","eyebrows/Brow Down_50.png","eyebrows/Brow Squeeze_50.png"
     ];
     return [...new Set(values)];
   }, []);
@@ -343,70 +344,84 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     const canvas = canvasRef.current;
     const base = getImage(NOVA_FILES.base);
     if (!canvas || !base) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     canvas.width = CANVAS_SIZE;
     canvas.height = CANVAS_SIZE;
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
-    // The DAZ plates share the exact same 1024x1024 camera/canvas.
-    // Render the base first, then difference masks for the active states.
     ctx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    const mouthSource = devAutoAnimate
-      ? (mouthState === "o"
-        ? NOVA_FILES.mouth.o
-        : mouthState === "open_wide"
-          ? NOVA_FILES.mouth.openWide
-          : mouthState === "open_small"
-            ? NOVA_FILES.mouth.openSmall
-            : mouthState === "smile"
-              ? NOVA_FILES.mouth.smile
-              : NOVA_FILES.mouth.closed)
-      : mouthSources[devMouthIndex];
-
-    const eyeSource = devAutoAnimate
-      ? NOVA_FILES.blinks[eyeState]
-      : eyeSources[devEyeIndex];
-
-    const drawLayer = (source: NovaSource, settings: DevLayerSettings) => {
-      if (!settings.visible) return;
-      const mask = getMask(source);
-      if (!mask) return;
+    const draw = (source: NovaSource, opacity = 1) => {
+      const image = getImage(source);
+      if (!image) return;
       ctx.save();
-      ctx.globalAlpha = settings.opacity;
-      const size = CANVAS_SIZE * settings.scale;
-      const offset = (CANVAS_SIZE - size) / 2;
-      ctx.drawImage(mask, offset + settings.x, offset + settings.y, size, size);
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(image, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
       ctx.restore();
     };
 
-    if (devControls.eyes.visible) {
-      drawLayer(NOVA_FILES.eyes.center, devControls.eyes);
-      if (eyeState !== "open" || !devAutoAnimate) {
-        drawLayer(eyeSource, devControls.eyes);
+    const px = enableParallax ? parallax.x : 0;
+    const py = enableParallax ? parallax.y : 0;
+    const eye =
+      Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
+      py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
+      py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
+      px < -.33 ? "eyes/left.png" : "eyes/right.png";
+    draw(eye);
+
+    if (devAutoAnimate && eyeState !== "open") {
+      draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
+    }
+
+    if (!isSpeaking) {
+      draw(isListening ? "idle_listening/slight_smile.png" : "idle_listening/annoyed.png", isListening ? .85 : .18);
+    }
+
+    if (isSpeaking) {
+      const w = currentWeightsRef.current;
+      const jaw = w.jawOpen ?? 0;
+      const pucker = Math.max(w.mouthPucker ?? 0, w.mouthFunnel ?? 0);
+      const smile = Math.max(w.mouthSmileLeft ?? 0, w.mouthSmileRight ?? 0);
+      const aa = w.viseme_aa ?? 0;
+      const e = w.viseme_E ?? 0;
+      const i = w.viseme_I ?? 0;
+      const o = w.viseme_O ?? 0;
+      const u = w.viseme_U ?? 0;
+      const pp = w.viseme_PP ?? 0;
+      const ff = w.viseme_FF ?? 0;
+      const th = w.viseme_TH ?? 0;
+      const ch = w.viseme_CH ?? 0;
+      const ss = w.viseme_SS ?? 0;
+
+      let mouth: NovaSource = "mouth/Mouth Press_20.png";
+      if (pp > .3) {
+        mouth = `mouth/Mouth Press_${Math.max(20, Math.min(100, Math.round(pp * 100 / 20) * 20))}.png`;
+      } else if (ff > .3) {
+        mouth = `mouth/Mouth Stretch_${Math.max(40, Math.min(80, Math.round(ff * 80 / 20) * 20))}.png`;
+      } else if (th > .35) {
+        mouth = "speech/phoneme_TH_80.png";
+      } else if (ch > .35) {
+        mouth = "speech/phoneme_SH_CH_J_80.png";
+      } else if (o > .3 || u > .3 || pucker > .3) {
+        mouth = `mouth/Mouth Pucker_${Math.max(60, Math.min(100, Math.round(Math.max(o, u, pucker) * 100 / 20) * 20))}.png`;
+      } else if (aa > .35 || jaw > .55) {
+        mouth = `mouth/Mouth Upper Up_${Math.max(60, Math.min(100, Math.round(Math.max(aa, jaw) * 100 / 20) * 20))}.png`;
+      } else if (e > .25 || i > .25 || jaw > .12) {
+        mouth = `mouth/Mouth Stretch_${Math.max(40, Math.min(80, Math.round(Math.max(e, i, jaw) * 100 / 20) * 20))}.png`;
+      } else if (ss > .3 || smile > .3) {
+        mouth = "mouth/Mouth Smile Widen_60.png";
       }
+
+      draw(mouth);
+      if (smile > .25) draw("face_deform/smile_50.png", .65);
+    } else {
+      draw(devAutoAnimate ? "mouth/Mouth Press_20.png" : mouthSources[devMouthIndex]);
     }
 
-    const browSource = devAutoAnimate ? NOVA_FILES.eyebrows.neutral : browSources[devBrowIndex];
-    drawLayer(browSource, devControls.eyebrows);
-
-    // Face deformation goes underneath the mouth plate. This is critical for
-    // the 2.5D open-mouth artwork: the deformation must never cover the lips.
-    if (devControls.face.visible) {
-      const faceSource = devAutoAnimate
-        ? (mouthState === "open_wide" ? NOVA_FILES.faceDeform.wide
-          : mouthState === "smile" ? NOVA_FILES.faceDeform.smile : null)
-        : faceSources[devFaceIndex];
-      if (faceSource) drawLayer(faceSource, devControls.face);
-    }
-
-    // Mouth is the final facial plate so the open/rounded artwork is always
-    // visible during speech.
-    drawLayer(mouthSource, devControls.mouth);
-  }, [eyeState, mouthState, devAutoAnimate, devMouthIndex, devEyeIndex, devFaceIndex, devBrowIndex, devControls, getImage, getMask]);
+    const brow = currentWeightsRef.current.browInnerUp ?? 0;
+    if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
+  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -493,28 +508,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     return () => unsub();
   }, [isSpeaking, isListening, devAutoAnimate]);
 
-  useEffect(() => {
-    if (!isSpeaking) return;
-
-    let index = 0;
-    const cycle: MouthState[] = [
-      "open_small",
-      "open_wide",
-      "open_small",
-      "o",
-      "smile",
-    ];
-
-    const interval = window.setInterval(() => {
-      const jaw = currentWeightsRef.current.jawOpen ?? 0;
-      if (jaw === 0) {
-        index = (index + 1) % cycle.length;
-        setMouthState(cycle[index]);
-      }
-    }, 280);
-
-    return () => window.clearInterval(interval);
-  }, [isSpeaking]);
 
   useEffect(() => {
     let blinkTimeout = 0;
