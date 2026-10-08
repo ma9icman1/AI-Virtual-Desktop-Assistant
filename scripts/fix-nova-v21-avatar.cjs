@@ -31,25 +31,25 @@ replaceOnce(
 if (source.includes("Promise.all(sources.map(loadImage))")) {
   source = source.replace(
     "Promise.all(sources.map(loadImage))",
-    "Promise.all(sources.map((asset) => loadImage(asset).catch((error) => {\\n      console.debug(\\"[Nova v21] optional plate unavailable:\\", asset, error);\\n      return null;\\n    })))",
+    "Promise.all(sources.map((asset) => loadImage(asset).catch((error) => {\n      console.debug(\"[Nova v21] optional plate unavailable:\", asset, error);\n      return null;\n    })))",
   );
   console.log("[nova-v21-fix] made optional plate loading tolerant");
 }
 
 source = source.replace(
-  /for \\(const item of loaded\\) \\{\\s*imagesRef\\.current\\.set\\(\\s*(imageKey\\(item\\.source\\)|item\\.source),\\s*item\\.image,\\s*\\);\\s*\\}/g,
+  /for \(const item of loaded\) \{\s*imagesRef\.current\.set\(\s*(imageKey\(item\.source\)|item\.source),\s*item\.image,\s*\);\s*\}/g,
   (match, keyExpression) =>
-    "for (const item of loaded) {\\n          if (!item) continue;\\n          imagesRef.current.set(" + keyExpression + ", item.image);\\n        }",
+    "for (const item of loaded) {\n          if (!item) continue;\n          imagesRef.current.set(" + keyExpression + ", item.image);\n        }",
 );
 
-if (!/imagesRef\\.current\\.has\\((?:NOVA_FILES\\.base|"base\\/nova_base\\.png")\\)/.test(source)) {
+if (!/imagesRef\.current\.has\((?:NOVA_FILES\.base|"base\/nova_base\.png")\)/.test(source)) {
   const readyMarker = "        setReady(true);";
   const idx = source.indexOf(readyMarker);
   if (idx !== -1) {
     source = source.slice(0, idx) +
-      "        if (!imagesRef.current.has(\\"base/nova_base.png\\")) {\\n" +
-      "          throw new Error(\\"Required Nova v21 base image is missing: \\" + sourceUrl(\\"base/nova_base.png\\"));\\n" +
-      "        }\\n" +
+      "        if (!imagesRef.current.has(\"base/nova_base.png\")) {\n" +
+      "          throw new Error(\"Required Nova v21 base image is missing: \" + sourceUrl(\"base/nova_base.png\"));\n" +
+      "        }\n" +
       source.slice(idx);
     console.log("[nova-v21-fix] added required-base validation");
   }
