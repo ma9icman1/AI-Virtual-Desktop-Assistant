@@ -158,11 +158,7 @@ export class LipSyncEngine {
     });
 
     // Reset after estimated duration if not already ended
-    this.speechTimeoutId = setTimeout(() => {
-      if (this.speakingActive) {
-        this.resetWeights();
-      }
-    }, delay + 200);
+    // The real speech-end event owns reset timing; do not snap the mouth early.
   }
 
   /**
@@ -324,10 +320,8 @@ export class LipSyncEngine {
         return;
       }
 
-      // Add gentle jitter/formant variation to make speech mouth feel organic
-      if (this.targetWeights.jawOpen && this.targetWeights.jawOpen > 0.1) {
-        const microJitter = (Math.sin(Date.now() * 0.02) * 0.08);
-        this.currentWeights.jawOpen = Math.max(0, Math.min(1, (this.targetWeights.jawOpen || 0) + microJitter));
+      if (this.targetWeights.jawOpen !== undefined) {
+        this.currentWeights.jawOpen = this.targetWeights.jawOpen;
         this.notify();
       }
 

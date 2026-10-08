@@ -1755,6 +1755,18 @@ public static class MagicPasteInput {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
   'KEY_PRESS' {
     $key = ([string]$scriptArgs[3]).Trim().ToUpperInvariant()
     $vk = switch ($key) {

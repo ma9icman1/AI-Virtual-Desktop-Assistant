@@ -7,12 +7,19 @@ const lipPath = path.join(root, "src/services/lipSyncEngine.ts");
 
 function patch(file, replacements) {
   let text = fs.readFileSync(file, "utf8");
+  let changed = false;
   for (const [pattern, replacement, name] of replacements) {
     const next = text.replace(pattern, replacement);
-    if (next === text) throw new Error("[nova-production] missing marker: " + name);
-    text = next;
+    if (next === text) {
+      console.warn("[nova-production] skipping already-applied patch: " + name);
+    } else {
+      text = next;
+      changed = true;
+    }
   }
-  fs.writeFileSync(file, text, "utf8");
+  if (changed) {
+    fs.writeFileSync(file, text, "utf8");
+  }
 }
 
 patch(avatarPath, [
@@ -50,11 +57,6 @@ patch(avatarPath, [
     "eyebrows/Brow Squeeze_50.png","eyebrows/Brow Down_100.png"
   ];`, "developer arrays"],
 ]);
-
-let avatar = fs.readFileSync(avatarPath, "utf8");
-const start = avatar.indexOf("  const renderNova = useCallback(() => {");
-const end = avatar.indexOf("\n\n  useEffect(() => {\n    let cancelled = false;", start);
-if (start < 0 || end < 0) throw new Error("[nova-production] renderNova marker not found");
 
 const render = [
 "  const renderNova = useCallback(() => {",
@@ -94,10 +96,17 @@ const render = [
 "  }, [eyeState,isSpeaking,isListening,devAutoAnimate,devMouthIndex,mouthSources,parallax,enableParallax,getImage]);"
 ].join("\n");
 
-avatar = avatar.slice(0, start) + render + avatar.slice(end);
+let avatar = fs.readFileSync(avatarPath, "utf8");
+const start = avatar.indexOf("  const renderNova = useCallback(() => {");
+const end = avatar.indexOf("\n\n  useEffect(() => {\n    let cancelled = false;", start);
 
-avatar = avatar.replace(/\n  useEffect\(\(\) => \{\n    if \(!isSpeaking\) return;[\s\S]*?\n  \}, \[isSpeaking\]\);\n/, "\n");
-fs.writeFileSync(avatarPath, avatar, "utf8");
+if (start < 0 || end < 0) {
+  console.warn("[nova-production] skipping already-applied patch: renderNova (marker not found - already patched)");
+} else {
+  avatar = avatar.slice(0, start) + render + avatar.slice(end);
+  avatar = avatar.replace(/\n  useEffect\(\(\) => \{\n    if \(!isSpeaking\) return;[\s\S]*?\n  \}, \[isSpeaking\]\);\n/, "\n");
+  fs.writeFileSync(avatarPath, avatar, "utf8");
+}
 
 patch(lipPath, [
   [/    this\.speechTimeoutId = setTimeout\(\(\) => \{\n      if \(this\.speakingActive\) \{\n        this\.resetWeights\(\);\n      \}\n    \}, delay \+ 200\);\n/, "    // The real speech-end event owns reset timing; do not snap the mouth early.\n", "speech reset"],

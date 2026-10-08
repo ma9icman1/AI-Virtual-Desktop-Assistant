@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
 import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
@@ -25,7 +25,7 @@ interface Avatar2DProps {
   enableParallax?: boolean;
 }
 
-const NOVA_ROOT = "/Nova_2_5D_PRODUCTION_LAYERS_FINAL";
+const NOVA_ROOT = "/Nova_2_5D_FINAL_PRODUCTION_v21_all_renders";
 
 const NOVA_FILES = {
   base: "base/nova_base.png",
@@ -38,37 +38,31 @@ const NOVA_FILES = {
     closed: "blinks/closed.png",
   },
   eyebrows: {
-    neutral: "eyebrows/Brow Down.png",
-    up: "eyebrows/Brow Up.png",
-    innerUp: "eyebrows/Brow Inner Up.png",
-    outerUpLeft: "eyebrows/Brow Outer Up Left.png",
-    outerUpRight: "eyebrows/Brow Outer Up Right.png",
-    squeeze: "eyebrows/Brow Squeeze.png",
-    down: "eyebrows/Brow Down.png",
+    neutral: "eyebrows/Brow Down_100.png",
+    up: "eyebrows/Brow Up_100.png",
+    innerUp: "eyebrows/Brow Inner Up_100.png",
+    outerUpLeft: "eyebrows/Brow Outer Up Left_100.png",
+    outerUpRight: "eyebrows/Brow Outer Up Right_100.png",
+    squeeze: "eyebrows/Brow Squeeze_100.png",
+    down: "eyebrows/Brow Down_100.png",
   },
   mouth: {
-    closed: "mouth/Mouth Press.png",
-    smile: "mouth/Mouth Smile.png",
-    openSmall: "mouth/Mouth Stretch.png",
-    openWide: "mouth/Mouth Upper Up.png",
-    o: "mouth/Mouth Pucker.png",
+    closed: "mouth/Mouth Press_100.png",
+    smile: "mouth/Mouth Smile_100.png",
+    openSmall: "mouth/Mouth Stretch_100.png",
+    openWide: "mouth/Mouth Upper Up_100.png",
+    o: "mouth/Mouth Pucker_100.png",
   },
   faceDeform: {
-    neutral: "face_deform/lip.png",
-    smile: "face_deform/smile.png",
-    frown: "face_deform/frown.png",
-    cheek: "face_deform/cheek.png",
-    wide: "face_deform/mouth wide.png",
+    neutral: "face_deform/lip_100.png",
+    smile: "face_deform/smile_100.png",
+    frown: "face_deform/frown_100.png",
+    cheek: "face_deform/cheek_100.png",
+    wide: "face_deform/mouth wide_100.png",
   },
 } as const;
 
-type NovaSource =
-  | typeof NOVA_FILES.base
-  | (typeof NOVA_FILES.eyes)[keyof typeof NOVA_FILES.eyes]
-  | (typeof NOVA_FILES.blinks)[keyof typeof NOVA_FILES.blinks]
-  | (typeof NOVA_FILES.eyebrows)[keyof typeof NOVA_FILES.eyebrows]
-  | (typeof NOVA_FILES.mouth)[keyof typeof NOVA_FILES.mouth]
-  | (typeof NOVA_FILES.faceDeform)[keyof typeof NOVA_FILES.faceDeform];
+type NovaSource = string;
 
 type RGBAImage = {
   source: NovaSource;
@@ -100,7 +94,7 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
 };
 
 const DIFF_THRESHOLD = 1;
-const CANVAS_SIZE = 1024;
+const CANVAS_SIZE = 2048;
 
 function sourceUrl(source: NovaSource): string {
   return `${NOVA_ROOT}/${source}`;
@@ -252,17 +246,21 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     window.addEventListener("pointerup", handleUp, { once: true });
   }, []);
 
-  const sources = useMemo(() => {
-    const values: NovaSource[] = [
-      NOVA_FILES.base,
-      NOVA_FILES.eyes.center,
-      ...Object.values(NOVA_FILES.blinks),
-      ...Object.values(NOVA_FILES.eyebrows),
-      ...Object.values(NOVA_FILES.mouth),
-      ...Object.values(NOVA_FILES.faceDeform),
-    ];
-    return [...new Set(values)];
-  }, []);
+  const sources = useMemo(() => [
+  NOVA_FILES.base,
+  "eyes/center.png","eyes/left.png","eyes/right.png","eyes/up.png","eyes/down.png",
+  "eyes/up_left.png","eyes/up_right.png","eyes/down_left.png","eyes/down_right.png",
+  "blinks/open.png","blinks/quarter.png","blinks/half.png","blinks/three_quarter.png","blinks/closed.png",
+  "idle_listening/slight_smile.png","idle_listening/annoyed.png",
+  "mouth/Mouth Press_20.png","mouth/Mouth Press_40.png","mouth/Mouth Press_60.png","mouth/Mouth Press_80.png","mouth/Mouth Press_100.png",
+  "mouth/Mouth Smile_100.png","mouth/Mouth Smile Widen_60.png",
+  "mouth/Mouth Stretch_40.png","mouth/Mouth Stretch_60.png","mouth/Mouth Stretch_80.png",
+  "mouth/Mouth Upper Up_60.png","mouth/Mouth Upper Up_80.png","mouth/Mouth Upper Up_100.png",
+  "mouth/Mouth Pucker_60.png","mouth/Mouth Pucker_80.png","mouth/Mouth Pucker_100.png",
+  "speech/phoneme_TH_80.png","speech/phoneme_SH_CH_J_80.png","speech/vowel_U_80.png",
+  "face_deform/smile_50.png","face_deform/mouth wide_75.png",
+  "eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png","eyebrows/Brow Down_50.png","eyebrows/Brow Squeeze_50.png"
+], []);
 
   const getImage = useCallback((source: NovaSource) => {
     return imagesRef.current.get(imageKey(source)) ?? null;
@@ -305,20 +303,18 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   }, []);
 
   const mouthSources: NovaSource[] = [
-    NOVA_FILES.mouth.closed, NOVA_FILES.mouth.smile, NOVA_FILES.mouth.openSmall,
-    NOVA_FILES.mouth.openWide, NOVA_FILES.mouth.o,
-  ];
-  const eyeSources: NovaSource[] = [
-    NOVA_FILES.blinks.open, NOVA_FILES.blinks.half, NOVA_FILES.blinks.closed,
-  ];
+  "mouth/Mouth Press_100.png","mouth/Mouth Smile_100.png","mouth/Mouth Stretch_60.png",
+  "mouth/Mouth Upper Up_100.png","mouth/Mouth Pucker_80.png"
+];
+  const eyeSources: NovaSource[] = ["blinks/open.png","blinks/half.png","blinks/closed.png"];
   const faceSources: NovaSource[] = [
-    NOVA_FILES.faceDeform.neutral, NOVA_FILES.faceDeform.smile, NOVA_FILES.faceDeform.frown,
-    NOVA_FILES.faceDeform.cheek, NOVA_FILES.faceDeform.wide,
+    "face_deform/lip_25.png","face_deform/smile_50.png","face_deform/frown_50.png",
+    "face_deform/cheek_50.png","face_deform/mouth wide_75.png"
   ];
   const browSources: NovaSource[] = [
-    NOVA_FILES.eyebrows.neutral, NOVA_FILES.eyebrows.up, NOVA_FILES.eyebrows.innerUp,
-    NOVA_FILES.eyebrows.outerUpLeft, NOVA_FILES.eyebrows.outerUpRight, NOVA_FILES.eyebrows.squeeze,
-    NOVA_FILES.eyebrows.down,
+    "eyebrows/Brow Down_50.png","eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png",
+    "eyebrows/Brow Outer Up Left_50.png","eyebrows/Brow Outer Up Right_50.png",
+    "eyebrows/Brow Squeeze_50.png","eyebrows/Brow Down_100.png"
   ];
 
   const getMask = useCallback(
