@@ -505,3 +505,26 @@ body.avatar-overlay .avatar2d-stage > .relative > div {
   .avatar2d-tool { height: 29px; }
   .avatar2d-tool svg { width: 17px !important; height: 17px !important; }
 }
+
+
+/* [avatar-2d-final-v1] */
+body.avatar-overlay .avatar2d-stage {
+  width: min(100%, 620px);
+  margin-left: 0;
+  margin-right: 0;
+}
+
+body.avatar-overlay .avatar2d-stage > .relative {
+  transform-origin: 50% 100%;
+}
+
+body.avatar-overlay .avatar2d-controls {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+}
+
+body.avatar-overlay .avatar2d-controls > div:first-child {
+  color: #e9f7ff !important;
+  text-shadow: 0 0 10px rgba(0, 170, 255, .28);
+}

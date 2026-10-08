@@ -612,7 +612,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         className="avatar2d-stage relative w-full h-full flex items-center justify-center"
         style={{
           transformStyle: "preserve-3d",
-          transform: `rotateY(${rotY}deg) rotateX(${rotX}deg)`,
+          transform: `translateX(-8%) rotateY(${rotY}deg) rotateX(${rotX}deg)`,
         }}
       >
         <div
@@ -741,7 +741,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
                   : "bg-emerald-400"
             }`}
           />
-          <span className="w-full px-8 text-center break-words">
+          <span className="w-full px-8 text-center break-words text-slate-100" style={{ color: "#e9f7ff", textShadow: "0 0 10px rgba(0, 170, 255, 0.28)" }}>
             {speechText.trim() || voiceNotice || ""}
           </span>
         </div>

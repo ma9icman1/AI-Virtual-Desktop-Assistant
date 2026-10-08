@@ -1,0 +1,18 @@
+// DAZ Studio version 4.24.0.4 filetype DAZ Script
+
+// DAZ Studio 4.24+ / Iray
+// NOVA EMERGENCY STOP RENDER
+(function(){
+    try {
+        var mgr = App.getRenderMgr();
+        var renderer = mgr ? mgr.getActiveRenderer() : null;
+        if (renderer && typeof renderer.killRender === "function" && renderer.isRendering()) {
+            renderer.killRender();
+            App.writeToLog("NOVA: active render killed.", true);
+        } else {
+            App.writeToLog("NOVA: no active render to kill.", true);
+        }
+    } catch(e) {
+        MessageBox.critical("NOVA STOP RENDER", String(e), "OK");
+    }
+})();

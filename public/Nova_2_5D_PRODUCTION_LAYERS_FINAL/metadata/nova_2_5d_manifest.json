@@ -1,15 +1,21 @@
 {
-  "version": 12,
-  "output_folder": "Nova_2_5D_PRODUCTION_v19_all_layers_hair",
-  "canvas": {"width": 1024, "height": 1024},
-  "facial_layer": {"width": 512, "height": 512, "scale": 0.5, "render_strategy": "normal_iray_render_with_facial_visibility_isolation"},
+  "version": 21,
+  "output_folder": "Nova_2_5D_FINAL_PRODUCTION_v21_all_renders",
+  "canvas": {"width": 2048, "height": 2048},
+  "facial_layer": {"width": 2048, "height": 2048, "scale": 1.0, "render_strategy": "normal_iray_render_with_facial_visibility_isolation"},
   "alpha": true,
   "base": "../base/nova_base.png",
   "layers": {
-    "eyes": {"path": "../eyes", "canvas": "512x512"},
-    "blinks": {"path": "../blinks", "canvas": "512x512"},
-    "eyebrows": {"path": "../eyebrows", "canvas": "512x512"},
-    "mouth": {"path": "../mouth", "canvas": "512x512"},
-    "face_deform": {"path": "../face_deform", "canvas": "512x512"}
+    "eyes": {"path": "../eyes", "canvas": "2048x2048"},
+    "blinks": {"path": "../blinks", "canvas": "2048x2048"},
+    "eyebrows": {"path": "../eyebrows", "canvas": "2048x2048"},
+    "mouth": {"path": "../mouth", "canvas": "2048x2048"},
+    "face_deform": {"path": "../face_deform", "canvas": "2048x2048"},
+    "speech": {"path": "../speech", "canvas": "2048x2048"},
+    "expressions": {"path": "../expressions", "canvas": "2048x2048"},
+    "emotions": {"path": "../emotions", "canvas": "2048x2048"},
+    "reactions": {"path": "../reactions", "canvas": "2048x2048"},
+    "idle_listening": {"path": "../idle_listening", "canvas": "2048x2048"},
+    "transitions": {"path": "../transitions", "canvas": "2048x2048"}
   }
 }

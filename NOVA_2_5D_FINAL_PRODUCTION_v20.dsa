@@ -1,0 +1,2448 @@
+// DAZ Studio version 4.5.0.53 filetype DAZ Script
+
+//
+
+// NOVA 2.5D PRODUCTION BUILDER - v19 (hair included in every render layer)
+
+// DAZ Studio 4.24 / NVIDIA Iray
+
+//
+
+// v19 GOAL:
+
+// Build a compositor-ready 2.5D asset set from the WORKING v8 renderer.
+
+//
+
+// IMPORTANT:
+
+// - Keeps the proven DirectToFile + RenderMgr.doRender() path from v8.
+
+// - Keeps CPU/GPU scheduling restore and facial-state restore.
+
+// - Keeps the final completion/exit section.
+
+// - Does NOT save or modify the DUF scene.
+
+// - Renders PNGs with the Iray environment/dome/ground disabled when those
+
+//   properties are available, so the outputs are alpha-ready for compositing.
+
+// - Separates base, eyes, eyebrows, mouth/face-deformation, and expressions.
+
+//
+
+// NOTE:
+
+// Genesis facial morphs live on the head geometry. DAZ's public canvas/node-list
+
+// API can isolate nodes, but it cannot isolate individual morph regions on one
+
+// head mesh. Therefore v10 deliberately keeps the actual facial deformation
+
+// source renders intact instead of pretending a mouth PNG alone contains the
+
+// surrounding skin deformation. The app can later use masks/difference or a
+
+// second-stage crop/compositor on these source plates.
+
+//
+
+// The script is intentionally conservative: first make reliable, alpha-ready
+
+// source passes; then the ma9icAI compositor can combine them in real time.
+
+function novaMain() {
+
+    // ============================================================
+
+    // CONFIG
+
+    // ============================================================
+
+    // PRODUCTION MODE: one facial pass only.
+
+    // This is deliberately NOT a production render. It exists so we can verify
+
+    // visibility isolation/camera/material behavior in seconds instead of
+
+    // waiting through the full 2.5D batch.
+
+    var WIDTH = 1024;
+
+    var HEIGHT = 1024;
+
+    var PRODUCTION_MAX_SAMPLES = 32;
+
+    var PRODUCTION_MAX_TIME = 15.0;
+
+    var PRODUCTION_RENDER_ALL_EYE_STATES = true;
+
+
+    var VISEME_STRENGTH = 100.0;
+
+    var EYE_STRENGTH = 100.0;
+
+    var BROW_STRENGTH = 100.0;
+
+    var EXPRESSION_STRENGTH = 100.0;
+
+    // PRODUCTION: render ONLY one center-eye facial isolation pass.
+
+    var DO_BASE = true;
+
+    var DO_EYES = true;
+
+    var DO_BLINKS = true;
+
+    var DO_EYEBROWS = true;
+
+    var DO_MOUTH = true;
+
+    var DO_FACE_DEFORM = true;
+
+    var DO_EXPRESSIONS = false;
+
+    // Keep false. This can create a large number of source renders.
+
+    var DO_VISEME_EYE_MATRIX = false;
+
+    // CPU contribution target. Keep the proven v8 behavior.
+
+    var CPU_LOAD_FRACTION = 0.50;
+
+    // ============================================================
+
+    // SCRIPT LOAD TEST
+
+    // ============================================================
+
+    App.writeToLog("Nova v19 PRODUCTION script loaded.", true);
+
+    // ============================================================
+
+    // HELPERS
+
+    // ============================================================
+
+    function info(s) {
+
+        MessageBox.information(s, "Nova 2.5D PRODUCTION v19", "&OK");
+
+    }
+
+    function fail(s) {
+
+        MessageBox.critical(s, "Nova 2.5D PRODUCTION v19", "&OK");
+
+    }
+
+    function warn(s) {
+
+        MessageBox.warning(s, "Nova 2.5D PRODUCTION v19", "&OK");
+
+    }
+
+    function findPropertyByLabel(properties, label) {
+
+        var target = String(label).toLowerCase();
+
+        for (var i = 0; i < properties.length; i += 1) {
+
+            try {
+
+                if (String(properties[i].getLabel()).toLowerCase() == target) {
+
+                    return properties[i];
+
+                }
+
+            } catch (e) {}
+
+        }
+
+        return null;
+
+    }
+
+    function findPropertyContains(properties, text) {
+
+        var target = String(text).toLowerCase();
+
+        for (var i = 0; i < properties.length; i += 1) {
+
+            try {
+
+                if (String(properties[i].getLabel()).toLowerCase().indexOf(target) >= 0) {
+
+                    return properties[i];
+
+                }
+
+            } catch (e) {}
+
+        }
+
+        return null;
+
+    }
+
+    function getPropertyValue(p) {
+
+        try {
+
+            return p.getValue();
+
+        } catch (e) {
+
+            return 0;
+
+        }
+
+    }
+
+    function setPropertyValue(p, value) {
+
+        if (!p) {
+
+            return;
+
+        }
+
+        try {
+
+            p.setValue(value);
+
+        } catch (e) {}
+
+    }
+
+    function safeFileName(s) {
+
+        return String(s).replace(/[\\\/:*?"<>|]/g, "_");
+
+    }
+
+    function ensureDir(parentPath, name) {
+
+        var path = parentPath + "/" + name;
+
+        var dir = new DzDir(path);
+
+        if (!dir.exists()) {
+
+            var parent = new DzDir(parentPath);
+
+            if (!parent.exists()) {
+
+                return null;
+
+            }
+
+            try {
+
+                parent.mkdir(name);
+
+            } catch (e) {
+
+                return null;
+
+            }
+
+        }
+
+        if (!dir.exists()) {
+
+            return null;
+
+        }
+
+        return dir;
+
+    }
+
+    function getElementPropertiesDeep(element) {
+
+        var result = [];
+
+        if (!element) {
+
+            return result;
+
+        }
+
+        try {
+
+            var tree = element.getPropertyGroups();
+
+            if (tree && typeof tree.getAllProperties == "function") {
+
+                result = tree.getAllProperties();
+
+                if (result && result.length > 0) {
+
+                    return result;
+
+                }
+
+            }
+
+        } catch (eTree) {}
+
+        try {
+
+            result = element.getPropertyList();
+
+        } catch (eList) {
+
+            result = [];
+
+        }
+
+        return result;
+
+    }
+
+    function findElementPropertyContains(element, text) {
+
+        return findPropertyContains(
+
+            getElementPropertiesDeep(element),
+
+            text
+
+        );
+
+    }
+
+    function findElementPropertyByLabel(element, label) {
+
+        return findPropertyByLabel(
+
+            getElementPropertiesDeep(element),
+
+            label
+
+        );
+
+    }
+
+    // ============================================================
+
+    // BATCH STATE
+
+    // ============================================================
+
+    var stopBatch = false;
+
+    var rendered = 0;
+
+    var failed = 0;
+
+    // ============================================================
+
+    // RENDER FUNCTIONS
+
+    // ============================================================
+
+    // Base uses the proven v8 RenderMgr.doRender() path.
+
+    // Facial layers use DAZ's documented DzImageRenderHandler crop window so
+
+    // Iray only writes the requested face region instead of a full 1024x1024
+
+    // frame. This is the key performance change in v10.
+
+    function renderFullFile(filePath) {
+
+        var output = String(filePath).replace(/\\/g, "/");
+
+        try { renderer.setRenderCamera(camera); } catch (eCamera) {}
+
+        renderOptions.imageSize = new Size(WIDTH, HEIGHT);
+
+        renderOptions.isAspectConstrained = true;
+
+        renderOptions.setAspectRatio(1, 1);
+
+        renderOptions.isCurrentFrameRender = true;
+
+        renderOptions.renderImgToId = DzRenderOptions.DirectToFile;
+
+        renderOptions.renderImgFilename = output;
+
+        App.writeToLog("Nova v19 PRODUCTION: FULL render -> " + output, true);
+
+        var result = renderMgr.doRender(renderOptions);
+
+        App.writeToLog("Nova v19 PRODUCTION: FULL render returned " + result, true);
+
+        return result;
+
+    }
+
+    // ============================================================
+
+    // FACIAL RENDER ISOLATION
+
+    // ============================================================
+
+    // v19 does NOT use renderer.customRender() for Genesis 9 facial layers.
+
+    // v12 proved that isolated customRender(head) can produce blank/deformed
+
+    // Iray plates in this scene. Instead we use DAZ's normal render pipeline,
+
+    // but temporarily hide everything that is not part of the moving face.
+
+    // This preserves the exact Genesis 9 scene/shaders/camera behavior while
+
+    // removing the expensive torso/body/environment geometry from the facial
+
+    // passes. Hair remains visible in every layer by design.
+
+    var savedRenderVisibility = null;
+
+    var facialIsolationReady = false;
+
+    function isFacialNode(node) {
+
+        if (!node) { return false; }
+
+        var label = "";
+
+        try { label = String(node.getLabel()).toLowerCase(); } catch (eLabel) {}
+
+        var keywords = [
+
+            "head", "face", "eye", "eyes", "eyebrow", "brow",
+
+            "eyelash", "lash", "cornea", "iris", "pupil", "sclera",
+
+            "tear", "lacrimal", "mouth", "lip", "jaw", "teeth", "tooth",
+
+            "tongue", "gum", "gums"
+
+        ];
+
+        for (var ki = 0; ki < keywords.length; ki += 1) {
+
+            if (label.indexOf(keywords[ki]) >= 0) { return true; }
+
+        }
+
+        return false;
+
+    }
+
+    // v19: hair is NOT a separate plate anymore. Every final layer is a
+
+    // complete 1024x1024 render with the actual Nova hair visible. We only
+
+    // use label/descendant detection here so hair-related nodes survive the
+
+    // facial isolation pass without bringing the torso/body/environment back.
+
+    function isHairLabelNode(node) {
+
+        if (!node) { return false; }
+
+        var label = "";
+
+        try { label = String(node.getLabel()).toLowerCase(); } catch (eHairLabel) {}
+
+        return label.indexOf("hair") >= 0 ||
+
+               label.indexOf("hairstyle") >= 0 ||
+
+               label.indexOf("haircap") >= 0;
+
+    }
+
+    function collectHairRoots(nodes) {
+
+        var roots = [];
+
+        for (var hi = 0; hi < nodes.length; hi += 1) {
+
+            if (isHairLabelNode(nodes[hi])) {
+
+                roots.push(nodes[hi]);
+
+            }
+
+        }
+
+        return roots;
+
+    }
+
+    function nodeIsHairRelated(node, hairRoots) {
+
+        if (!node || !hairRoots) { return false; }
+
+        if (isHairLabelNode(node)) { return true; }
+
+        for (var hri = 0; hri < hairRoots.length; hri += 1) {
+
+            try {
+
+                if (node.isNodeDescendantOf(hairRoots[hri], true)) {
+
+                    return true;
+
+                }
+
+            } catch (eHairDesc) {}
+
+        }
+
+        return false;
+
+    }
+
+    function saveRenderVisibility() {
+
+        if (savedRenderVisibility) { return; }
+
+        savedRenderVisibility = [];
+
+        var nodes = Scene.getNodeList();
+
+        for (var i = 0; i < nodes.length; i += 1) {
+
+            var node = nodes[i];
+
+            if (!node) { continue; }
+
+            try {
+
+                savedRenderVisibility.push({
+
+                    node: node,
+
+                    visible: node.isVisibleInRender()
+
+                });
+
+            } catch (eSaveVis) {}
+
+        }
+
+        App.writeToLog(
+
+            "Nova v19 PRODUCTION: saved render visibility for " +
+
+            savedRenderVisibility.length + " scene nodes.",
+
+            true
+
+        );
+
+    }
+
+    function setRenderVisible(node, value) {
+
+        if (!node) { return; }
+
+        try { node.setVisibleInRender(value); } catch (eSetVis) {}
+
+    }
+
+    function restoreRenderVisibility() {
+
+        if (!savedRenderVisibility) { return; }
+
+        for (var i = 0; i < savedRenderVisibility.length; i += 1) {
+
+            var item = savedRenderVisibility[i];
+
+            try { item.node.setVisibleInRender(item.visible); } catch (eRestoreVis) {}
+
+        }
+
+        App.writeToLog("Nova v19 PRODUCTION: restored scene render visibility.", true);
+
+    }
+
+    function isolateFacialRenderNodes() {
+
+        saveRenderVisibility();
+
+        var nodes = Scene.getNodeList();
+
+        var hairRoots = collectHairRoots(nodes);
+
+        // First hide EVERYTHING from renders.
+
+        for (var i = 0; i < nodes.length; i += 1) {
+
+            setRenderVisible(nodes[i], false);
+
+        }
+
+        // Keep the active camera and all lights available to the normal Iray
+
+        // renderer. Cameras do not contribute pixels, but leaving them visible
+
+        // is harmless and makes the scene state predictable.
+
+        setRenderVisible(camera, true);
+
+        for (var li = 0; li < nodes.length; li += 1) {
+
+            var lightNode = nodes[li];
+
+            try {
+
+                if (lightNode && lightNode.inherits("DzLight")) {
+
+                    setRenderVisible(lightNode, true);
+
+                }
+
+            } catch (eLight) {}
+
+        }
+
+        // Keep the Genesis 9 figure in the render so its normal figure/skin
+
+        // pipeline remains intact. Then hide its non-facial body descendants.
+
+        setRenderVisible(genesis, true);
+
+        setRenderVisible(head, true);
+
+        for (var ni = 0; ni < nodes.length; ni += 1) {
+
+            var node = nodes[ni];
+
+            if (!node || node === genesis || node === head) { continue; }
+
+            var keep = false;
+
+            try {
+
+                if (node.isNodeDescendantOf(head, true)) {
+
+                    keep = true;
+
+                }
+
+            } catch (eHeadDesc) {}
+
+            // Some Genesis facial geometry (eyes/teeth/etc.) is not necessarily
+
+            // parented below Head in every character setup. Keep those by label.
+
+            if (!keep && isFacialNode(node)) {
+
+                try {
+
+                    if (node.isNodeDescendantOf(genesis, true)) {
+
+                        keep = true;
+
+                    }
+
+                } catch (eGenesisDesc) {}
+
+            }
+
+            // Facial props may be separate scene nodes rather than Genesis
+
+            // descendants. Keep obvious facial props.
+
+            if (!keep && isFacialNode(node)) {
+
+                keep = true;
+
+            }
+
+            // v19: keep the real hair and all of its child geometry in EVERY
+
+            // layer. This deliberately replaces the old separate hair plate.
+
+            if (!keep && nodeIsHairRelated(node, hairRoots)) {
+
+                keep = true;
+
+            }
+
+            if (keep) {
+
+                setRenderVisible(node, true);
+
+            }
+
+        }
+
+        facialIsolationReady = true;
+
+        App.writeToLog(
+
+            "Nova v19 PRODUCTION: facial isolation active. Body/environment hidden; real hair retained in every layer.",
+
+            true
+
+        );
+
+    }
+
+    function renderFacialLayer(filePath) {
+
+        var output = String(filePath).replace(/\\/g, "/");
+
+        try {
+
+            isolateFacialRenderNodes();
+
+            // Use the proven normal Iray render path, only smaller. Same camera,
+
+            // same Genesis 9 geometry, same materials, same lights. This avoids
+
+            // customRender() and avoids crop coordinates entirely.
+
+            try { renderer.setRenderCamera(camera); } catch (eCamera) {}
+
+            renderOptions.imageSize = new Size(WIDTH, HEIGHT);
+
+            renderOptions.isAspectConstrained = true;
+
+            renderOptions.setAspectRatio(1, 1);
+
+            renderOptions.isCurrentFrameRender = true;
+
+            renderOptions.renderImgToId = DzRenderOptions.DirectToFile;
+
+            renderOptions.renderImgFilename = output;
+
+            App.writeToLog(
+
+                "Nova v19 PRODUCTION: FACIAL-ISOLATED render -> " +
+
+                output + " size=" + WIDTH + "x" + HEIGHT,
+
+                true
+
+            );
+
+            var result = renderMgr.doRender(renderOptions);
+
+            App.writeToLog(
+
+                "Nova v19 PRODUCTION: FACIAL-ISOLATED render returned " + result,
+
+                true
+
+            );
+
+            if (!result) {
+
+                throw new Error("Facial-isolated Iray render returned false.");
+
+            }
+
+            return true;
+
+        } finally {
+
+            restoreRenderVisibility();
+
+            facialIsolationReady = false;
+
+        }
+
+    }
+
+    function doOne(filePath, headOnly) {
+
+        if (stopBatch) { return false; }
+
+        try {
+
+            var ok = headOnly ? renderFacialLayer(filePath) : renderFullFile(filePath);
+
+            if (ok) { rendered += 1; }
+
+            else { failed += 1; stopBatch = true; }
+
+            return ok;
+
+        } catch (err) {
+
+            failed += 1;
+
+            stopBatch = true;
+
+            MessageBox.warning(
+
+                "A render failed:\n\n" + String(err) +
+
+                "\n\nOutput:\n" + filePath,
+
+                "Nova Render Warning", "&OK"
+
+            );
+
+            return false;
+
+        }
+
+    }
+
+    // ============================================================
+
+    // FIND SCENE / CAMERA / FIGURE
+
+    // ============================================================
+
+    var camera = null;
+
+    try {
+
+        camera = Scene.findCameraByLabel("Nova_Camera");
+
+    } catch (eCameraFind) {}
+
+    if (!camera) {
+
+        try {
+
+            var cameras = Scene.getCameraList();
+
+            if (cameras && cameras.length > 0) {
+
+                camera = cameras[0];
+
+            }
+
+        } catch (eCameras) {}
+
+    }
+
+    if (!camera) {
+
+        fail("No camera was found in the scene.");
+
+        return;
+
+    }
+
+    var genesis = Scene.findNodeByLabel("Genesis 9");
+
+    if (!genesis) {
+
+        genesis = Scene.getPrimarySelection();
+
+    }
+
+    if (!genesis) {
+
+        fail(
+
+            "Genesis 9 was not found.\n\n" +
+
+            "Select the Genesis 9 figure and run the script again."
+
+        );
+
+        return;
+
+    }
+
+    var head = genesis.findNodeChildByLabel("Head", true);
+
+    if (!head) {
+
+        fail("Genesis 9 Head was not found.");
+
+        return;
+
+    }
+
+    // ============================================================
+
+    // RENDER MANAGER
+
+    // ============================================================
+
+    var renderMgr = App.getRenderMgr();
+
+    if (!renderMgr) {
+
+        fail("DAZ Render Manager was not available.");
+
+        return;
+
+    }
+
+    var renderer = renderMgr.getActiveRenderer();
+
+    if (!renderer) {
+
+        fail("No active renderer was available.");
+
+        return;
+
+    }
+
+    var renderOptions = renderMgr.getRenderOptions();
+
+    if (!renderOptions) {
+
+        fail("DAZ Render Options were not available.");
+
+        return;
+
+    }
+
+    // ============================================================
+
+    // IRAY CPU/GPU - SAME RESTORE LOGIC AS v8
+
+    // ============================================================
+
+    var iraySchedulingEnabled = false;
+
+    var oldCPULoadLimit = 0;
+
+    var oldGPULoadLimit = 0;
+
+    var oldAllowCPUFallback = false;
+
+    var oldCPUThreadAffinity = false;
+
+    var newCPULoadLimit = 0;
+
+    if (
+
+        typeof renderer.getCPULoadLimit == "function" &&
+
+        typeof renderer.setCPULoadLimit == "function"
+
+    ) {
+
+        try {
+
+            oldCPULoadLimit = renderer.getCPULoadLimit();
+
+            newCPULoadLimit = oldCPULoadLimit * CPU_LOAD_FRACTION;
+
+            if (newCPULoadLimit < 1.0) {
+
+                newCPULoadLimit = 1.0;
+
+            }
+
+            renderer.setCPULoadLimit(newCPULoadLimit);
+
+            iraySchedulingEnabled = true;
+
+            if (
+
+                typeof renderer.getGPULoadLimit == "function" &&
+
+                typeof renderer.setGPULoadLimit == "function"
+
+            ) {
+
+                oldGPULoadLimit = renderer.getGPULoadLimit();
+
+                renderer.setGPULoadLimit(oldGPULoadLimit);
+
+            }
+
+            if (
+
+                typeof renderer.getAllowCPUFallback == "function" &&
+
+                typeof renderer.setAllowCPUFallback == "function"
+
+            ) {
+
+                oldAllowCPUFallback = renderer.getAllowCPUFallback();
+
+                renderer.setAllowCPUFallback(true);
+
+            }
+
+            if (
+
+                typeof renderer.getCPUThreadAffinityEnabled == "function" &&
+
+                typeof renderer.setCPUThreadAffinityEnabled == "function"
+
+            ) {
+
+                oldCPUThreadAffinity = renderer.getCPUThreadAffinityEnabled();
+
+            }
+
+        } catch (eIray) {
+
+            fail(
+
+                "Could not configure Iray CPU scheduling.\n\n" +
+
+                String(eIray)
+
+            );
+
+            return;
+
+        }
+
+    } else {
+
+        fail(
+
+            "The active renderer does not expose the Iray CPU scheduling API.\n\n" +
+
+            "Make sure NVIDIA Iray is active."
+
+        );
+
+        return;
+
+    }
+
+    // ============================================================
+
+    // SCENE PATH / OUTPUT FOLDERS
+
+    // ============================================================
+
+    var sceneFile = Scene.getFilename();
+
+    if (!sceneFile || String(sceneFile).length < 1) {
+
+        fail(
+
+            "Nova_Master.duf has not been saved.\n\n" +
+
+            "Save the scene first, then run this script."
+
+        );
+
+        return;
+
+    }
+
+    var scenePath = String(sceneFile).replace(/\\/g, "/");
+
+    var slashPos = scenePath.lastIndexOf("/");
+
+    if (slashPos <= 2) {
+
+        fail(
+
+            "Could not determine the scene folder from:\n\n" +
+
+            scenePath
+
+        );
+
+        return;
+
+    }
+
+    var basePath = scenePath.substring(0, slashPos);
+
+    if (!/^[A-Za-z]:\//.test(basePath)) {
+
+        fail(
+
+            "DAZ returned a non-absolute scene path:\n\n" +
+
+            basePath +
+
+            "\n\nScene filename:\n" +
+
+            scenePath
+
+        );
+
+        return;
+
+    }
+
+    // ALWAYS use a fresh output folder so v9/v10/v11/v12/v13/v14 images are never overwritten.
+
+    // If Nova_2_5D_PRODUCTION_v19_all_layers_hair already exists, automatically
+
+    // create _run2, _run3, etc. No DAZ "Replace existing file?" prompts.
+
+    var rootName = "Nova_2_5D_PRODUCTION_v19_all_layers_hair";
+
+    var rootPath = basePath + "/" + rootName;
+
+    var runNumber = 1;
+
+    while (new DzDir(rootPath).exists()) {
+
+        runNumber++;
+
+        rootName = "Nova_2_5D_PRODUCTION_v19_all_layers_hair_run" + runNumber;
+
+        rootPath = basePath + "/" + rootName;
+
+    }
+
+    var root = ensureDir(basePath, rootName);
+
+    if (!root) {
+
+        fail(
+
+            "Could not create the Nova v19 PRODUCTION output folder:\n\n" +
+
+            rootPath
+
+        );
+
+        return;
+
+    }
+
+    var baseDir = ensureDir(rootPath, "base");
+
+    var eyesDir = ensureDir(rootPath, "eyes");
+
+    var blinksDir = ensureDir(rootPath, "blinks");
+
+    var eyebrowsDir = ensureDir(rootPath, "eyebrows");
+
+    var mouthDir = ensureDir(rootPath, "mouth");
+
+    var faceDeformDir = ensureDir(rootPath, "face_deform");
+
+    var expressionsDir = ensureDir(rootPath, "expressions");
+
+    var metadataDir = ensureDir(rootPath, "metadata");
+
+    if (
+
+        !baseDir ||
+
+        !eyesDir ||
+
+        !blinksDir ||
+
+        !eyebrowsDir ||
+
+        !mouthDir ||
+
+        !faceDeformDir ||
+
+        !expressionsDir ||
+
+        !metadataDir
+
+    ) {
+
+        fail(
+
+            "Could not create one or more Nova v19 PRODUCTION output folders.\n\n" +
+
+            "Root:\n" + root.path()
+
+        );
+
+        return;
+
+    }
+
+    // ============================================================
+
+    // IRAY ALPHA-READY SETTINGS
+
+    // ============================================================
+
+    // IMPORTANT: Render Settings properties are owned by the renderer's
+
+    // render-element tree. They are NOT reliably exposed through a generic
+
+    // renderer property-holder. DAZ's official "Render Settings - Find
+
+    // Property" sample searches getRenderElementObjects(), so v10 uses that
+
+    // same route here.
+
+    function getRenderElementProperties(element) {
+
+        var result = [];
+
+        if (!element) {
+
+            return result;
+
+        }
+
+        try {
+
+            var tree = element.getPropertyGroups();
+
+            if (tree) {
+
+                if (App.version64 >= 0x0004000900040065 &&
+
+                    typeof tree.getAllProperties == "function") {
+
+                    result = tree.getAllProperties();
+
+                } else if (typeof tree.getFirstChild == "function") {
+
+                    result = getElementPropertiesDeep(element);
+
+                }
+
+            }
+
+        } catch (eRenderElementProps) {
+
+            result = [];
+
+        }
+
+        return result;
+
+    }
+
+    function findRendererSettingByLabel(label) {
+
+        var target = String(label).toLowerCase();
+
+        var elements = [];
+
+        try {
+
+            elements = renderMgr.getRenderElementObjects();
+
+        } catch (eElements) {
+
+            elements = [];
+
+        }
+
+        for (var ei = 0; ei < elements.length; ei += 1) {
+
+            var props = getRenderElementProperties(elements[ei]);
+
+            for (var pi = 0; pi < props.length; pi += 1) {
+
+                try {
+
+                    if (String(props[pi].getLabel()).toLowerCase() == target) {
+
+                        return props[pi];
+
+                    }
+
+                } catch (ePropLabel) {}
+
+            }
+
+            // Some render elements expose child elements. Search those too.
+
+            try {
+
+                for (var ci = 0; ci < elements[ei].getNumElementChildren(); ci += 1) {
+
+                    var child = elements[ei].getElementChild(ci);
+
+                    var childProps = getRenderElementProperties(child);
+
+                    for (var cpi = 0; cpi < childProps.length; cpi += 1) {
+
+                        try {
+
+                            if (String(childProps[cpi].getLabel()).toLowerCase() == target) {
+
+                                return childProps[cpi];
+
+                            }
+
+                        } catch (eChildLabel) {}
+
+                    }
+
+                }
+
+            } catch (eChildren) {}
+
+        }
+
+        return null;
+
+    }
+
+    var drawDome = findRendererSettingByLabel("Draw Dome");
+
+    var drawGround = findRendererSettingByLabel("Draw Ground");
+
+    var oldDrawDome = null;
+
+    var oldDrawGround = null;
+
+    var alphaReady = false;
+
+    if (drawDome) {
+
+        oldDrawDome = getPropertyValue(drawDome);
+
+        setPropertyValue(drawDome, 0);
+
+    }
+
+    if (drawGround) {
+
+        oldDrawGround = getPropertyValue(drawGround);
+
+        setPropertyValue(drawGround, 0);
+
+    }
+
+    // A transparent PNG requires the visible dome/ground to be disabled.
+
+    // DAZ documents Draw Dome and Draw Ground as the controls for whether
+
+    // those environment surfaces are rendered. The environment can still
+
+    // provide illumination; we are only removing the visible background.
+
+    alphaReady = !!drawDome && !!drawGround;
+
+    App.writeToLog(
+
+        "Nova v19 PRODUCTION alpha setup via Render Settings: Draw Dome found=" +
+
+        (!!drawDome) +
+
+        ", Draw Ground found=" +
+
+        (!!drawGround) +
+
+        ", alpha-ready=" +
+
+        alphaReady,
+
+        true
+
+    );
+
+    // ============================================================
+
+    // FAST IRAY QUALITY OVERRIDE
+
+    // ============================================================
+
+    // DAZ exposes renderer settings such as Max Samples through the render
+
+    // element property tree. We temporarily lower them for this production
+
+    // pass and restore the user's original values in the final cleanup.
+
+    var productionMaxSamplesProp = findRendererSettingByLabel("Max Samples");
+
+    var productionMaxTimeProp = findRendererSettingByLabel("Max Time");
+
+    var oldProductionMaxSamples = null;
+
+    var oldProductionMaxTime = null;
+
+    if (productionMaxSamplesProp) {
+
+        oldProductionMaxSamples = getPropertyValue(productionMaxSamplesProp);
+
+        setPropertyValue(productionMaxSamplesProp, PRODUCTION_MAX_SAMPLES);
+
+    }
+
+    if (productionMaxTimeProp) {
+
+        oldProductionMaxTime = getPropertyValue(productionMaxTimeProp);
+
+        setPropertyValue(productionMaxTimeProp, PRODUCTION_MAX_TIME);
+
+    }
+
+    App.writeToLog(
+
+        "Nova v19 PRODUCTION quality: Max Samples=" +
+
+        (!!productionMaxSamplesProp ? PRODUCTION_MAX_SAMPLES : "not found") +
+
+        ", Max Time=" +
+
+        (!!productionMaxTimeProp ? PRODUCTION_MAX_TIME : "not found"),
+
+        true
+
+    );
+
+    // ============================================================
+
+    // FACIAL PROPERTIES
+
+    // ============================================================
+
+    var properties = head.getPropertyList();
+
+    var eyeSide = findPropertyByLabel(
+
+        properties,
+
+        "Eye Look Side-Side"
+
+    );
+
+    var eyeUpDown = findPropertyByLabel(
+
+        properties,
+
+        "Eye Look Up-Down"
+
+    );
+
+    var eyeBlink = findPropertyByLabel(
+
+        properties,
+
+        "Eye Blink"
+
+    );
+
+    if (!eyeSide) {
+
+        eyeSide = findPropertyContains(
+
+            properties,
+
+            "Eye Look Side-Side"
+
+        );
+
+    }
+
+    if (!eyeUpDown) {
+
+        eyeUpDown = findPropertyContains(
+
+            properties,
+
+            "Eye Look Up-Down"
+
+        );
+
+    }
+
+    if (!eyeBlink) {
+
+        eyeBlink = findPropertyContains(
+
+            properties,
+
+            "Eye Blink"
+
+        );
+
+    }
+
+    // Visemes are the mouth-shape drivers.
+
+    var visemes = [];
+
+    for (var p = 0; p < properties.length; p += 1) {
+
+        var label = "";
+
+        try {
+
+            label = properties[p].getLabel();
+
+        } catch (eLabel) {}
+
+        if (
+
+            String(label).toLowerCase().indexOf("viseme") >= 0
+
+        ) {
+
+            visemes.push(properties[p]);
+
+        }
+
+    }
+
+    // If this Genesis 9 setup has no explicit Viseme controls, discover a
+
+    // small set of direct mouth/lip/jaw drivers instead. v9 found zero
+
+    // visemes, so this is how v10 gets real mouth movement without guessing
+
+    // at a fixed naming scheme.
+
+    var mouthDrivers = [];
+
+    var mouthKeywords = ["mouth", "lip", "jaw", "phoneme", "viseme"];
+
+    for (var mp = 0; mp < properties.length; mp += 1) {
+
+        var mouthLabel = "";
+
+        try { mouthLabel = String(properties[mp].getLabel()).toLowerCase(); } catch (eMouthLabel) {}
+
+        var isMouth = false;
+
+        for (var mk = 0; mk < mouthKeywords.length; mk += 1) {
+
+            if (mouthLabel.indexOf(mouthKeywords[mk]) >= 0) { isMouth = true; break; }
+
+        }
+
+        if (isMouth && mouthLabel.indexOf("brow") < 0) {
+
+            var duplicateMouth = false;
+
+            for (var md = 0; md < mouthDrivers.length; md += 1) {
+
+                if (mouthDrivers[md] === properties[mp]) { duplicateMouth = true; break; }
+
+            }
+
+            if (!duplicateMouth && mouthDrivers.length < 16) { mouthDrivers.push(properties[mp]); }
+
+        }
+
+    }
+
+    // Search for eyebrow controls separately.
+
+    var browProperties = [];
+
+    var browKeywords = [
+
+        "brow",
+
+        "eyebrow",
+
+        "eyebrow inner",
+
+        "eyebrow outer"
+
+    ];
+
+    for (var bp = 0; bp < properties.length; bp += 1) {
+
+        var browLabel = "";
+
+        try {
+
+            browLabel = String(properties[bp].getLabel()).toLowerCase();
+
+        } catch (eBrowLabel) {}
+
+        var isBrow = false;
+
+        for (var bk = 0; bk < browKeywords.length; bk += 1) {
+
+            if (browLabel.indexOf(browKeywords[bk]) >= 0) {
+
+                isBrow = true;
+
+                break;
+
+            }
+
+        }
+
+        if (isBrow) {
+
+            var alreadyBrow = false;
+
+            for (var bd = 0; bd < browProperties.length; bd += 1) {
+
+                if (browProperties[bd] === properties[bp]) {
+
+                    alreadyBrow = true;
+
+                    break;
+
+                }
+
+            }
+
+            if (!alreadyBrow) {
+
+                browProperties.push(properties[bp]);
+
+            }
+
+        }
+
+    }
+
+    // Common expression drivers. These are also used as face-deformation
+
+    // source plates because the skin around the mouth/eyes follows these
+
+    // morphs in the actual DAZ render.
+
+    var expressionNames = [
+
+        "smile",
+
+        "frown",
+
+        "angry",
+
+        "surprised",
+
+        "sad",
+
+        "mouth open",
+
+        "mouth wide",
+
+        "cheek",
+
+        "lip"
+
+    ];
+
+    var expressions = [];
+
+    for (var e = 0; e < expressionNames.length; e += 1) {
+
+        var ep = findPropertyContains(
+
+            properties,
+
+            expressionNames[e]
+
+        );
+
+        if (ep) {
+
+            var duplicateExpression = false;
+
+            for (var ed = 0; ed < expressions.length; ed += 1) {
+
+                if (expressions[ed].property === ep) {
+
+                    duplicateExpression = true;
+
+                    break;
+
+                }
+
+            }
+
+            if (!duplicateExpression) {
+
+                expressions.push({
+
+                    name: safeFileName(expressionNames[e]),
+
+                    property: ep
+
+                });
+
+            }
+
+        }
+
+    }
+
+    // ============================================================
+
+    // SAVE FACIAL STATE
+
+    // ============================================================
+
+    var savedProperties = [];
+
+    var saveList = [];
+
+    if (eyeSide) saveList.push(eyeSide);
+
+    if (eyeUpDown) saveList.push(eyeUpDown);
+
+    if (eyeBlink) saveList.push(eyeBlink);
+
+    for (var sb = 0; sb < browProperties.length; sb += 1) {
+
+        saveList.push(browProperties[sb]);
+
+    }
+
+    for (var sv = 0; sv < visemes.length; sv += 1) {
+
+        saveList.push(visemes[sv]);
+
+    }
+
+    for (var sm = 0; sm < mouthDrivers.length; sm += 1) {
+
+        saveList.push(mouthDrivers[sm]);
+
+    }
+
+    for (var se = 0; se < expressions.length; se += 1) {
+
+        saveList.push(expressions[se].property);
+
+    }
+
+    for (var si = 0; si < saveList.length; si += 1) {
+
+        var duplicate = false;
+
+        for (var sj = 0; sj < savedProperties.length; sj += 1) {
+
+            if (savedProperties[sj].property === saveList[si]) {
+
+                duplicate = true;
+
+                break;
+
+            }
+
+        }
+
+        if (!duplicate) {
+
+            savedProperties.push({
+
+                property: saveList[si],
+
+                value: getPropertyValue(saveList[si])
+
+            });
+
+        }
+
+    }
+
+    // ============================================================
+
+    // SAVE RENDER SETTINGS
+
+    // ============================================================
+
+    var oldImageSize = renderOptions.imageSize;
+
+    var oldCurrentFrame = renderOptions.isCurrentFrameRender;
+
+    var oldRenderImgTarget = renderOptions.renderImgToId;
+
+    var oldRenderImgFilename = renderOptions.renderImgFilename;
+
+    var oldRenderType = renderOptions.renderType;
+
+    // ============================================================
+
+    // FACE RESET
+
+    // ============================================================
+
+    function resetFace() {
+
+        setPropertyValue(eyeSide, 0);
+
+        setPropertyValue(eyeUpDown, 0);
+
+        setPropertyValue(eyeBlink, 0);
+
+        for (var i = 0; i < browProperties.length; i += 1) {
+
+            setPropertyValue(browProperties[i], 0);
+
+        }
+
+        for (var v = 0; v < visemes.length; v += 1) {
+
+            setPropertyValue(visemes[v], 0);
+
+        }
+
+        for (var m = 0; m < mouthDrivers.length; m += 1) {
+
+            setPropertyValue(mouthDrivers[m], 0);
+
+        }
+
+        for (var x = 0; x < expressions.length; x += 1) {
+
+            setPropertyValue(expressions[x].property, 0);
+
+        }
+
+    }
+
+    // ============================================================
+
+    // START
+
+    // ============================================================
+
+    info(
+
+        "NOVA 2.5D PRODUCTION v15\n\n" +
+
+        "Renderer: " + renderer.getName() + "\n" +
+
+        "Camera: " + camera.getLabel() + "\n" +
+
+        "Resolution: " + WIDTH + " x " + HEIGHT + "\n\n" +
+
+        "PRODUCTION ASSET PASS:\n" +
+
+        "Base + eye states + blinks + eyebrows + mouth + face-deformation sources.\n" +
+
+        "Every output is 1024x1024 and uses the same camera coordinate space.\n" +
+
+        "Max Samples: " + PRODUCTION_MAX_SAMPLES + " / Max Time: " + PRODUCTION_MAX_TIME + " seconds.\n\n" +
+
+        "Every final layer includes the real Nova hair; there is NO separate hair plate.\n" +
+
+        "Facial passes hide only non-moving body/environment geometry.\n" +
+
+        "The normal Genesis 9 + Iray render pipeline is preserved.\n\n" +
+
+        "Alpha-ready environment handling: " +
+
+        (alphaReady ? "READY - Draw Dome and Draw Ground disabled" :
+
+            "INCOMPLETE - required Render Settings properties were not found") +
+
+        "\n\n" +
+
+        "The proven normal DirectToFile Iray renderer is used.\n" +
+
+        "Click OK and the production asset pass starts immediately."
+
+    );
+
+    // ============================================================
+
+    // BASE
+
+    // ============================================================
+
+    if (DO_BASE && !stopBatch) {
+
+        resetFace();
+
+        doOne(baseDir.path() + "/nova_base.png");
+
+    }
+
+    // ============================================================
+
+    // EYES
+
+    // ============================================================
+
+    if (DO_EYES && eyeSide && eyeUpDown && !stopBatch) {
+
+        var eyeStates = PRODUCTION_RENDER_ALL_EYE_STATES ? [
+
+            { name:"center", side:0, up:0 }
+
+        ] : [
+
+            { name:"center", side:0, up:0 },
+
+            { name:"left", side:-EYE_STRENGTH, up:0 },
+
+            { name:"right", side:EYE_STRENGTH, up:0 },
+
+            { name:"up", side:0, up:EYE_STRENGTH },
+
+            { name:"down", side:0, up:-EYE_STRENGTH }
+
+        ];
+
+        for (var ei = 0; ei < eyeStates.length && !stopBatch; ei += 1) {
+
+            resetFace();
+
+            setPropertyValue(eyeSide, eyeStates[ei].side);
+
+            setPropertyValue(eyeUpDown, eyeStates[ei].up);
+
+            doOne(
+
+                eyesDir.path() + "/" +
+
+                eyeStates[ei].name + ".png",
+
+                true
+
+            );
+
+        }
+
+    }
+
+    // ============================================================
+
+    // BLINKS
+
+    // ============================================================
+
+    if (DO_BLINKS && eyeBlink && !stopBatch) {
+
+        var blinkStates = [
+
+            { name:"open", value:0 },
+
+            { name:"half", value:50 },
+
+            { name:"closed", value:100 }
+
+        ];
+
+        for (var bi = 0; bi < blinkStates.length && !stopBatch; bi += 1) {
+
+            resetFace();
+
+            setPropertyValue(eyeBlink, blinkStates[bi].value);
+
+            doOne(
+
+                blinksDir.path() + "/" +
+
+                blinkStates[bi].name + ".png",
+
+                true
+
+            );
+
+        }
+
+    }
+
+    // ============================================================
+
+    // EYEBROWS
+
+    // ============================================================
+
+    // We render independent source plates for discovered eyebrow morphs.
+
+    // If the Genesis 9 head does not expose eyebrow properties under this
+
+    // figure, the folder remains present and the script reports zero found.
+
+    if (DO_EYEBROWS && browProperties.length > 0 && !stopBatch) {
+
+        for (var br = 0; br < browProperties.length && !stopBatch; br += 1) {
+
+            resetFace();
+
+            setPropertyValue(
+
+                browProperties[br],
+
+                BROW_STRENGTH
+
+            );
+
+            doOne(
+
+                eyebrowsDir.path() + "/" +
+
+                safeFileName(browProperties[br].getLabel()) +
+
+                ".png",
+
+                true
+
+            );
+
+        }
+
+    }
+
+    // ============================================================
+
+    // MOUTH / VISEMES / DIRECT LIP-JAW DRIVERS
+
+    // ============================================================
+
+    var allMouthDrivers = [];
+
+    for (var av = 0; av < visemes.length; av += 1) { allMouthDrivers.push(visemes[av]); }
+
+    if (allMouthDrivers.length === 0) {
+
+        for (var am = 0; am < mouthDrivers.length; am += 1) { allMouthDrivers.push(mouthDrivers[am]); }
+
+    }
+
+    if (DO_MOUTH && allMouthDrivers.length > 0 && !stopBatch) {
+
+        for (var vi = 0; vi < allMouthDrivers.length && !stopBatch; vi += 1) {
+
+            resetFace();
+
+            setPropertyValue(allMouthDrivers[vi], VISEME_STRENGTH);
+
+            doOne(
+
+                mouthDir.path() + "/" +
+
+                safeFileName(allMouthDrivers[vi].getLabel()) + ".png",
+
+                true
+
+            );
+
+        }
+
+    }
+
+    // ============================================================
+
+    // FACE DEFORMATION SOURCE PLATES
+
+    // ============================================================
+
+    // These intentionally keep the actual head/skin deformation generated
+
+    // by DAZ. They are NOT fake mouth stickers. The compositor can later
+
+    // crop/mask/difference these plates against nova_base.png.
+
+    if (DO_FACE_DEFORM && expressions.length > 0 && !stopBatch) {
+
+        for (var fd = 0; fd < expressions.length && !stopBatch; fd += 1) {
+
+            resetFace();
+
+            setPropertyValue(
+
+                expressions[fd].property,
+
+                EXPRESSION_STRENGTH
+
+            );
+
+            doOne(
+
+                faceDeformDir.path() + "/" +
+
+                safeFileName(expressions[fd].name) +
+
+                ".png",
+
+                true
+
+            );
+
+        }
+
+    }
+
+    // ============================================================
+
+    // EXPRESSIONS
+
+    // ============================================================
+
+    // v9 rendered the same facial expression twice (face_deform + expressions).
+
+    // v12 removes that duplicate render. The expression sources live in
+
+    // face_deform and are listed in the manifest for the compositor.
+
+    // ============================================================
+
+    // VISEME/EYE MATRIX - OFF BY DEFAULT
+
+    // ============================================================
+
+    if (
+
+        DO_MOUTH &&
+
+        DO_VISEME_EYE_MATRIX &&
+
+        visemes.length > 0 &&
+
+        eyeSide &&
+
+        eyeUpDown &&
+
+        !stopBatch
+
+    ) {
+
+        var matrixEyes = [
+
+            { name:"center", side:0, up:0 },
+
+            { name:"left", side:-EYE_STRENGTH, up:0 },
+
+            { name:"right", side:EYE_STRENGTH, up:0 },
+
+            { name:"up", side:0, up:EYE_STRENGTH },
+
+            { name:"down", side:0, up:-EYE_STRENGTH }
+
+        ];
+
+        for (var mi = 0; mi < visemes.length && !stopBatch; mi += 1) {
+
+            for (var mj = 0; mj < matrixEyes.length && !stopBatch; mj += 1) {
+
+                resetFace();
+
+                setPropertyValue(
+
+                    visemes[mi],
+
+                    VISEME_STRENGTH
+
+                );
+
+                setPropertyValue(
+
+                    eyeSide,
+
+                    matrixEyes[mj].side
+
+                );
+
+                setPropertyValue(
+
+                    eyeUpDown,
+
+                    matrixEyes[mj].up
+
+                );
+
+                doOne(
+
+                    mouthDir.path() + "/" +
+
+                    safeFileName(visemes[mi].getLabel()) +
+
+                    "__" +
+
+                    matrixEyes[mj].name +
+
+                    ".png"
+
+                );
+
+            }
+
+        }
+
+    }
+
+    // ============================================================
+
+    // RESTORE FACIAL STATE
+
+    // ============================================================
+
+    for (var ri = 0; ri < savedProperties.length; ri += 1) {
+
+        setPropertyValue(
+
+            savedProperties[ri].property,
+
+            savedProperties[ri].value
+
+        );
+
+    }
+
+    // ============================================================
+
+    // RESTORE ALPHA/ENVIRONMENT SETTINGS
+
+    // ============================================================
+
+    if (drawDome && oldDrawDome !== null) {
+
+        setPropertyValue(drawDome, oldDrawDome);
+
+    }
+
+    if (drawGround && oldDrawGround !== null) {
+
+        setPropertyValue(drawGround, oldDrawGround);
+
+    }
+
+    if (productionMaxSamplesProp && oldProductionMaxSamples !== null) {
+
+        setPropertyValue(productionMaxSamplesProp, oldProductionMaxSamples);
+
+    }
+
+    if (productionMaxTimeProp && oldProductionMaxTime !== null) {
+
+        setPropertyValue(productionMaxTimeProp, oldProductionMaxTime);
+
+    }
+
+    // ============================================================
+
+    // RESTORE RENDER SETTINGS - SAME v8 EXIT/RESTORE SECTION
+
+    // ============================================================
+
+    try {
+
+        renderOptions.imageSize = oldImageSize;
+
+    } catch (eRestoreSize) {}
+
+    try {
+
+        renderOptions.isCurrentFrameRender = oldCurrentFrame;
+
+    } catch (eRestoreFrame) {}
+
+    try {
+
+        renderOptions.renderImgToId = oldRenderImgTarget;
+
+    } catch (eRestoreTarget) {}
+
+    try {
+
+        renderOptions.renderImgFilename = oldRenderImgFilename;
+
+    } catch (eRestoreFilename) {}
+
+    try {
+
+        renderOptions.renderType = oldRenderType;
+
+    } catch (eRestoreType) {}
+
+    // ============================================================
+
+    // RESTORE IRAY CPU/GPU - SAME v8 EXIT/RESTORE SECTION
+
+    // ============================================================
+
+    if (iraySchedulingEnabled) {
+
+        try {
+
+            if (
+
+                typeof renderer.setCPULoadLimit == "function" &&
+
+                oldCPULoadLimit >= 1.0
+
+            ) {
+
+                renderer.setCPULoadLimit(oldCPULoadLimit);
+
+            }
+
+            if (
+
+                typeof renderer.setGPULoadLimit == "function" &&
+
+                oldGPULoadLimit > 0
+
+            ) {
+
+                renderer.setGPULoadLimit(oldGPULoadLimit);
+
+            }
+
+            if (
+
+                typeof renderer.setAllowCPUFallback == "function"
+
+            ) {
+
+                renderer.setAllowCPUFallback(oldAllowCPUFallback);
+
+            }
+
+            if (
+
+                typeof renderer.setCPUThreadAffinityEnabled == "function"
+
+            ) {
+
+                renderer.setCPUThreadAffinityEnabled(oldCPUThreadAffinity);
+
+            }
+
+        } catch (eRestoreIray) {}
+
+    }
+
+    // ============================================================
+
+    // WRITE COMPOSITOR MANIFEST
+
+    // ============================================================
+
+    var manifestPath = metadataDir.path() + "/nova_2_5d_manifest.json";
+
+    try {
+
+        var mf = new DzFile(manifestPath);
+
+        if (mf.open(DzFile.WriteOnly | DzFile.Truncate | DzFile.Text)) {
+
+            mf.writeLine("{");
+
+            mf.writeLine('  "version": 12,');
+
+            mf.writeLine('  "output_folder": "' + rootName + '",');
+
+            mf.writeLine('  "canvas": {"width": 1024, "height": 1024},');
+
+            mf.writeLine('  "facial_layer": {"width": 512, "height": 512, "scale": 0.5, "render_strategy": "normal_iray_render_with_facial_visibility_isolation"},');
+
+            mf.writeLine('  "alpha": true,');
+
+            mf.writeLine('  "base": "../base/nova_base.png",');
+
+            mf.writeLine('  "layers": {');
+
+            mf.writeLine('    "eyes": {"path": "../eyes", "canvas": "512x512"},');
+
+            mf.writeLine('    "blinks": {"path": "../blinks", "canvas": "512x512"},');
+
+            mf.writeLine('    "eyebrows": {"path": "../eyebrows", "canvas": "512x512"},');
+
+            mf.writeLine('    "mouth": {"path": "../mouth", "canvas": "512x512"},');
+
+            mf.writeLine('    "face_deform": {"path": "../face_deform", "canvas": "512x512"}');
+
+            mf.writeLine('  }');
+
+            mf.writeLine('}');
+
+            mf.close();
+
+        } else {
+
+            App.writeToLog("Nova v19 PRODUCTION: manifest could not be opened: " + manifestPath, true);
+
+        }
+
+    } catch (eManifest) {
+
+        App.writeToLog("Nova v19 PRODUCTION: manifest write failed: " + eManifest, true);
+
+    }
+
+    // ============================================================
+
+    // MANIFEST
+
+    // ============================================================
+
+    // DAZ's simple script file API varies between installations. Rather than
+
+    // risk making the render pipeline fail, the manifest is logged and the
+
+    // folder layout itself is the stable contract for the first compositor
+
+    // test. A later pass can add JSON writing once the layer renders are
+
+    // visually verified.
+
+    App.writeToLog(
+
+        "Nova v19 PRODUCTION manifest: root=" + rootPath,
+
+        true
+
+    );
+
+    App.writeToLog(
+
+        "Nova v19 PRODUCTION manifest: base=true, eyes=" +
+
+        (eyeSide && eyeUpDown) +
+
+        ", blinks=" +
+
+        (!!eyeBlink) +
+
+        ", eyebrows=" +
+
+        browProperties.length +
+
+        ", visemes=" +
+
+        visemes.length +
+
+        ", mouthDrivers=" +
+
+        mouthDrivers.length +
+
+        ", faceDeform=" +
+
+        expressions.length +
+
+        ", manifest=" + manifestPath,
+
+        true
+
+    );
+
+    // ============================================================
+
+    // COMPLETE - KEEP THE v8 EXIT/COMPLETION BEHAVIOR
+
+    // ============================================================
+
+    info(
+
+        (stopBatch
+
+            ? "NOVA 2.5D BUILD v10 STOPPED\n\n"
+
+            : "NOVA 2.5D BUILD v10 COMPLETE!\n\n") +
+
+        "Rendered: " + rendered + "\n" +
+
+        "Failed: " + failed + "\n" +
+
+        "Eyebrow properties found: " + browProperties.length + "\n" +
+
+        "Visemes found: " + visemes.length + "\n" +
+
+        "Direct mouth/lip/jaw drivers found: " + mouthDrivers.length + "\n" +
+
+        "Face-deformation sources found: " + expressions.length + "\n" +
+
+        "Alpha-ready environment handling: " +
+
+        (alphaReady ? "YES" : "NO") +
+
+        "\n\n" +
+
+        "Output:\n" +
+
+        rootPath + "\n\n" +
+
+        "The scene was not saved.\n" +
+
+        "Facial values, environment settings, render settings, and Iray scheduling were restored."
+
+    );
+
+}
+
+novaMain();
