@@ -1,6 +1,6 @@
 {
   "version": 21,
-  "output_folder": "Nova_2_5D_FINAL_PRODUCTION_v21_all_renders",
+  "output_folder": "Nova_2_5D_FINAL_PRODUCTION_v21_all_renders_run2",
   "canvas": {"width": 2048, "height": 2048},
   "facial_layer": {"width": 2048, "height": 2048, "scale": 1.0, "render_strategy": "normal_iray_render_with_facial_visibility_isolation"},
   "alpha": true,
