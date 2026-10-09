@@ -378,6 +378,28 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       ctx.restore();
     };
 
+
+    // Restrict eye/blink overlays to the eye band.
+    // Coordinates are relative to the square avatar canvas.
+    const drawEyeArea = (source: NovaSource) => {
+      const mask = getMask(source);
+      if (!mask) return;
+
+      const size = CANVAS_SIZE;
+      const eyeX = size * 0.15;
+      const eyeY = size * 0.29;
+      const eyeW = size * 0.70;
+      const eyeH = size * 0.30;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(eyeX, eyeY, eyeW, eyeH);
+      ctx.clip();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.drawImage(mask, 0, 0, size, size);
+      ctx.restore();
+    };
+
     const px = enableParallax ? parallax.x : 0;
     const py = enableParallax ? parallax.y : 0;
     // Idle expression plates are full render plates. Composite them first so
@@ -435,7 +457,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
       py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
-    draw(eye);
+    drawEyeArea(eye);
 
     // Eyes render after the mouth and brows. Blink PNGs use the existing
     // base-difference mask so they don't cover the rest of Nova's face.
@@ -445,7 +467,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         eyeState === "half" ? "blinks/half.png" :
         eyeState === "three_quarter" ? "blinks/three_quarter.png" :
         "blinks/closed.png";
-      draw(blinkSource);
+      drawEyeArea(blinkSource);
     }
 
   }, [eyeState, idleExpression, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
