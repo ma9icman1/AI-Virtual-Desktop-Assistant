@@ -400,6 +400,30 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       ctx.restore();
     };
 
+    // Mouth plates are also full-face renders. Apply the complementary
+    // lower-face clip so changes around the eyes in a mouth render can never
+    // overwrite the eye/blink layers. Keep the mouth band separate from the
+    // eye band; both use the same base-difference pixels, but opposite regions.
+    const drawMouthArea = (source: NovaSource, opacity = 1) => {
+      const mask = getMask(source);
+      if (!mask) return;
+
+      const size = CANVAS_SIZE;
+      const mouthX = size * 0.24;
+      const mouthY = size * 0.56;
+      const mouthW = size * 0.52;
+      const mouthH = size * 0.28;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(mouthX, mouthY, mouthW, mouthH);
+      ctx.clip();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(mask, 0, 0, size, size);
+      ctx.restore();
+    };
+
     const px = enableParallax ? parallax.x : 0;
     const py = enableParallax ? parallax.y : 0;
     // Idle expression plates are full render plates. Composite them first so
@@ -448,10 +472,10 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         mouth = "mouth/Mouth Smile Widen_60.png";
       }
 
-      draw(mouth);
-      if (smile > .25) draw("face_deform/smile_50.png", .65);
+      drawMouthArea(mouth);
+      if (smile > .25) drawMouthArea("face_deform/smile_50.png", .65);
     } else {
-      draw(devAutoAnimate ? "mouth/Mouth Press_20.png" : mouthSources[devMouthIndex]);
+      drawMouthArea(devAutoAnimate ? "mouth/Mouth Press_20.png" : mouthSources[devMouthIndex]);
     }
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
