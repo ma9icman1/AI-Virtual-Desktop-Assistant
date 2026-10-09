@@ -382,21 +382,20 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     // Restrict eye/blink overlays to the eye band.
     // Coordinates are relative to the square avatar canvas.
     const drawEyeArea = (source: NovaSource) => {
-      const mask = getMask(source);
-      if (!mask) return;
+      // Blink and eye PNGs are full render plates. Draw the actual plate
+      // directly inside the eye band rather than using the unreliable
+      // base-difference mask, which can omit the eyelid pixels.
+      const image = getImage(source);
+      if (!image) return;
 
       const size = CANVAS_SIZE;
-      const eyeX = size * 0.15;
-      const eyeY = size * 0.29;
-      const eyeW = size * 0.70;
-      const eyeH = size * 0.30;
-
       ctx.save();
       ctx.beginPath();
-      ctx.rect(eyeX, eyeY, eyeW, eyeH);
+      ctx.rect(size * 0.15, size * 0.29, size * 0.70, size * 0.30);
       ctx.clip();
       ctx.globalCompositeOperation = "source-over";
-      ctx.drawImage(mask, 0, 0, size, size);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(image, 0, 0, size, size);
       ctx.restore();
     };
 
