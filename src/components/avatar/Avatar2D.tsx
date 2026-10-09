@@ -1,8 +1,8 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
 import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
-export type EyeState = "open" | "half" | "closed";
+export type EyeState = "open" | "quarter" | "half" | "three_quarter" | "closed";
 export type MouthState =
   | "closed"
   | "smile"
@@ -96,6 +96,8 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
 const DIFF_THRESHOLD = 1;
 const CANVAS_SIZE = 2048;
 
+type DifferenceMask = HTMLCanvasElement;
+
 function sourceUrl(source: NovaSource): string {
   return `${NOVA_ROOT}/${source}?v=v21-production-20261008`;
 }
@@ -118,13 +120,15 @@ function buildDifferenceMask(
   base: HTMLImageElement,
   overlay: HTMLImageElement,
   threshold: number,
-): HTMLCanvasElement {
+): DifferenceMask {
   const baseCanvas = document.createElement("canvas");
   const overlayCanvas = document.createElement("canvas");
-  const maskCanvas = document.createElement("canvas");
+  const maskCanvas = document.createElement("canvas") as DifferenceMask;
 
-  baseCanvas.width = overlayCanvas.width = maskCanvas.width = CANVAS_SIZE;
-  baseCanvas.height = overlayCanvas.height = maskCanvas.height = CANVAS_SIZE;
+  for (const canvas of [baseCanvas, overlayCanvas, maskCanvas]) {
+    canvas.width = CANVAS_SIZE;
+    canvas.height = CANVAS_SIZE;
+  }
 
   const baseCtx = baseCanvas.getContext("2d", { willReadFrequently: true });
   const overlayCtx = overlayCanvas.getContext("2d", { willReadFrequently: true });
@@ -134,33 +138,34 @@ function buildDifferenceMask(
     throw new Error("Nova compositor could not create canvas contexts.");
   }
 
-  baseCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  overlayCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   baseCtx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
   overlayCtx.drawImage(overlay, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-  const a = baseCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  const b = overlayCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  const baseData = baseCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+  const overlayData = overlayCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+  const output = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
 
-  const out = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
+  for (let i = 0; i < baseData.length; i += 4) {
+    const changed =
+      Math.max(
+        Math.abs(baseData[i] - overlayData[i]),
+        Math.abs(baseData[i + 1] - overlayData[i + 1]),
+        Math.abs(baseData[i + 2] - overlayData[i + 2]),
+        Math.abs(baseData[i + 3] - overlayData[i + 3]),
+      ) >= threshold;
 
-  for (let i = 0; i < a.data.length; i += 4) {
-    const dr = Math.abs(a.data[i] - b.data[i]);
-    const dg = Math.abs(a.data[i + 1] - b.data[i + 1]);
-    const db = Math.abs(a.data[i + 2] - b.data[i + 2]);
-    const da = Math.abs(a.data[i + 3] - b.data[i + 3]);
+    // Only paint pixels that are actually visible in the overlay.
+    // Transparent pixels in exported PNGs can contain arbitrary RGB values;
+    // treating those as erasers can wipe out the whole avatar.
+    if (!changed || overlayData[i + 3] === 0) continue;
 
-    const changed = Math.max(dr, dg, db, da) >= threshold;
-
-    if (changed) {
-      out.data[i] = b.data[i];
-      out.data[i + 1] = b.data[i + 1];
-      out.data[i + 2] = b.data[i + 2];
-      out.data[i + 3] = b.data[i + 3];
-    }
+    output.data[i] = overlayData[i];
+    output.data[i + 1] = overlayData[i + 1];
+    output.data[i + 2] = overlayData[i + 2];
+    output.data[i + 3] = overlayData[i + 3];
   }
 
-  maskCtx.putImageData(out, 0, 0);
+  maskCtx.putImageData(output, 0, 0);
   return maskCanvas;
 }
 
@@ -189,6 +194,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [eyeState, setEyeState] = useState<EyeState>("open");
+  const lastRenderedBlinkRef = useRef<string>("");
+  const [idleExpression, setIdleExpression] = useState<"slight_smile" | "annoyed">("slight_smile");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
   const [showDevControls, setShowDevControls] = useState(false);
@@ -365,6 +372,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       const mask = getMask(source);
       if (!mask) return;
       ctx.save();
+      ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = opacity;
       ctx.drawImage(mask, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
       ctx.restore();
@@ -372,19 +380,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const px = enableParallax ? parallax.x : 0;
     const py = enableParallax ? parallax.y : 0;
-    const eye =
-      Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
-      py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
-      py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
-      px < -.33 ? "eyes/left.png" : "eyes/right.png";
-    draw(eye);
-
-    if (devAutoAnimate && eyeState !== "open") {
-      draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
-    }
-
+    // Idle expression plates are full render plates. Composite them first so
+    // they cannot paint open eyes over the blink layer later in this frame.
     if (!isSpeaking) {
-      draw(isListening ? "idle_listening/slight_smile.png" : "idle_listening/annoyed.png", isListening ? .85 : .18);
+      const idlePlate = isListening ? "idle_listening/slight_smile.png" : `idle_listening/${idleExpression}.png`;
+      draw(idlePlate, isListening ? .82 : .42);
     }
 
     if (isSpeaking) {
@@ -430,7 +430,25 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
-  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
+    const eye =
+      Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
+      py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
+      py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
+      px < -.33 ? "eyes/left.png" : "eyes/right.png";
+    draw(eye);
+
+    // Eyes render after the mouth and brows. Blink PNGs use the existing
+    // base-difference mask so they don't cover the rest of Nova's face.
+    if (devAutoAnimate && eyeState !== "open") {
+      const blinkSource: NovaSource =
+        eyeState === "quarter" ? "blinks/quarter.png" :
+        eyeState === "half" ? "blinks/half.png" :
+        eyeState === "three_quarter" ? "blinks/three_quarter.png" :
+        "blinks/closed.png";
+      draw(blinkSource);
+    }
+
+  }, [eyeState, idleExpression, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
@@ -450,6 +468,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         for (const item of loaded) {
           if (item) imagesRef.current.set(imageKey(item.source), item.image);
         }
+        console.info("[NOVA-BLINK-DEBUG] asset load complete " + JSON.stringify({
+          root: NOVA_ROOT,
+          autoAnimate: devAutoAnimate,
+          open: imagesRef.current.get("blinks/open.png")?.src ?? "MISSING",
+          half: imagesRef.current.get("blinks/half.png")?.src ?? "MISSING",
+          closed: imagesRef.current.get("blinks/closed.png")?.src ?? "MISSING",
+          canvasPresent: Boolean(canvasRef.current),
+        }));
         if (!imagesRef.current.has(NOVA_FILES.base)) {
           throw new Error(`Required Nova v21 base image is missing: ${sourceUrl(NOVA_FILES.base)}`);
         }
@@ -469,6 +495,19 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
   useEffect(() => {
     if (!ready) return;
+
+    // Log only eye-state changes, not every parallax-driven canvas redraw.
+    const debugState = JSON.stringify({
+      eyeState,
+      devAutoAnimate,
+      canvasPresent: Boolean(canvasRef.current),
+      closedImageLoaded: imagesRef.current.has("blinks/closed.png"),
+      ready,
+    });
+    if ((window as Window & { __novaBlinkLastDebugState?: string }).__novaBlinkLastDebugState !== debugState) {
+      (window as Window & { __novaBlinkLastDebugState?: string }).__novaBlinkLastDebugState = debugState;
+      console.info("[NOVA-BLINK-DEBUG] render scheduled " + debugState);
+    }
 
     if (renderFrameRef.current !== null) {
       cancelAnimationFrame(renderFrameRef.current);
@@ -531,56 +570,88 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
 
   useEffect(() => {
-    let blinkTimeout = 0;
-    let blinkHalfTimeout = 0;
-    let blinkClosedTimeout = 0;
-    let blinkReturnTimeout = 0;
-    let cancelled = false;
+    if (isSpeaking) return;
+    if (isListening || !devAutoAnimate) {
+      setIdleExpression(isListening ? "slight_smile" : "annoyed");
+      return;
+    }
 
-    const executeBlink = (onComplete: () => void) => {
-      if (cancelled || !devAutoAnimate) {
-        onComplete();
-        return;
-      }
-      setEyeState("half");
-      blinkHalfTimeout = window.setTimeout(() => {
-        if (cancelled || !devAutoAnimate) return onComplete();
-        setEyeState("closed");
-        blinkClosedTimeout = window.setTimeout(() => {
-          if (cancelled || !devAutoAnimate) return onComplete();
-          setEyeState("half");
-          blinkReturnTimeout = window.setTimeout(() => {
-            if (cancelled || !devAutoAnimate) return onComplete();
-            setEyeState("open");
-            onComplete();
-          }, 110);
-        }, 140);
-      }, 90);
+    let timeout = 0;
+    let cancelled = false;
+    const scheduleNextExpression = () => {
+      timeout = window.setTimeout(() => {
+        if (cancelled) return;
+        setIdleExpression((current) => current === "slight_smile" ? "annoyed" : "slight_smile");
+        scheduleNextExpression();
+      }, 3200 + Math.random() * 1800);
     };
 
-    const scheduleNextBlink = () => {
-      // Frequent, visible blinks: 2.5–5.5 seconds between blinks.
-      const delay = Math.random() * 3000 + 2500;
+    setIdleExpression("slight_smile");
+    scheduleNextExpression();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [isSpeaking, isListening, devAutoAnimate]);
+
+  useEffect(() => {
+    // Play all supplied blink renders instead of flipping between open and
+    // closed: quarter -> half -> three-quarter -> closed, then reverse.
+    let blinkTimeout = 0;
+    let frameTimeout = 0;
+    let cancelled = false;
+
+    const scheduleBlink = (delay: number) => {
+      console.info("[NOVA-BLINK-DEBUG] scheduling blink " + JSON.stringify({
+        delayMs: delay, devAutoAnimate, ready, speaking: isSpeaking, listening: isListening,
+      }));
       blinkTimeout = window.setTimeout(() => {
-        executeBlink(() => {
-          if (Math.random() < 0.25) {
-            window.setTimeout(() => executeBlink(scheduleNextBlink), 120);
-          } else {
-            scheduleNextBlink();
-          }
-        });
+        if (cancelled || !devAutoAnimate) return;
+        console.info("[NOVA-BLINK-DEBUG] BLINK sequence start " + new Date().toISOString());
+        setEyeState("quarter");
+        frameTimeout = window.setTimeout(() => {
+          if (cancelled || !devAutoAnimate) return;
+          setEyeState("half");
+          frameTimeout = window.setTimeout(() => {
+            if (cancelled || !devAutoAnimate) return;
+            setEyeState("three_quarter");
+            frameTimeout = window.setTimeout(() => {
+              if (cancelled || !devAutoAnimate) return;
+              setEyeState("closed");
+              frameTimeout = window.setTimeout(() => {
+                if (cancelled || !devAutoAnimate) return;
+                setEyeState("three_quarter");
+                frameTimeout = window.setTimeout(() => {
+                  if (cancelled || !devAutoAnimate) return;
+                  setEyeState("half");
+                  frameTimeout = window.setTimeout(() => {
+                    if (cancelled || !devAutoAnimate) return;
+                    setEyeState("quarter");
+                    frameTimeout = window.setTimeout(() => {
+                      if (cancelled || !devAutoAnimate) return;
+                      setEyeState("open");
+                      console.info("[NOVA-BLINK-DEBUG] BLINK sequence complete " + new Date().toISOString());
+                      scheduleBlink(2600 + Math.random() * 1800);
+                    }, 35);
+                  }, 35);
+                }, 35);
+              }, 75);
+            }, 35);
+          }, 35);
+        }, 35);
       }, delay);
     };
 
-    scheduleNextBlink();
+    setEyeState("open");
+    if (devAutoAnimate) {
+      // Blink shortly after mount so the animation is immediately testable.
+      scheduleBlink(1200);
+    }
 
     return () => {
       cancelled = true;
       window.clearTimeout(blinkTimeout);
-      window.clearTimeout(blinkHalfTimeout);
-      window.clearTimeout(blinkClosedTimeout);
-      window.clearTimeout(blinkReturnTimeout);
-      setEyeState("open");
+      window.clearTimeout(frameTimeout);
     };
   }, [devAutoAnimate]);
 
@@ -827,3 +898,4 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     </div>
   );
 };
+
