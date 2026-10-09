@@ -393,12 +393,19 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
-    // Blink is intentionally the last eye layer; idle plates must never undo it.
+    // Blink frames are complete production render plates. Draw the actual
+    // closed-eye plate directly so its eyelid pixels cannot be lost by the
+    // base-difference mask. The mouth and brow layers are drawn afterward.
     if (devAutoAnimate && eyeState !== "open") {
       const blinkSource = eyeState === "half" ? "blinks/half.png" : "blinks/closed.png";
       const blinkImage = getImage(blinkSource);
-      const blinkMask = getMask(blinkSource);
-      draw(blinkSource);
+      if (blinkImage) {
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        ctx.drawImage(blinkImage, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+        ctx.restore();
+      }
     }
 
     if (isSpeaking) {
