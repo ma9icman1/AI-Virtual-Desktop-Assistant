@@ -189,6 +189,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [eyeState, setEyeState] = useState<EyeState>("open");
+  const [idleExpression, setIdleExpression] = useState<"slight_smile" | "annoyed">("slight_smile");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
   const [showDevControls, setShowDevControls] = useState(false);
@@ -372,6 +373,13 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const px = enableParallax ? parallax.x : 0;
     const py = enableParallax ? parallax.y : 0;
+    // Idle expression plates are full render plates. Composite them first so
+    // they cannot paint open eyes over the blink layer later in this frame.
+    if (!isSpeaking) {
+      const idlePlate = isListening ? "idle_listening/slight_smile.png" : `idle_listening/${idleExpression}.png`;
+      draw(idlePlate, isListening ? .82 : .42);
+    }
+
     const eye =
       Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
       py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
@@ -379,12 +387,9 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
+    // Blink is intentionally the last eye layer; idle plates must never undo it.
     if (devAutoAnimate && eyeState !== "open") {
       draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
-    }
-
-    if (!isSpeaking) {
-      draw(isListening ? "idle_listening/slight_smile.png" : "idle_listening/annoyed.png", isListening ? .85 : .18);
     }
 
     if (isSpeaking) {
@@ -430,7 +435,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
-  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
+  }, [eyeState, idleExpression, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
@@ -529,6 +534,31 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     return () => unsub();
   }, [isSpeaking, isListening, devAutoAnimate]);
 
+
+  useEffect(() => {
+    if (isSpeaking) return;
+    if (isListening || !devAutoAnimate) {
+      setIdleExpression(isListening ? "slight_smile" : "annoyed");
+      return;
+    }
+
+    let timeout = 0;
+    let cancelled = false;
+    const scheduleNextExpression = () => {
+      timeout = window.setTimeout(() => {
+        if (cancelled) return;
+        setIdleExpression((current) => current === "slight_smile" ? "annoyed" : "slight_smile");
+        scheduleNextExpression();
+      }, 3200 + Math.random() * 1800);
+    };
+
+    setIdleExpression("slight_smile");
+    scheduleNextExpression();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [isSpeaking, isListening, devAutoAnimate]);
 
   useEffect(() => {
     let blinkTimeout = 0;
