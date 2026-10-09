@@ -165,14 +165,20 @@ function buildDifferenceMask(
 
   maskCtx.putImageData(out, 0, 0);
   if (debugBlinkPlate) {
-    console.info("[NOVA-BLINK-DEBUG] mask built", {
+    const maskData = maskCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+    let visibleMaskPixels = 0;
+    for (let i = 3; i < maskData.length; i += 4) {
+      if (maskData[i] > 0) visibleMaskPixels++;
+    }
+    console.info("[NOVA-BLINK-DEBUG] mask built " + JSON.stringify({
       overlay: overlay.src,
       base: base.src,
       threshold,
       changedOpaquePixels: debugChangedPixels,
+      visibleMaskPixels,
       overlaySize: [overlay.naturalWidth, overlay.naturalHeight],
       baseSize: [base.naturalWidth, base.naturalHeight],
-    });
+    }));
   }
   return maskCanvas;
 }
@@ -402,7 +408,27 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     // Blink is intentionally the last eye layer; idle plates must never undo it.
     if (devAutoAnimate && eyeState !== "open") {
-      draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
+      const blinkSource = eyeState === "half" ? "blinks/half.png" : "blinks/closed.png";
+      const blinkImage = getImage(blinkSource);
+      const blinkMask = getMask(blinkSource);
+      console.info("[NOVA-BLINK-DEBUG] blink layer draw " + JSON.stringify({
+        eyeState,
+        blinkSource,
+        imageLoaded: Boolean(blinkImage?.complete && blinkImage.naturalWidth > 0),
+        imageSize: blinkImage ? [blinkImage.naturalWidth, blinkImage.naturalHeight] : null,
+        maskAvailable: Boolean(blinkMask),
+        maskSize: blinkMask ? [blinkMask.width, blinkMask.height] : null,
+        canvasSize: [canvas.width, canvas.height],
+        speaking: isSpeaking,
+        listening: isListening,
+      }));
+      if (blinkMask) {
+        let visibleMaskPixels = 0;
+        const maskData = blinkMask.getContext("2d")?.getImageData(0, 0, blinkMask.width, blinkMask.height).data;
+        if (maskData) for (let i = 3; i < maskData.length; i += 4) if (maskData[i] > 0) visibleMaskPixels++;
+        console.info("[NOVA-BLINK-DEBUG] blink mask visibility " + JSON.stringify({ eyeState, visibleMaskPixels }));
+      }
+      draw(blinkSource);
     }
 
     if (isSpeaking) {
@@ -468,14 +494,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         for (const item of loaded) {
           if (item) imagesRef.current.set(imageKey(item.source), item.image);
         }
-        console.info("[NOVA-BLINK-DEBUG] asset load complete", {
+        console.info("[NOVA-BLINK-DEBUG] asset load complete " + JSON.stringify({
           root: NOVA_ROOT,
           autoAnimate: devAutoAnimate,
           open: imagesRef.current.get("blinks/open.png")?.src ?? "MISSING",
           half: imagesRef.current.get("blinks/half.png")?.src ?? "MISSING",
           closed: imagesRef.current.get("blinks/closed.png")?.src ?? "MISSING",
           canvasPresent: Boolean(canvasRef.current),
-        });
+        }));
         if (!imagesRef.current.has(NOVA_FILES.base)) {
           throw new Error(`Required Nova v21 base image is missing: ${sourceUrl(NOVA_FILES.base)}`);
         }
@@ -496,12 +522,18 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   useEffect(() => {
     if (!ready) return;
 
-    console.info("[NOVA-BLINK-DEBUG] render scheduled", {
+    // Log only eye-state changes, not every parallax-driven canvas redraw.
+    const debugState = JSON.stringify({
       eyeState,
       devAutoAnimate,
       canvasPresent: Boolean(canvasRef.current),
       closedImageLoaded: imagesRef.current.has("blinks/closed.png"),
+      ready,
     });
+    if ((window as Window & { __novaBlinkLastDebugState?: string }).__novaBlinkLastDebugState !== debugState) {
+      (window as Window & { __novaBlinkLastDebugState?: string }).__novaBlinkLastDebugState = debugState;
+      console.info("[NOVA-BLINK-DEBUG] render scheduled " + debugState);
+    }
 
     if (renderFrameRef.current !== null) {
       cancelAnimationFrame(renderFrameRef.current);
@@ -597,30 +629,30 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     let cancelled = false;
 
     const scheduleBlink = (delay: number) => {
-      console.info("[NOVA-BLINK-DEBUG] scheduling blink", {
+      console.info("[NOVA-BLINK-DEBUG] scheduling blink " + JSON.stringify({
         delayMs: delay,
         devAutoAnimate,
         ready,
         speaking: isSpeaking,
         listening: isListening,
-      });
+      }));
       blinkTimeout = window.setTimeout(() => {
         if (cancelled || !devAutoAnimate) {
           console.warn("[NOVA-BLINK-DEBUG] blink timer fired but cancelled/disabled", { cancelled, devAutoAnimate });
           return;
         }
-        console.info("[NOVA-BLINK-DEBUG] CLOSE", {
+        console.info("[NOVA-BLINK-DEBUG] CLOSE " + JSON.stringify({
           at: new Date().toISOString(),
           closedLoaded: imagesRef.current.has("blinks/closed.png"),
           closedImage: imagesRef.current.get("blinks/closed.png")?.src,
-        });
+        }));
         setEyeState("closed");
         reopenTimeout = window.setTimeout(() => {
           if (cancelled || !devAutoAnimate) {
             console.warn("[NOVA-BLINK-DEBUG] reopen timer fired but cancelled/disabled", { cancelled, devAutoAnimate });
             return;
           }
-          console.info("[NOVA-BLINK-DEBUG] OPEN", { at: new Date().toISOString() });
+          console.info("[NOVA-BLINK-DEBUG] OPEN " + JSON.stringify({ at: new Date().toISOString() }));
           setEyeState("open");
           scheduleBlink(2600 + Math.random() * 1800);
         }, 170);
