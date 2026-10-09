@@ -194,6 +194,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [eyeState, setEyeState] = useState<EyeState>("open");
+  const lastRenderedBlinkRef = useRef<string>("");
   const [idleExpression, setIdleExpression] = useState<"slight_smile" | "annoyed">("slight_smile");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
@@ -393,16 +394,41 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
-    // Blink PNGs are full render plates. Use the existing difference-mask
-    // compositor so only the changed eye/eyelid pixels are painted; drawing a
-    // whole plate here would cover the independently animated mouth and face.
+    // Use the supplied blink render itself, not a difference mask. These are
+    // production render plates and their eyelid changes must be drawn exactly
+    // as exported. The mouth and brow layers are rendered below this block, so
+    // the blink plate cannot freeze the talking mouth or cover the final brows.
     if (devAutoAnimate && eyeState !== "open") {
       const blinkSource: NovaSource =
         eyeState === "quarter" ? "blinks/quarter.png" :
         eyeState === "half" ? "blinks/half.png" :
         eyeState === "three_quarter" ? "blinks/three_quarter.png" :
         "blinks/closed.png";
-      draw(blinkSource);
+      const blinkImage = getImage(blinkSource);
+      if (blinkImage && blinkImage.complete && blinkImage.naturalWidth > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        ctx.drawImage(blinkImage, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+        ctx.restore();
+        if (lastRenderedBlinkRef.current !== blinkSource) {
+          lastRenderedBlinkRef.current = blinkSource;
+          console.info("[NOVA-BLINK-DEBUG] direct blink plate drawn", {
+            frame: eyeState,
+            source: blinkSource,
+            width: blinkImage.naturalWidth,
+            height: blinkImage.naturalHeight,
+          });
+        }
+      } else {
+        console.warn("[NOVA-BLINK-DEBUG] blink plate unavailable", {
+          frame: eyeState,
+          source: blinkSource,
+          found: !!blinkImage,
+          complete: !!blinkImage?.complete,
+          width: blinkImage?.naturalWidth ?? 0,
+        });
+      }
     }
 
     if (isSpeaking) {
