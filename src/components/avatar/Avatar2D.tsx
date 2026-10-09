@@ -119,6 +119,8 @@ function buildDifferenceMask(
   overlay: HTMLImageElement,
   threshold: number,
 ): HTMLCanvasElement {
+  const debugBlinkPlate = overlay.src.includes("/blinks/");
+  let debugChangedPixels = 0;
   const baseCanvas = document.createElement("canvas");
   const overlayCanvas = document.createElement("canvas");
   const maskCanvas = document.createElement("canvas");
@@ -153,6 +155,7 @@ function buildDifferenceMask(
     const changed = Math.max(dr, dg, db, da) >= threshold;
 
     if (changed) {
+      if (debugBlinkPlate && b.data[i + 3] > 0) debugChangedPixels++;
       out.data[i] = b.data[i];
       out.data[i + 1] = b.data[i + 1];
       out.data[i + 2] = b.data[i + 2];
@@ -161,6 +164,16 @@ function buildDifferenceMask(
   }
 
   maskCtx.putImageData(out, 0, 0);
+  if (debugBlinkPlate) {
+    console.info("[NOVA-BLINK-DEBUG] mask built", {
+      overlay: overlay.src,
+      base: base.src,
+      threshold,
+      changedOpaquePixels: debugChangedPixels,
+      overlaySize: [overlay.naturalWidth, overlay.naturalHeight],
+      baseSize: [base.naturalWidth, base.naturalHeight],
+    });
+  }
   return maskCanvas;
 }
 
@@ -455,6 +468,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         for (const item of loaded) {
           if (item) imagesRef.current.set(imageKey(item.source), item.image);
         }
+        console.info("[NOVA-BLINK-DEBUG] asset load complete", {
+          root: NOVA_ROOT,
+          autoAnimate: devAutoAnimate,
+          open: imagesRef.current.get("blinks/open.png")?.src ?? "MISSING",
+          half: imagesRef.current.get("blinks/half.png")?.src ?? "MISSING",
+          closed: imagesRef.current.get("blinks/closed.png")?.src ?? "MISSING",
+          canvasPresent: Boolean(canvasRef.current),
+        });
         if (!imagesRef.current.has(NOVA_FILES.base)) {
           throw new Error(`Required Nova v21 base image is missing: ${sourceUrl(NOVA_FILES.base)}`);
         }
@@ -474,6 +495,13 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
   useEffect(() => {
     if (!ready) return;
+
+    console.info("[NOVA-BLINK-DEBUG] render scheduled", {
+      eyeState,
+      devAutoAnimate,
+      canvasPresent: Boolean(canvasRef.current),
+      closedImageLoaded: imagesRef.current.has("blinks/closed.png"),
+    });
 
     if (renderFrameRef.current !== null) {
       cancelAnimationFrame(renderFrameRef.current);
@@ -569,11 +597,30 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     let cancelled = false;
 
     const scheduleBlink = (delay: number) => {
+      console.info("[NOVA-BLINK-DEBUG] scheduling blink", {
+        delayMs: delay,
+        devAutoAnimate,
+        ready,
+        speaking: isSpeaking,
+        listening: isListening,
+      });
       blinkTimeout = window.setTimeout(() => {
-        if (cancelled || !devAutoAnimate) return;
+        if (cancelled || !devAutoAnimate) {
+          console.warn("[NOVA-BLINK-DEBUG] blink timer fired but cancelled/disabled", { cancelled, devAutoAnimate });
+          return;
+        }
+        console.info("[NOVA-BLINK-DEBUG] CLOSE", {
+          at: new Date().toISOString(),
+          closedLoaded: imagesRef.current.has("blinks/closed.png"),
+          closedImage: imagesRef.current.get("blinks/closed.png")?.src,
+        });
         setEyeState("closed");
         reopenTimeout = window.setTimeout(() => {
-          if (cancelled || !devAutoAnimate) return;
+          if (cancelled || !devAutoAnimate) {
+            console.warn("[NOVA-BLINK-DEBUG] reopen timer fired but cancelled/disabled", { cancelled, devAutoAnimate });
+            return;
+          }
+          console.info("[NOVA-BLINK-DEBUG] OPEN", { at: new Date().toISOString() });
           setEyeState("open");
           scheduleBlink(2600 + Math.random() * 1800);
         }, 170);
