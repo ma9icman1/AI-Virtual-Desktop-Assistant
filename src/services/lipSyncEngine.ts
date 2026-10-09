@@ -106,13 +106,13 @@ export class LipSyncEngine {
    * Called when speech starts.
    * Parses the text into phonetic/viseme timing pulses.
    */
-  public onSpeechStart(text: string) {
+  public onSpeechStart(text: string, audioDurationMs?: number) {
     // Invalidate callbacks from any previous utterance before scheduling this one.
     this.speechGeneration += 1;
     this.clearSpeechTimeouts();
     this.speakingActive = true;
     this.startAudioFormantLoop();
-    this.animateSpeechWords(text, this.speechGeneration);
+    this.animateSpeechWords(text, this.speechGeneration, audioDurationMs);
   }
 
   /**
@@ -135,7 +135,7 @@ export class LipSyncEngine {
   /**
    * Parse words and trigger realistic phonetic visemes over time
    */
-  private animateSpeechWords(text: string, generation: number) {
+  private animateSpeechWords(text: string, generation: number, audioDurationMs?: number) {
     if (!this.speakingActive || generation !== this.speechGeneration) return;
 
     const words = text
@@ -146,23 +146,24 @@ export class LipSyncEngine {
 
     if (words.length === 0) return;
 
-    let delay = 0;
-    const averageWordDurationMs = 280;
+    const visemes = words.flatMap((word) => this.extractVisemeSequence(word));
+    if (visemes.length === 0) return;
 
-    words.forEach((word) => {
-      // Analyze vowels and consonants in word
-      const syllables = this.extractVisemeSequence(word);
-      const stepDuration = averageWordDurationMs / Math.max(1, syllables.length);
+    // Neural TTS provides a real audio duration. Spread the estimated visemes
+    // across that duration instead of assuming every word takes 280 ms. When
+    // duration metadata is unavailable (e.g. browser SAPI), retain the fallback.
+    const usableDuration = Number.isFinite(audioDurationMs) && (audioDurationMs ?? 0) > 0
+      ? Math.max(100, audioDurationMs as number)
+      : words.length * 280;
+    const stepDuration = usableDuration / visemes.length;
 
-      syllables.forEach((viseme) => {
-        const timeoutId = setTimeout(() => {
-          this.speechTimeoutIds.delete(timeoutId);
-          if (!this.speakingActive || generation !== this.speechGeneration) return;
-          this.applyPhoneticViseme(viseme);
-        }, delay);
-        this.speechTimeoutIds.add(timeoutId);
-        delay += stepDuration;
-      });
+    visemes.forEach((viseme, index) => {
+      const timeoutId = setTimeout(() => {
+        this.speechTimeoutIds.delete(timeoutId);
+        if (!this.speakingActive || generation !== this.speechGeneration) return;
+        this.applyPhoneticViseme(viseme);
+      }, index * stepDuration);
+      this.speechTimeoutIds.add(timeoutId);
     });
 
     // Reset after estimated duration if not already ended
