@@ -384,14 +384,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       draw(isListening ? "idle_listening/slight_smile.png" : "idle_listening/annoyed.png", isListening ? .85 : .18);
     }
 
-    // In manual mode, the eye slider must actually drive the rendered blink plate.
-    // In automatic mode, eyeState is driven by the blink scheduler below.
-    if (devAutoAnimate && eyeState !== "open") {
-      draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
-    } else if (!devAutoAnimate && devEyeIndex > 0) {
-      draw(devEyeIndex === 1 ? "blinks/half.png" : "blinks/closed.png");
-    }
-
     if (isSpeaking) {
       const w = currentWeightsRef.current;
       const jaw = w.jawOpen ?? 0;
@@ -435,6 +427,16 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
+
+    // BLINK MUST BE THE FINAL COMPOSITOR LAYER. Mouth and expression plates
+    // are full renders turned into difference masks; their masks can still
+    // touch pixels around the eyes. Drawing blink earlier lets those later
+    // layers repaint the eyes open again even while eyeState says "closed".
+    if (devAutoAnimate && eyeState !== "open") {
+      draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
+    } else if (!devAutoAnimate && devEyeIndex > 0) {
+      draw(devEyeIndex === 1 ? "blinks/half.png" : "blinks/closed.png");
+    }
   }, [eyeState, isSpeaking, isListening, devAutoAnimate, devEyeIndex, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
