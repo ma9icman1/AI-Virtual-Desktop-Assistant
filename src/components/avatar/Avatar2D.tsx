@@ -191,7 +191,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [eyeState, setEyeState] = useState<EyeState>("open");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
-  const [showDevControls, setShowDevControls] = useState(false);
+  const [showDevControls, setShowDevControls] = useState(true);
   const [devAutoAnimate, setDevAutoAnimate] = useState(true);
   const [devMouthIndex, setDevMouthIndex] = useState(2);
   const [devEyeIndex, setDevEyeIndex] = useState(0);
@@ -542,15 +542,19 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         onComplete();
         return;
       }
+      console.debug("[Nova Blink Debug] blink start -> half");
       setEyeState("half");
       blinkHalfTimeout = window.setTimeout(() => {
         if (cancelled || !devAutoAnimate) return onComplete();
+        console.debug("[Nova Blink Debug] half -> closed");
         setEyeState("closed");
         blinkClosedTimeout = window.setTimeout(() => {
           if (cancelled || !devAutoAnimate) return onComplete();
+          console.debug("[Nova Blink Debug] closed -> half");
           setEyeState("half");
           blinkReturnTimeout = window.setTimeout(() => {
             if (cancelled || !devAutoAnimate) return onComplete();
+            console.debug("[Nova Blink Debug] half -> open; blink complete");
             setEyeState("open");
             onComplete();
           }, 110);
