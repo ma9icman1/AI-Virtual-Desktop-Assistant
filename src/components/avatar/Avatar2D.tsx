@@ -96,6 +96,10 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
 const DIFF_THRESHOLD = 1;
 const CANVAS_SIZE = 2048;
 
+type DifferenceMask = HTMLCanvasElement & {
+  differenceRegion?: HTMLCanvasElement;
+};
+
 function sourceUrl(source: NovaSource): string {
   return `${NOVA_ROOT}/${source}?v=v21-production-20261008`;
 }
@@ -118,68 +122,62 @@ function buildDifferenceMask(
   base: HTMLImageElement,
   overlay: HTMLImageElement,
   threshold: number,
-): HTMLCanvasElement {
-  const debugBlinkPlate = overlay.src.includes("/blinks/");
-  let debugChangedPixels = 0;
+): DifferenceMask {
   const baseCanvas = document.createElement("canvas");
   const overlayCanvas = document.createElement("canvas");
-  const maskCanvas = document.createElement("canvas");
+  const maskCanvas = document.createElement("canvas") as DifferenceMask;
+  const regionCanvas = document.createElement("canvas");
 
-  baseCanvas.width = overlayCanvas.width = maskCanvas.width = CANVAS_SIZE;
-  baseCanvas.height = overlayCanvas.height = maskCanvas.height = CANVAS_SIZE;
+  for (const canvas of [baseCanvas, overlayCanvas, maskCanvas, regionCanvas]) {
+    canvas.width = CANVAS_SIZE;
+    canvas.height = CANVAS_SIZE;
+  }
 
   const baseCtx = baseCanvas.getContext("2d", { willReadFrequently: true });
   const overlayCtx = overlayCanvas.getContext("2d", { willReadFrequently: true });
   const maskCtx = maskCanvas.getContext("2d");
+  const regionCtx = regionCanvas.getContext("2d");
 
-  if (!baseCtx || !overlayCtx || !maskCtx) {
+  if (!baseCtx || !overlayCtx || !maskCtx || !regionCtx) {
     throw new Error("Nova compositor could not create canvas contexts.");
   }
 
-  baseCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  overlayCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   baseCtx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
   overlayCtx.drawImage(overlay, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-  const a = baseCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  const b = overlayCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  const baseData = baseCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+  const overlayData = overlayCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+  const output = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
+  const region = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
 
-  const out = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
+  for (let i = 0; i < baseData.length; i += 4) {
+    const changed =
+      Math.max(
+        Math.abs(baseData[i] - overlayData[i]),
+        Math.abs(baseData[i + 1] - overlayData[i + 1]),
+        Math.abs(baseData[i + 2] - overlayData[i + 2]),
+        Math.abs(baseData[i + 3] - overlayData[i + 3]),
+      ) >= threshold;
 
-  for (let i = 0; i < a.data.length; i += 4) {
-    const dr = Math.abs(a.data[i] - b.data[i]);
-    const dg = Math.abs(a.data[i + 1] - b.data[i + 1]);
-    const db = Math.abs(a.data[i + 2] - b.data[i + 2]);
-    const da = Math.abs(a.data[i + 3] - b.data[i + 3]);
+    if (!changed) continue;
 
-    const changed = Math.max(dr, dg, db, da) >= threshold;
+    // Keep the plate's real RGBA values, including transparent pixels.
+    output.data[i] = overlayData[i];
+    output.data[i + 1] = overlayData[i + 1];
+    output.data[i + 2] = overlayData[i + 2];
+    output.data[i + 3] = overlayData[i + 3];
 
-    if (changed) {
-      if (debugBlinkPlate && b.data[i + 3] > 0) debugChangedPixels++;
-      out.data[i] = b.data[i];
-      out.data[i + 1] = b.data[i + 1];
-      out.data[i + 2] = b.data[i + 2];
-      out.data[i + 3] = b.data[i + 3];
-    }
+    // Separate opaque region mask lets the compositor erase base pixels
+    // wherever a changed render plate is transparent.
+    region.data[i] = 255;
+    region.data[i + 1] = 255;
+    region.data[i + 2] = 255;
+    region.data[i + 3] = 255;
   }
 
-  maskCtx.putImageData(out, 0, 0);
-  if (debugBlinkPlate) {
-    const maskData = maskCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
-    let visibleMaskPixels = 0;
-    for (let i = 3; i < maskData.length; i += 4) {
-      if (maskData[i] > 0) visibleMaskPixels++;
-    }
-    console.info("[NOVA-BLINK-DEBUG] mask built " + JSON.stringify({
-      overlay: overlay.src,
-      base: base.src,
-      threshold,
-      changedOpaquePixels: debugChangedPixels,
-      visibleMaskPixels,
-      overlaySize: [overlay.naturalWidth, overlay.naturalHeight],
-      baseSize: [base.naturalWidth, base.naturalHeight],
-    }));
-  }
+  maskCtx.putImageData(output, 0, 0);
+  regionCtx.putImageData(region, 0, 0);
+  maskCanvas.differenceRegion = regionCanvas;
   return maskCanvas;
 }
 
@@ -385,6 +383,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       const mask = getMask(source);
       if (!mask) return;
       ctx.save();
+      ctx.globalAlpha = 1;
+      if (mask.differenceRegion) {
+        // Remove stale pixels from the base/previous plate first, including
+        // pixels that the new render plate makes fully transparent.
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.drawImage(mask.differenceRegion, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      }
+      ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = opacity;
       ctx.drawImage(mask, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
       ctx.restore();
@@ -411,23 +417,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       const blinkSource = eyeState === "half" ? "blinks/half.png" : "blinks/closed.png";
       const blinkImage = getImage(blinkSource);
       const blinkMask = getMask(blinkSource);
-      console.info("[NOVA-BLINK-DEBUG] blink layer draw " + JSON.stringify({
-        eyeState,
-        blinkSource,
-        imageLoaded: Boolean(blinkImage?.complete && blinkImage.naturalWidth > 0),
-        imageSize: blinkImage ? [blinkImage.naturalWidth, blinkImage.naturalHeight] : null,
-        maskAvailable: Boolean(blinkMask),
-        maskSize: blinkMask ? [blinkMask.width, blinkMask.height] : null,
-        canvasSize: [canvas.width, canvas.height],
-        speaking: isSpeaking,
-        listening: isListening,
-      }));
-      if (blinkMask) {
-        let visibleMaskPixels = 0;
-        const maskData = blinkMask.getContext("2d")?.getImageData(0, 0, blinkMask.width, blinkMask.height).data;
-        if (maskData) for (let i = 3; i < maskData.length; i += 4) if (maskData[i] > 0) visibleMaskPixels++;
-        console.info("[NOVA-BLINK-DEBUG] blink mask visibility " + JSON.stringify({ eyeState, visibleMaskPixels }));
-      }
       draw(blinkSource);
     }
 
