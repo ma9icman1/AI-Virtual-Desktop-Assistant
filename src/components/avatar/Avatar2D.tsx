@@ -380,16 +380,16 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
+    if (!isSpeaking) {
+      draw(isListening ? "idle_listening/slight_smile.png" : "idle_listening/annoyed.png", isListening ? .85 : .18);
+    }
+
     // In manual mode, the eye slider must actually drive the rendered blink plate.
     // In automatic mode, eyeState is driven by the blink scheduler below.
     if (devAutoAnimate && eyeState !== "open") {
       draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
     } else if (!devAutoAnimate && devEyeIndex > 0) {
       draw(devEyeIndex === 1 ? "blinks/half.png" : "blinks/closed.png");
-    }
-
-    if (!isSpeaking) {
-      draw(isListening ? "idle_listening/slight_smile.png" : "idle_listening/annoyed.png", isListening ? .85 : .18);
     }
 
     if (isSpeaking) {
