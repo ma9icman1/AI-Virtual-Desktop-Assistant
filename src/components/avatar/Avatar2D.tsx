@@ -472,6 +472,11 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
   }, [eyeState, idleExpression, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
+  // Keep the latest renderer available to the lip-sync subscription without
+  // forcing that subscription to reconnect whenever parallax or eye state changes.
+  const renderNovaRef = useRef<() => void>(() => {});
+  renderNovaRef.current = renderNova;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -557,6 +562,15 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     const unsub = LipSyncEngine.getInstance().subscribe((weights) => {
       currentWeightsRef.current = weights;
 
+      // Ref updates do not trigger React renders. While speaking, coalesce each
+      // lip-sync update into the next animation frame so mouth plates animate smoothly.
+      if (isSpeaking && ready && renderFrameRef.current === null) {
+        renderFrameRef.current = requestAnimationFrame(() => {
+          renderNovaRef.current();
+          renderFrameRef.current = null;
+        });
+      }
+
       if (!devAutoAnimate) return;
 
       if (!isSpeaking) {
@@ -588,7 +602,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     });
 
     return () => unsub();
-  }, [isSpeaking, isListening, devAutoAnimate]);
+  }, [isSpeaking, isListening, devAutoAnimate, ready]);
 
 
   useEffect(() => {
