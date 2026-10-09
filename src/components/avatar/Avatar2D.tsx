@@ -435,7 +435,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
-  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
+  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devEyeIndex, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
@@ -541,6 +541,9 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     let blinkClosedTimeout = 0;
     let blinkReturnTimeout = 0;
     let cancelled = false;
+
+    setBlinkDebugStatus(devAutoAnimate ? "SCHEDULER ACTIVE — waiting" : "AUTO ANIMATION OFF");
+    console.debug("[Nova Blink Debug] scheduler effect started; auto animation:", devAutoAnimate);
 
     const executeBlink = (onComplete: () => void) => {
       if (cancelled || !devAutoAnimate) {
