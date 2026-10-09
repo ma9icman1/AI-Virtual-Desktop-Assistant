@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
 import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
@@ -387,50 +387,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       draw(idlePlate, isListening ? .82 : .42);
     }
 
-    const eye =
-      Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
-      py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
-      py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
-      px < -.33 ? "eyes/left.png" : "eyes/right.png";
-    draw(eye);
-
-    // Use the supplied blink render itself, not a difference mask. These are
-    // production render plates and their eyelid changes must be drawn exactly
-    // as exported. The mouth and brow layers are rendered below this block, so
-    // the blink plate cannot freeze the talking mouth or cover the final brows.
-    if (devAutoAnimate && eyeState !== "open") {
-      const blinkSource: NovaSource =
-        eyeState === "quarter" ? "blinks/quarter.png" :
-        eyeState === "half" ? "blinks/half.png" :
-        eyeState === "three_quarter" ? "blinks/three_quarter.png" :
-        "blinks/closed.png";
-      const blinkImage = getImage(blinkSource);
-      if (blinkImage && blinkImage.complete && blinkImage.naturalWidth > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
-        ctx.drawImage(blinkImage, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
-        ctx.restore();
-        if (lastRenderedBlinkRef.current !== blinkSource) {
-          lastRenderedBlinkRef.current = blinkSource;
-          console.info("[NOVA-BLINK-DEBUG] direct blink plate drawn", {
-            frame: eyeState,
-            source: blinkSource,
-            width: blinkImage.naturalWidth,
-            height: blinkImage.naturalHeight,
-          });
-        }
-      } else {
-        console.warn("[NOVA-BLINK-DEBUG] blink plate unavailable", {
-          frame: eyeState,
-          source: blinkSource,
-          found: !!blinkImage,
-          complete: !!blinkImage?.complete,
-          width: blinkImage?.naturalWidth ?? 0,
-        });
-      }
-    }
-
     if (isSpeaking) {
       const w = currentWeightsRef.current;
       const jaw = w.jawOpen ?? 0;
@@ -474,6 +430,24 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
+    const eye =
+      Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
+      py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
+      py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
+      px < -.33 ? "eyes/left.png" : "eyes/right.png";
+    draw(eye);
+
+    // Eyes render after the mouth and brows. Blink PNGs use the existing
+    // base-difference mask so they don't cover the rest of Nova's face.
+    if (devAutoAnimate && eyeState !== "open") {
+      const blinkSource: NovaSource =
+        eyeState === "quarter" ? "blinks/quarter.png" :
+        eyeState === "half" ? "blinks/half.png" :
+        eyeState === "three_quarter" ? "blinks/three_quarter.png" :
+        "blinks/closed.png";
+      draw(blinkSource);
+    }
+
   }, [eyeState, idleExpression, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
@@ -924,3 +898,4 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     </div>
   );
 };
+
