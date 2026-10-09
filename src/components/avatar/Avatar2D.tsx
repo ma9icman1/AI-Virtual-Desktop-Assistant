@@ -434,8 +434,12 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         mouth = "speech/phoneme_TH_80.png";
       } else if (ch > .35) {
         mouth = "speech/phoneme_SH_CH_J_80.png";
-      } else if (o > .3 || u > .3 || pucker > .3) {
-        mouth = `mouth/Mouth Pucker_${Math.max(60, Math.min(100, Math.round(Math.max(o, u, pucker) * 100 / 20) * 20))}.png`;
+      } else if (u > .3 && u >= o) {
+        // V21 includes a dedicated U vowel render; use it instead of reusing
+        // the generic pucker plate for both O and U.
+        mouth = "speech/vowel_U_80.png";
+      } else if (o > .3 || pucker > .3) {
+        mouth = `mouth/Mouth Pucker_${Math.max(60, Math.min(100, Math.round(Math.max(o, pucker) * 100 / 20) * 20))}.png`;
       } else if (aa > .35 || jaw > .55) {
         mouth = `mouth/Mouth Upper Up_${Math.max(60, Math.min(100, Math.round(Math.max(aa, jaw) * 100 / 20) * 20))}.png`;
       } else if (e > .25 || i > .25 || jaw > .12) {
