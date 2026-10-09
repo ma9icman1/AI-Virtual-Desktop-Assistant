@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
 import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
@@ -93,7 +93,7 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
   eyebrows: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
 };
 
-const DIFF_THRESHOLD = 1;
+const DIFF_THRESHOLD = 18;
 const CANVAS_SIZE = 2048;
 
 function sourceUrl(source: NovaSource): string {
@@ -185,6 +185,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const renderFrameRef = useRef<number | null>(null);
   const currentWeightsRef = useRef<Partial<VisemeWeights>>({});
   const targetParallax = useRef({ x: 0, y: 0 });
+  const lastMouseMoveAt = useRef(0);
 
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -379,7 +380,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
-    if (devAutoAnimate && eyeState !== "open") {
+    if (eyeState !== "open") {
       draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
     }
 
@@ -538,19 +539,19 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     let cancelled = false;
 
     const executeBlink = (onComplete: () => void) => {
-      if (cancelled || !devAutoAnimate) {
+      if (cancelled) {
         onComplete();
         return;
       }
       setEyeState("half");
       blinkHalfTimeout = window.setTimeout(() => {
-        if (cancelled || !devAutoAnimate) return onComplete();
+        if (cancelled) return onComplete();
         setEyeState("closed");
         blinkClosedTimeout = window.setTimeout(() => {
-          if (cancelled || !devAutoAnimate) return onComplete();
+          if (cancelled) return onComplete();
           setEyeState("half");
           blinkReturnTimeout = window.setTimeout(() => {
-            if (cancelled || !devAutoAnimate) return onComplete();
+            if (cancelled) return onComplete();
             setEyeState("open");
             onComplete();
           }, 110);
@@ -588,6 +589,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     if (!enableParallax) return;
 
     const handleMouseMove = (event: MouseEvent) => {
+      lastMouseMoveAt.current = Date.now();
       const nx = (event.clientX / window.innerWidth) * 2 - 1;
       const ny = (event.clientY / window.innerHeight) * 2 - 1;
       targetParallax.current = {
@@ -613,6 +615,37 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       cancelAnimationFrame(frame);
     };
   }, [enableParallax]);
+
+  useEffect(() => {
+    if (!enableParallax || isSpeaking) return;
+
+    let timeout = 0;
+    let cancelled = false;
+
+    const scheduleIdleGlance = () => {
+      timeout = window.setTimeout(() => {
+        if (cancelled) return;
+
+        // Leave mouse-directed gaze alone while the user is active.
+        if (Date.now() - lastMouseMoveAt.current > 1800) {
+          targetParallax.current = {
+            x: (Math.random() - 0.5) * 0.55,
+            y: (Math.random() - 0.5) * 0.32,
+          };
+        }
+
+        scheduleIdleGlance();
+      }, 2400 + Math.random() * 3600);
+    };
+
+    scheduleIdleGlance();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [enableParallax, isSpeaking]);
+
 
   const rotY = parallax.x * 12;
   const rotX = -parallax.y * 10;
@@ -827,3 +860,4 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     </div>
   );
 };
+

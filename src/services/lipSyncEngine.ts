@@ -105,13 +105,13 @@ export class LipSyncEngine {
    * Called when speech starts.
    * Parses the text into phonetic/viseme timing pulses.
    */
-  public onSpeechStart(text: string) {
+  public onSpeechStart(text: string, durationMs?: number) {
     this.speakingActive = true;
     if (this.speechTimeoutId) {
       clearTimeout(this.speechTimeoutId);
     }
     this.startAudioFormantLoop();
-    this.animateSpeechWords(text);
+    this.animateSpeechWords(text, durationMs);
   }
 
   /**
@@ -129,7 +129,7 @@ export class LipSyncEngine {
   /**
    * Parse words and trigger realistic phonetic visemes over time
    */
-  private animateSpeechWords(text: string) {
+  private animateSpeechWords(text: string, durationMs?: number) {
     if (!this.speakingActive) return;
 
     const words = text
@@ -138,29 +138,26 @@ export class LipSyncEngine {
       .split(/\s+/)
       .filter(Boolean);
 
-    if (words.length === 0) return;
+    const sequence = words.flatMap((word) => this.extractVisemeSequence(word));
+    if (sequence.length === 0) {
+      this.applyPhoneticViseme("DEFAULT");
+      return;
+    }
 
-    let delay = 0;
-    const averageWordDurationMs = 280;
+    const totalDuration =
+      durationMs !== undefined && Number.isFinite(durationMs) && durationMs > 0
+        ? durationMs
+        : words.length * 280;
 
-    words.forEach((word) => {
-      // Analyze vowels and consonants in word
-      const syllables = this.extractVisemeSequence(word);
-      const stepDuration = averageWordDurationMs / Math.max(1, syllables.length);
+    const stepDuration = Math.max(55, totalDuration / sequence.length);
 
-      syllables.forEach((viseme) => {
-        setTimeout(() => {
-          if (!this.speakingActive) return;
-          this.applyPhoneticViseme(viseme);
-        }, delay);
-        delay += stepDuration;
-      });
+    sequence.forEach((viseme, index) => {
+      window.setTimeout(() => {
+        if (!this.speakingActive) return;
+        this.applyPhoneticViseme(viseme);
+      }, Math.round(index * stepDuration));
     });
-
-    // Reset after estimated duration if not already ended
-    // The real speech-end event owns reset timing; do not snap the mouth early.
   }
-
   /**
    * Extract phoneme keys from word
    */
@@ -200,12 +197,11 @@ export class LipSyncEngine {
         sequence.push("SS");
         i += 1;
       } else {
-        sequence.push("DEFAULT");
         i += 1;
       }
     }
 
-    return sequence.slice(0, 6);
+    return sequence;
   }
 
   /**

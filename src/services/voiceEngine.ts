@@ -786,13 +786,13 @@ export class VoiceEngine {
 
         const audio = new Audio(audioUrl);
         this.currentAudio = audio;
-        audio.volume = this.settings.volume ?? 1.0;
+        audio.volume = Math.max(0.85, Math.min(1, Number(this.settings.volume ?? 1)));
         audio.playbackRate = this.settings.rate || 1.0;
 
         audio.onplay = () => {
           this.isSpeaking = true;
           this.callbacks.onSpeakingStateChange(true);
-          LipSyncEngine.getInstance().onSpeechStart(cleanText);
+          LipSyncEngine.getInstance().onSpeechStart(cleanText, Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration * 1000 : undefined);
         };
 
         audio.onended = () => {
@@ -849,7 +849,7 @@ export class VoiceEngine {
       }
       utterance.rate = this.settings.rate || 1.0;
       utterance.pitch = this.settings.pitch || 1.05;
-      utterance.volume = this.settings.volume ?? 1.0;
+      utterance.volume = Math.max(0.85, Math.min(1, Number(this.settings.volume ?? 1)));
 
       utterance.onstart = () => {
         this.isSpeaking = true;
@@ -919,3 +919,4 @@ export class VoiceEngine {
     }
   }
 }
+
