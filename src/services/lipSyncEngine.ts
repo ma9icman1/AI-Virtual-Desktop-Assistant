@@ -303,8 +303,8 @@ export class LipSyncEngine {
         break;
     }
 
-    this.currentWeights = { ...this.targetWeights };
-    this.notify();
+    // Do not snap directly to the new pose. The animation loop eases every
+    // viseme toward its target so adjacent mouth shapes blend instead of flip.
   }
 
   /**
@@ -320,11 +320,29 @@ export class LipSyncEngine {
         return;
       }
 
-      if (this.targetWeights.jawOpen !== undefined) {
-        this.currentWeights.jawOpen = this.targetWeights.jawOpen;
-        this.notify();
-      }
+      // Smoothly blend all mouth and expression weights, not just the jaw.
+      // A slightly faster response keeps speech readable while avoiding hard snaps.
+      const smoothing = 0.28;
+      const keys = new Set([
+        ...Object.keys(this.currentWeights),
+        ...Object.keys(this.targetWeights),
+      ]);
+      let changed = false;
 
+      keys.forEach((key) => {
+        const current = this.currentWeights[key] ?? 0;
+        const target = this.targetWeights[key] ?? 0;
+        const next = current + (target - current) * smoothing;
+        if (Math.abs(target - next) < 0.005) {
+          if (next !== target) changed = true;
+          this.currentWeights[key] = target;
+        } else {
+          this.currentWeights[key] = next;
+          changed = true;
+        }
+      });
+
+      if (changed) this.notify();
       this.animFrameId = requestAnimationFrame(tick);
     };
 
