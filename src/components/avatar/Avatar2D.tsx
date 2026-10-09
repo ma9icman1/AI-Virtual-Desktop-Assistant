@@ -561,56 +561,37 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   }, [isSpeaking, isListening, devAutoAnimate]);
 
   useEffect(() => {
+    // The production render batch currently has only two distinct blink
+    // images: open.png and the shared half/closed frame. Do not animate
+    // through duplicate half/closed images; use a short, clear close/open.
     let blinkTimeout = 0;
-    let blinkHalfTimeout = 0;
-    let blinkClosedTimeout = 0;
-    let blinkReturnTimeout = 0;
+    let reopenTimeout = 0;
     let cancelled = false;
 
-    const executeBlink = (onComplete: () => void) => {
-      if (cancelled || !devAutoAnimate) {
-        onComplete();
-        return;
-      }
-      setEyeState("half");
-      blinkHalfTimeout = window.setTimeout(() => {
-        if (cancelled || !devAutoAnimate) return onComplete();
-        setEyeState("closed");
-        blinkClosedTimeout = window.setTimeout(() => {
-          if (cancelled || !devAutoAnimate) return onComplete();
-          setEyeState("half");
-          blinkReturnTimeout = window.setTimeout(() => {
-            if (cancelled || !devAutoAnimate) return onComplete();
-            setEyeState("open");
-            onComplete();
-          }, 110);
-        }, 140);
-      }, 90);
-    };
-
-    const scheduleNextBlink = () => {
-      // Frequent, visible blinks: 2.5–5.5 seconds between blinks.
-      const delay = Math.random() * 3000 + 2500;
+    const scheduleBlink = (delay: number) => {
       blinkTimeout = window.setTimeout(() => {
-        executeBlink(() => {
-          if (Math.random() < 0.25) {
-            window.setTimeout(() => executeBlink(scheduleNextBlink), 120);
-          } else {
-            scheduleNextBlink();
-          }
-        });
+        if (cancelled || !devAutoAnimate) return;
+        setEyeState("closed");
+        reopenTimeout = window.setTimeout(() => {
+          if (cancelled || !devAutoAnimate) return;
+          setEyeState("open");
+          scheduleBlink(2600 + Math.random() * 1800);
+        }, 170);
       }, delay);
     };
 
-    scheduleNextBlink();
+    if (devAutoAnimate) {
+      setEyeState("open");
+      // Blink shortly after mount so the animation is immediately testable.
+      scheduleBlink(1200);
+    } else {
+      setEyeState("open");
+    }
 
     return () => {
       cancelled = true;
       window.clearTimeout(blinkTimeout);
-      window.clearTimeout(blinkHalfTimeout);
-      window.clearTimeout(blinkClosedTimeout);
-      window.clearTimeout(blinkReturnTimeout);
-      setEyeState("open");
+      window.clearTimeout(reopenTimeout);
     };
   }, [devAutoAnimate]);
 
