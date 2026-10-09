@@ -38,7 +38,8 @@ export class LipSyncEngine {
 
   // Speech timing & synthesis sync
   private speakingActive: boolean = false;
-  private speechTimeoutId: any = null;
+  private speechTimeoutIds = new Set<ReturnType<typeof setTimeout>>();
+  private speechGeneration = 0;
 
   private constructor() {
     this.resetWeights();
@@ -106,12 +107,12 @@ export class LipSyncEngine {
    * Parses the text into phonetic/viseme timing pulses.
    */
   public onSpeechStart(text: string) {
+    // Invalidate callbacks from any previous utterance before scheduling this one.
+    this.speechGeneration += 1;
+    this.clearSpeechTimeouts();
     this.speakingActive = true;
-    if (this.speechTimeoutId) {
-      clearTimeout(this.speechTimeoutId);
-    }
     this.startAudioFormantLoop();
-    this.animateSpeechWords(text);
+    this.animateSpeechWords(text, this.speechGeneration);
   }
 
   /**
@@ -119,18 +120,23 @@ export class LipSyncEngine {
    */
   public onSpeechEnd() {
     this.speakingActive = false;
-    if (this.speechTimeoutId) {
-      clearTimeout(this.speechTimeoutId);
-      this.speechTimeoutId = null;
-    }
+    // Invalidate callbacks already queued by the browser as well as clearing
+    // pending timers, so an old phrase can never reopen the mouth after stop.
+    this.speechGeneration += 1;
+    this.clearSpeechTimeouts();
     this.resetWeights();
+  }
+
+  private clearSpeechTimeouts() {
+    this.speechTimeoutIds.forEach((timeoutId) => clearTimeout(timeoutId));
+    this.speechTimeoutIds.clear();
   }
 
   /**
    * Parse words and trigger realistic phonetic visemes over time
    */
-  private animateSpeechWords(text: string) {
-    if (!this.speakingActive) return;
+  private animateSpeechWords(text: string, generation: number) {
+    if (!this.speakingActive || generation !== this.speechGeneration) return;
 
     const words = text
       .toLowerCase()
@@ -149,10 +155,12 @@ export class LipSyncEngine {
       const stepDuration = averageWordDurationMs / Math.max(1, syllables.length);
 
       syllables.forEach((viseme) => {
-        setTimeout(() => {
-          if (!this.speakingActive) return;
+        const timeoutId = setTimeout(() => {
+          this.speechTimeoutIds.delete(timeoutId);
+          if (!this.speakingActive || generation !== this.speechGeneration) return;
           this.applyPhoneticViseme(viseme);
         }, delay);
+        this.speechTimeoutIds.add(timeoutId);
         delay += stepDuration;
       });
     });
