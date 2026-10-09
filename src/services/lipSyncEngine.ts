@@ -303,12 +303,14 @@ export class LipSyncEngine {
         break;
     }
 
-    this.currentWeights = { ...this.targetWeights };
-    this.notify();
+    // Do not snap the rendered avatar to each phoneme. Keep the new values
+    // as targets and let the animation-frame loop ease every channel toward
+    // them; immediate assignment caused the mouth plates to pop between poses.
   }
 
   /**
-   * Web Audio API Real-time Frequency Formant loop
+   * Smoothly blends phoneme targets on every animation frame.
+   * This is a pose interpolator, not a claim of audio-to-phoneme recognition.
    */
   private startAudioFormantLoop() {
     if (this.isAnalyzing) return;
@@ -317,14 +319,35 @@ export class LipSyncEngine {
     const tick = () => {
       if (!this.speakingActive) {
         this.isAnalyzing = false;
+        this.animFrameId = null;
         return;
       }
 
-      if (this.targetWeights.jawOpen !== undefined) {
-        this.currentWeights.jawOpen = this.targetWeights.jawOpen;
-        this.notify();
+      let changed = false;
+      const keys = new Set([
+        ...Object.keys(this.currentWeights),
+        ...Object.keys(this.targetWeights),
+      ]);
+
+      for (const key of keys) {
+        const current = this.currentWeights[key] ?? 0;
+        const target = this.targetWeights[key] ?? 0;
+        const difference = target - current;
+        if (Math.abs(difference) < 0.003) {
+          if (current !== target) {
+            this.currentWeights[key] = target;
+            changed = true;
+          }
+          continue;
+        }
+
+        // Open poses move in briskly; closing and relaxing are a little softer.
+        const easing = Math.abs(target) > Math.abs(current) ? 0.34 : 0.22;
+        this.currentWeights[key] = current + difference * easing;
+        changed = true;
       }
 
+      if (changed) this.notify();
       this.animFrameId = requestAnimationFrame(tick);
     };
 
