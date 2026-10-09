@@ -189,6 +189,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [eyeState, setEyeState] = useState<EyeState>("open");
+  const [blinkDebugStatus, setBlinkDebugStatus] = useState("Waiting for first blink…");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
   const [showDevControls, setShowDevControls] = useState(true);
@@ -379,8 +380,12 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
+    // In manual mode, the eye slider must actually drive the rendered blink plate.
+    // In automatic mode, eyeState is driven by the blink scheduler below.
     if (devAutoAnimate && eyeState !== "open") {
       draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
+    } else if (!devAutoAnimate && devEyeIndex > 0) {
+      draw(devEyeIndex === 1 ? "blinks/half.png" : "blinks/closed.png");
     }
 
     if (!isSpeaking) {
@@ -542,18 +547,22 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         onComplete();
         return;
       }
+      setBlinkDebugStatus("BLINK START → HALF");
       console.debug("[Nova Blink Debug] blink start -> half");
       setEyeState("half");
       blinkHalfTimeout = window.setTimeout(() => {
         if (cancelled || !devAutoAnimate) return onComplete();
+        setBlinkDebugStatus("HALF → CLOSED");
         console.debug("[Nova Blink Debug] half -> closed");
         setEyeState("closed");
         blinkClosedTimeout = window.setTimeout(() => {
           if (cancelled || !devAutoAnimate) return onComplete();
+          setBlinkDebugStatus("CLOSED → HALF");
           console.debug("[Nova Blink Debug] closed -> half");
           setEyeState("half");
           blinkReturnTimeout = window.setTimeout(() => {
             if (cancelled || !devAutoAnimate) return onComplete();
+            setBlinkDebugStatus("OPEN — blink complete");
             console.debug("[Nova Blink Debug] half -> open; blink complete");
             setEyeState("open");
             onComplete();
@@ -711,6 +720,9 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           </div>
           <div className="mb-3 rounded bg-slate-900 p-2">
             <div className="mb-1 text-[10px] font-bold text-cyan-300">EYES / BLINK</div>
+            <div className="mb-1 rounded border border-cyan-500/20 bg-black/40 px-1.5 py-1 text-[9px] font-bold text-emerald-300">
+              BLINK DEBUG: {blinkDebugStatus}
+            </div>
             <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? eyeState : ["Open","Half","Closed"][devEyeIndex]}</span><span className="truncate text-cyan-400/70">{eyeSources[devEyeIndex]}</span></div>
             <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="2" step="1" value={devEyeIndex} disabled={devAutoAnimate} onChange={(e)=>setDevEyeIndex(Number(e.target.value))}/>
             <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.x} onChange={(e)=>updateDevLayer("eyes",{x:Number(e.target.value)})}/></label>
