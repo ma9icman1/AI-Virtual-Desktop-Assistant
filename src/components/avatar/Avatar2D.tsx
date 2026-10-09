@@ -2,7 +2,7 @@
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
 import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
-export type EyeState = "open" | "quarter" | "half" | "closed";
+export type EyeState = "open" | "quarter" | "half" | "three_quarter" | "closed";
 export type MouthState =
   | "closed"
   | "smile"
@@ -400,6 +400,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       const blinkSource: NovaSource =
         eyeState === "quarter" ? "blinks/quarter.png" :
         eyeState === "half" ? "blinks/half.png" :
+        eyeState === "three_quarter" ? "blinks/three_quarter.png" :
         "blinks/closed.png";
       draw(blinkSource);
     }
@@ -594,9 +595,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   }, [isSpeaking, isListening, devAutoAnimate]);
 
   useEffect(() => {
-    // Play the supplied blink renders in sequence instead of flipping between
-    // open and closed. The closing frames are quarter -> half -> closed, then
-    // the same frames reverse to reopen naturally.
+    // Play all supplied blink renders instead of flipping between open and
+    // closed: quarter -> half -> three-quarter -> closed, then reverse.
     let blinkTimeout = 0;
     let frameTimeout = 0;
     let cancelled = false;
@@ -614,21 +614,29 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           setEyeState("half");
           frameTimeout = window.setTimeout(() => {
             if (cancelled || !devAutoAnimate) return;
-            setEyeState("closed");
+            setEyeState("three_quarter");
             frameTimeout = window.setTimeout(() => {
               if (cancelled || !devAutoAnimate) return;
-              setEyeState("half");
+              setEyeState("closed");
               frameTimeout = window.setTimeout(() => {
                 if (cancelled || !devAutoAnimate) return;
-                setEyeState("quarter");
+                setEyeState("three_quarter");
                 frameTimeout = window.setTimeout(() => {
                   if (cancelled || !devAutoAnimate) return;
-                  setEyeState("open");
-                  console.info("[NOVA-BLINK-DEBUG] BLINK sequence complete " + new Date().toISOString());
-                  scheduleBlink(2600 + Math.random() * 1800);
+                  setEyeState("half");
+                  frameTimeout = window.setTimeout(() => {
+                    if (cancelled || !devAutoAnimate) return;
+                    setEyeState("quarter");
+                    frameTimeout = window.setTimeout(() => {
+                      if (cancelled || !devAutoAnimate) return;
+                      setEyeState("open");
+                      console.info("[NOVA-BLINK-DEBUG] BLINK sequence complete " + new Date().toISOString());
+                      scheduleBlink(2600 + Math.random() * 1800);
+                    }, 35);
+                  }, 35);
                 }, 35);
-              }, 35);
-            }, 75);
+              }, 75);
+            }, 35);
           }, 35);
         }, 35);
       }, delay);
