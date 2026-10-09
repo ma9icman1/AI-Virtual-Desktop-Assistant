@@ -792,7 +792,10 @@ export class VoiceEngine {
         audio.onplay = () => {
           this.isSpeaking = true;
           this.callbacks.onSpeakingStateChange(true);
-          LipSyncEngine.getInstance().onSpeechStart(cleanText);
+          const durationMs = Number.isFinite(audio.duration) && audio.duration > 0
+            ? audio.duration * 1000
+            : undefined;
+          LipSyncEngine.getInstance().onSpeechStart(cleanText, durationMs);
         };
 
         audio.onended = () => {
