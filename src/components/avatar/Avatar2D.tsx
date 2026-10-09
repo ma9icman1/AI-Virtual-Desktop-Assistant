@@ -81,8 +81,21 @@ const MOUTH_DIAGNOSTIC_SOURCES = [
   "mouth/Mouth Upper Up_60.png", "mouth/Mouth Upper Up_80.png",
   "mouth/Mouth Upper Up_100.png", "mouth/Mouth Pucker_60.png",
   "mouth/Mouth Pucker_80.png", "mouth/Mouth Pucker_100.png",
-  "speech/phoneme_TH_80.png", "speech/phoneme_SH_CH_J_80.png",
+  "speech/phoneme_SH_CH_J_20.png",
+  "speech/phoneme_SH_CH_J_40.png",
+  "speech/phoneme_SH_CH_J_60.png",
+  "speech/phoneme_SH_CH_J_80.png",
+  "speech/phoneme_SH_CH_J_100.png",
+  "speech/phoneme_TH_20.png",
+  "speech/phoneme_TH_40.png",
+  "speech/phoneme_TH_60.png",
+  "speech/phoneme_TH_80.png",
+  "speech/phoneme_TH_100.png",
+  "speech/vowel_U_20.png",
+  "speech/vowel_U_40.png",
+  "speech/vowel_U_60.png",
   "speech/vowel_U_80.png",
+  "speech/vowel_U_100.png",
 ] as const;
 
 type ImageDifference = { changedPercent: number; bounds: string };
@@ -161,7 +174,7 @@ function logMouthPlateDiagnostics(
 }
 
 function sourceUrl(source: NovaSource): string {
-  return `${NOVA_ROOT}/${source}?v=v21-production-20261008`;
+  return `${NOVA_ROOT}/${source}?v=v21-speech-plates-20261009`;
 }
 
 function loadImage(source: NovaSource): Promise<RGBAImage> {
@@ -269,7 +282,21 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       "mouth/Mouth Stretch_40.png","mouth/Mouth Stretch_60.png","mouth/Mouth Stretch_80.png",
       "mouth/Mouth Upper Up_60.png","mouth/Mouth Upper Up_80.png","mouth/Mouth Upper Up_100.png",
       "mouth/Mouth Pucker_60.png","mouth/Mouth Pucker_80.png","mouth/Mouth Pucker_100.png",
-      "speech/phoneme_TH_80.png","speech/phoneme_SH_CH_J_80.png","speech/vowel_U_80.png",
+      "speech/phoneme_SH_CH_J_20.png",
+      "speech/phoneme_SH_CH_J_40.png",
+      "speech/phoneme_SH_CH_J_60.png",
+      "speech/phoneme_SH_CH_J_80.png",
+      "speech/phoneme_SH_CH_J_100.png",
+      "speech/phoneme_TH_20.png",
+      "speech/phoneme_TH_40.png",
+      "speech/phoneme_TH_60.png",
+      "speech/phoneme_TH_80.png",
+      "speech/phoneme_TH_100.png",
+      "speech/vowel_U_20.png",
+      "speech/vowel_U_40.png",
+      "speech/vowel_U_60.png",
+      "speech/vowel_U_80.png",
+      "speech/vowel_U_100.png",
       "face_deform/smile_50.png","face_deform/mouth wide_75.png",
       "eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png","eyebrows/Brow Down_50.png","eyebrows/Brow Squeeze_50.png",
       ...Object.values(NOVA_FILES.eyes),
@@ -372,11 +399,16 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       } else if (ff > .3) {
         mouth = `mouth/Mouth Stretch_${Math.max(40, Math.min(80, Math.round(ff * 80 / 20) * 20))}.png`;
       } else if (th > .35) {
-        mouth = "speech/phoneme_TH_80.png";
+        const level = Math.max(20, Math.min(100, Math.round(th * 100 / 20) * 20));
+        mouth = `speech/phoneme_TH_${level}.png`;
       } else if (ch > .35) {
-        mouth = "speech/phoneme_SH_CH_J_80.png";
-      } else if (o > .3 || u > .3 || pucker > .3) {
-        mouth = `mouth/Mouth Pucker_${Math.max(60, Math.min(100, Math.round(Math.max(o, u, pucker) * 100 / 20) * 20))}.png`;
+        const level = Math.max(20, Math.min(100, Math.round(ch * 100 / 20) * 20));
+        mouth = `speech/phoneme_SH_CH_J_${level}.png`;
+      } else if (u > .3) {
+        const level = Math.max(20, Math.min(100, Math.round(u * 100 / 20) * 20));
+        mouth = `speech/vowel_U_${level}.png`;
+      } else if (o > .3 || pucker > .3) {
+        mouth = `mouth/Mouth Pucker_${Math.max(60, Math.min(100, Math.round(Math.max(o, pucker) * 100 / 20) * 20))}.png`;
       } else if (aa > .35 || jaw > .55) {
         mouth = `mouth/Mouth Upper Up_${Math.max(60, Math.min(100, Math.round(Math.max(aa, jaw) * 100 / 20) * 20))}.png`;
       } else if (e > .25 || i > .25 || jaw > .12) {
