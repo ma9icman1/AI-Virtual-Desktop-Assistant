@@ -96,9 +96,7 @@ const DEFAULT_DEV_CONTROLS: DevControls = {
 const DIFF_THRESHOLD = 1;
 const CANVAS_SIZE = 2048;
 
-type DifferenceMask = HTMLCanvasElement & {
-  differenceRegion?: HTMLCanvasElement;
-};
+type DifferenceMask = HTMLCanvasElement;
 
 function sourceUrl(source: NovaSource): string {
   return `${NOVA_ROOT}/${source}?v=v21-production-20261008`;
@@ -126,9 +124,8 @@ function buildDifferenceMask(
   const baseCanvas = document.createElement("canvas");
   const overlayCanvas = document.createElement("canvas");
   const maskCanvas = document.createElement("canvas") as DifferenceMask;
-  const regionCanvas = document.createElement("canvas");
 
-  for (const canvas of [baseCanvas, overlayCanvas, maskCanvas, regionCanvas]) {
+  for (const canvas of [baseCanvas, overlayCanvas, maskCanvas]) {
     canvas.width = CANVAS_SIZE;
     canvas.height = CANVAS_SIZE;
   }
@@ -136,9 +133,8 @@ function buildDifferenceMask(
   const baseCtx = baseCanvas.getContext("2d", { willReadFrequently: true });
   const overlayCtx = overlayCanvas.getContext("2d", { willReadFrequently: true });
   const maskCtx = maskCanvas.getContext("2d");
-  const regionCtx = regionCanvas.getContext("2d");
 
-  if (!baseCtx || !overlayCtx || !maskCtx || !regionCtx) {
+  if (!baseCtx || !overlayCtx || !maskCtx) {
     throw new Error("Nova compositor could not create canvas contexts.");
   }
 
@@ -148,7 +144,6 @@ function buildDifferenceMask(
   const baseData = baseCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
   const overlayData = overlayCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
   const output = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
-  const region = new ImageData(CANVAS_SIZE, CANVAS_SIZE);
 
   for (let i = 0; i < baseData.length; i += 4) {
     const changed =
@@ -159,25 +154,18 @@ function buildDifferenceMask(
         Math.abs(baseData[i + 3] - overlayData[i + 3]),
       ) >= threshold;
 
-    if (!changed) continue;
+    // Only paint pixels that are actually visible in the overlay.
+    // Transparent pixels in exported PNGs can contain arbitrary RGB values;
+    // treating those as erasers can wipe out the whole avatar.
+    if (!changed || overlayData[i + 3] === 0) continue;
 
-    // Keep the plate's real RGBA values, including transparent pixels.
     output.data[i] = overlayData[i];
     output.data[i + 1] = overlayData[i + 1];
     output.data[i + 2] = overlayData[i + 2];
     output.data[i + 3] = overlayData[i + 3];
-
-    // Separate opaque region mask lets the compositor erase base pixels
-    // wherever a changed render plate is transparent.
-    region.data[i] = 255;
-    region.data[i + 1] = 255;
-    region.data[i + 2] = 255;
-    region.data[i + 3] = 255;
   }
 
   maskCtx.putImageData(output, 0, 0);
-  regionCtx.putImageData(region, 0, 0);
-  maskCanvas.differenceRegion = regionCanvas;
   return maskCanvas;
 }
 
@@ -383,13 +371,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       const mask = getMask(source);
       if (!mask) return;
       ctx.save();
-      ctx.globalAlpha = 1;
-      if (mask.differenceRegion) {
-        // Remove stale pixels from the base/previous plate first, including
-        // pixels that the new render plate makes fully transparent.
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.drawImage(mask.differenceRegion, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
-      }
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = opacity;
       ctx.drawImage(mask, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
