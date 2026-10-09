@@ -182,6 +182,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const speechTextRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const maskCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const blinkMaskCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const mouthExclusionMaskRef = useRef<HTMLCanvasElement | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const currentWeightsRef = useRef<Partial<VisemeWeights>>({});
   const targetParallax = useRef({ x: 0, y: 0 });
@@ -345,6 +347,92 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     [getImage],
   );
 
+  // Build a mouth/lip/nearby-skin exclusion mask from the actual mouth render plates.
+  // Blink overlays are still used for the eyes, but their pixels are removed wherever
+  // mouth-related plates differ from the neutral base.
+  const getMouthExclusionMask = useCallback((): HTMLCanvasElement | null => {
+    if (mouthExclusionMaskRef.current) return mouthExclusionMaskRef.current;
+
+    const mouthSources: NovaSource[] = [
+      "mouth/Mouth Press_100.png",
+      "mouth/Mouth Smile_100.png",
+      "mouth/Mouth Stretch_80.png",
+      "mouth/Mouth Upper Up_100.png",
+      "mouth/Mouth Pucker_100.png",
+      "speech/phoneme_TH_80.png",
+      "speech/phoneme_SH_CH_J_80.png",
+      "speech/vowel_U_80.png",
+      "face_deform/lip_100.png",
+      "face_deform/smile_100.png",
+      "face_deform/frown_100.png",
+      "face_deform/cheek_100.png",
+      "face_deform/mouth wide_100.png",
+      "face_deform/mouth wide_75.png",
+    ];
+
+    const union = document.createElement("canvas");
+    union.width = union.height = CANVAS_SIZE;
+    const unionCtx = union.getContext("2d", { willReadFrequently: true });
+    if (!unionCtx) return null;
+    const unionData = unionCtx.createImageData(CANVAS_SIZE, CANVAS_SIZE);
+
+    let foundPlate = false;
+    for (const source of mouthSources) {
+      const plateMask = getMask(source);
+      if (!plateMask) continue;
+      const plateCtx = plateMask.getContext("2d", { willReadFrequently: true });
+      if (!plateCtx) continue;
+      const plateData = plateCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+      foundPlate = true;
+      for (let i = 3; i < plateData.length; i += 4) {
+        if (plateData[i] > 0) unionData.data[i] = 255;
+      }
+    }
+    if (!foundPlate) return null;
+    unionCtx.putImageData(unionData, 0, 0);
+
+    // Expand the detected mouth-motion region into the surrounding lips/skin.
+    const expanded = document.createElement("canvas");
+    expanded.width = expanded.height = CANVAS_SIZE;
+    const expandedCtx = expanded.getContext("2d", { willReadFrequently: true });
+    if (!expandedCtx) return union;
+    expandedCtx.filter = "blur(14px)";
+    expandedCtx.drawImage(union, 0, 0);
+    expandedCtx.filter = "none";
+
+    const expandedData = expandedCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    for (let i = 3; i < expandedData.data.length; i += 4) {
+      expandedData.data[i] = expandedData.data[i] >= 18 ? 255 : 0;
+    }
+    expandedCtx.putImageData(expandedData, 0, 0);
+    mouthExclusionMaskRef.current = expanded;
+    return expanded;
+  }, [getMask]);
+
+  const getBlinkMask = useCallback((source: NovaSource): HTMLCanvasElement | null => {
+    const cached = blinkMaskCacheRef.current.get(source);
+    if (cached) return cached;
+    const original = getMask(source);
+    const exclusion = getMouthExclusionMask();
+    if (!original || !exclusion) return original;
+
+    const originalCtx = original.getContext("2d", { willReadFrequently: true });
+    const exclusionCtx = exclusion.getContext("2d", { willReadFrequently: true });
+    if (!originalCtx || !exclusionCtx) return original;
+    const originalData = originalCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    const exclusionData = exclusionCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+    for (let i = 3; i < originalData.data.length; i += 4) {
+      if (exclusionData[i] > 0) originalData.data[i] = 0;
+    }
+    const masked = document.createElement("canvas");
+    masked.width = masked.height = CANVAS_SIZE;
+    const maskedCtx = masked.getContext("2d");
+    if (!maskedCtx) return original;
+    maskedCtx.putImageData(originalData, 0, 0);
+    blinkMaskCacheRef.current.set(source, masked);
+    return masked;
+  }, [getMask, getMouthExclusionMask]);
+
   const renderNova = useCallback(() => {
     const canvas = canvasRef.current;
     const base = getImage(NOVA_FILES.base);
@@ -362,7 +450,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     // Composite only pixels that differ from the neutral base render.
     const draw = (source: NovaSource, opacity = 1) => {
       if (source === NOVA_FILES.base) return;
-      const mask = getMask(source);
+      const isBlinkPlate = source.startsWith("blinks/") && source !== "blinks/open.png";
+      const mask = isBlinkPlate ? getBlinkMask(source) : getMask(source);
       if (!mask) return;
       ctx.save();
       ctx.globalAlpha = opacity;
@@ -430,7 +519,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
     if (brow > .25) draw("eyebrows/Brow Inner Up_50.png");
-  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
+  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask, getBlinkMask]);
 
   useEffect(() => {
     let cancelled = false;
