@@ -2,7 +2,7 @@
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
 import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
 
-export type EyeState = "open" | "half" | "closed";
+export type EyeState = "open" | "quarter" | "half" | "closed";
 export type MouthState =
   | "closed"
   | "smile"
@@ -393,19 +393,15 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       px < -.33 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
-    // Blink frames are complete production render plates. Draw the actual
-    // closed-eye plate directly so its eyelid pixels cannot be lost by the
-    // base-difference mask. The mouth and brow layers are drawn afterward.
+    // Blink PNGs are full render plates. Use the existing difference-mask
+    // compositor so only the changed eye/eyelid pixels are painted; drawing a
+    // whole plate here would cover the independently animated mouth and face.
     if (devAutoAnimate && eyeState !== "open") {
-      const blinkSource = eyeState === "half" ? "blinks/half.png" : "blinks/closed.png";
-      const blinkImage = getImage(blinkSource);
-      if (blinkImage) {
-        ctx.save();
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
-        ctx.drawImage(blinkImage, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
-        ctx.restore();
-      }
+      const blinkSource: NovaSource =
+        eyeState === "quarter" ? "blinks/quarter.png" :
+        eyeState === "half" ? "blinks/half.png" :
+        "blinks/closed.png";
+      draw(blinkSource);
     }
 
     if (isSpeaking) {
@@ -598,56 +594,56 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   }, [isSpeaking, isListening, devAutoAnimate]);
 
   useEffect(() => {
-    // The production render batch currently has only two distinct blink
-    // images: open.png and the shared half/closed frame. Do not animate
-    // through duplicate half/closed images; use a short, clear close/open.
+    // Play the supplied blink renders in sequence instead of flipping between
+    // open and closed. The closing frames are quarter -> half -> closed, then
+    // the same frames reverse to reopen naturally.
     let blinkTimeout = 0;
-    let reopenTimeout = 0;
+    let frameTimeout = 0;
     let cancelled = false;
 
     const scheduleBlink = (delay: number) => {
       console.info("[NOVA-BLINK-DEBUG] scheduling blink " + JSON.stringify({
-        delayMs: delay,
-        devAutoAnimate,
-        ready,
-        speaking: isSpeaking,
-        listening: isListening,
+        delayMs: delay, devAutoAnimate, ready, speaking: isSpeaking, listening: isListening,
       }));
       blinkTimeout = window.setTimeout(() => {
-        if (cancelled || !devAutoAnimate) {
-          console.warn("[NOVA-BLINK-DEBUG] blink timer fired but cancelled/disabled", { cancelled, devAutoAnimate });
-          return;
-        }
-        console.info("[NOVA-BLINK-DEBUG] CLOSE " + JSON.stringify({
-          at: new Date().toISOString(),
-          closedLoaded: imagesRef.current.has("blinks/closed.png"),
-          closedImage: imagesRef.current.get("blinks/closed.png")?.src,
-        }));
-        setEyeState("closed");
-        reopenTimeout = window.setTimeout(() => {
-          if (cancelled || !devAutoAnimate) {
-            console.warn("[NOVA-BLINK-DEBUG] reopen timer fired but cancelled/disabled", { cancelled, devAutoAnimate });
-            return;
-          }
-          console.info("[NOVA-BLINK-DEBUG] OPEN " + JSON.stringify({ at: new Date().toISOString() }));
-          setEyeState("open");
-          scheduleBlink(2600 + Math.random() * 1800);
-        }, 170);
+        if (cancelled || !devAutoAnimate) return;
+        console.info("[NOVA-BLINK-DEBUG] BLINK sequence start " + new Date().toISOString());
+        setEyeState("quarter");
+        frameTimeout = window.setTimeout(() => {
+          if (cancelled || !devAutoAnimate) return;
+          setEyeState("half");
+          frameTimeout = window.setTimeout(() => {
+            if (cancelled || !devAutoAnimate) return;
+            setEyeState("closed");
+            frameTimeout = window.setTimeout(() => {
+              if (cancelled || !devAutoAnimate) return;
+              setEyeState("half");
+              frameTimeout = window.setTimeout(() => {
+                if (cancelled || !devAutoAnimate) return;
+                setEyeState("quarter");
+                frameTimeout = window.setTimeout(() => {
+                  if (cancelled || !devAutoAnimate) return;
+                  setEyeState("open");
+                  console.info("[NOVA-BLINK-DEBUG] BLINK sequence complete " + new Date().toISOString());
+                  scheduleBlink(2600 + Math.random() * 1800);
+                }, 35);
+              }, 35);
+            }, 75);
+          }, 35);
+        }, 35);
       }, delay);
     };
 
+    setEyeState("open");
     if (devAutoAnimate) {
-      setEyeState("open");
       // Blink shortly after mount so the animation is immediately testable.
       scheduleBlink(1200);
-    } else {
-      setEyeState("open");
     }
 
     return () => {
       cancelled = true;
       window.clearTimeout(blinkTimeout);
-      window.clearTimeout(reopenTimeout);
+      window.clearTimeout(frameTimeout);
     };
   }, [devAutoAnimate]);
 
