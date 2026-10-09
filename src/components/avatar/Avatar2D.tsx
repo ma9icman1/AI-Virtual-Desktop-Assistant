@@ -71,6 +71,94 @@ type RGBAImage = {
 
 const DIFF_THRESHOLD = 1;
 const CANVAS_SIZE = 2048;
+const DIAGNOSTIC_SIZE = 128;
+const MOUTH_DIAGNOSTIC_SOURCES = [
+  "mouth/Mouth Press_20.png", "mouth/Mouth Press_40.png",
+  "mouth/Mouth Press_60.png", "mouth/Mouth Press_80.png",
+  "mouth/Mouth Press_100.png", "mouth/Mouth Smile_100.png",
+  "mouth/Mouth Smile Widen_60.png", "mouth/Mouth Stretch_40.png",
+  "mouth/Mouth Stretch_60.png", "mouth/Mouth Stretch_80.png",
+  "mouth/Mouth Upper Up_60.png", "mouth/Mouth Upper Up_80.png",
+  "mouth/Mouth Upper Up_100.png", "mouth/Mouth Pucker_60.png",
+  "mouth/Mouth Pucker_80.png", "mouth/Mouth Pucker_100.png",
+  "speech/phoneme_TH_80.png", "speech/phoneme_SH_CH_J_80.png",
+  "speech/vowel_U_80.png",
+] as const;
+
+type ImageDifference = { changedPercent: number; bounds: string };
+
+function measureImageDifference(
+  reference: HTMLImageElement,
+  candidate: HTMLImageElement,
+): ImageDifference {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = DIAGNOSTIC_SIZE;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Could not create Nova diagnostic canvas.");
+
+  context.drawImage(reference, 0, 0, DIAGNOSTIC_SIZE, DIAGNOSTIC_SIZE);
+  const referencePixels = context.getImageData(0, 0, DIAGNOSTIC_SIZE, DIAGNOSTIC_SIZE).data;
+  context.clearRect(0, 0, DIAGNOSTIC_SIZE, DIAGNOSTIC_SIZE);
+  context.drawImage(candidate, 0, 0, DIAGNOSTIC_SIZE, DIAGNOSTIC_SIZE);
+  const candidatePixels = context.getImageData(0, 0, DIAGNOSTIC_SIZE, DIAGNOSTIC_SIZE).data;
+
+  let changed = 0;
+  let minX = DIAGNOSTIC_SIZE, minY = DIAGNOSTIC_SIZE, maxX = -1, maxY = -1;
+  for (let y = 0; y < DIAGNOSTIC_SIZE; y++) {
+    for (let x = 0; x < DIAGNOSTIC_SIZE; x++) {
+      const i = (y * DIAGNOSTIC_SIZE + x) * 4;
+      const delta = Math.max(
+        Math.abs(referencePixels[i] - candidatePixels[i]),
+        Math.abs(referencePixels[i + 1] - candidatePixels[i + 1]),
+        Math.abs(referencePixels[i + 2] - candidatePixels[i + 2]),
+        Math.abs(referencePixels[i + 3] - candidatePixels[i + 3]),
+      );
+      if (delta > 12) {
+        changed++;
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+      }
+    }
+  }
+  return {
+    changedPercent: (changed / (DIAGNOSTIC_SIZE * DIAGNOSTIC_SIZE)) * 100,
+    bounds: changed ? `${minX},${minY}–${maxX},${maxY}` : "no visible difference",
+  };
+}
+
+function logMouthPlateDiagnostics(
+  base: HTMLImageElement,
+  loadedImages: Map<string, HTMLImageElement>,
+  unavailableSources: string[],
+): void {
+  const loadedMouths = MOUTH_DIAGNOSTIC_SOURCES.filter((source) => loadedImages.has(source));
+  console.groupCollapsed(`[Nova lip-sync debug] mouth plates: ${loadedMouths.length}/${MOUTH_DIAGNOSTIC_SOURCES.length} loaded`);
+  if (unavailableSources.length) {
+    console.warn("[Nova lip-sync debug] unavailable optional plates:", unavailableSources);
+  }
+  const rows = loadedMouths.map((source) => ({
+    source,
+    ...measureImageDifference(base, loadedImages.get(source)!),
+  }));
+  console.table(rows.map((item) => ({
+    plate: item.source,
+    changedFromBase: `${item.changedPercent.toFixed(2)}%`,
+    changedBounds128px: item.bounds,
+  })));
+  for (let i = 1; i < loadedMouths.length; i++) {
+    const previous = loadedImages.get(loadedMouths[i - 1])!;
+    const current = loadedImages.get(loadedMouths[i])!;
+    const difference = measureImageDifference(previous, current);
+    if (difference.changedPercent < 0.08) {
+      console.warn("[Nova lip-sync debug] mouth plates may be nearly identical:", {
+        first: loadedMouths[i - 1],
+        second: loadedMouths[i],
+        differingPixels: `${difference.changedPercent.toFixed(3)}%`,
+      });
+    }
+  }
+  console.groupEnd();
+}
 
 function sourceUrl(source: NovaSource): string {
   return `${NOVA_ROOT}/${source}?v=v21-production-20261008`;
@@ -160,6 +248,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const maskCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const renderFrameRef = useRef<number | null>(null);
   const currentWeightsRef = useRef<Partial<VisemeWeights>>({});
+  const lastMouthSourceRef = useRef<string | null>(null);
+  const missingMouthWarningsRef = useRef<Set<string>>(new Set());
   const targetParallax = useRef({ x: 0, y: 0 });
 
   const [ready, setReady] = useState(false);
@@ -232,6 +322,13 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     // Composite only pixels that differ from the neutral base render.
     const draw = (source: NovaSource, opacity = 1) => {
       if (source === NOVA_FILES.base) return;
+      if (!getImage(source) && (source.startsWith("mouth/") || source.startsWith("speech/"))) {
+        if (!missingMouthWarningsRef.current.has(source)) {
+          missingMouthWarningsRef.current.add(source);
+          console.warn("[Nova lip-sync debug] selected mouth plate is not loaded:", source);
+        }
+        return;
+      }
       const mask = getMask(source);
       if (!mask) return;
       ctx.save();
@@ -288,6 +385,18 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         mouth = "mouth/Mouth Smile Widen_60.png";
       }
 
+      if (lastMouthSourceRef.current !== mouth) {
+        lastMouthSourceRef.current = mouth;
+        console.debug("[Nova lip-sync debug] mouth plate changed:", {
+          plate: mouth,
+          jaw: Number(jaw.toFixed(2)), aa: Number(aa.toFixed(2)),
+          e: Number(e.toFixed(2)), i: Number(i.toFixed(2)),
+          o: Number(o.toFixed(2)), u: Number(u.toFixed(2)),
+          pp: Number(pp.toFixed(2)), ff: Number(ff.toFixed(2)),
+          th: Number(th.toFixed(2)), ch: Number(ch.toFixed(2)),
+          ss: Number(ss.toFixed(2)),
+        });
+      }
       draw(mouth);
       if (smile > .25) draw("face_deform/smile_50.png", .65);
     } else {
@@ -321,6 +430,15 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         if (cancelled) return;
         for (const item of loaded) {
           if (item) imagesRef.current.set(imageKey(item.source), item.image);
+        }
+        const unavailableSources = sources.filter((source) => !imagesRef.current.has(source));
+        const baseImage = imagesRef.current.get(NOVA_FILES.base);
+        if (baseImage) {
+          try {
+            logMouthPlateDiagnostics(baseImage, imagesRef.current, unavailableSources);
+          } catch (diagnosticError) {
+            console.warn("[Nova lip-sync debug] PNG comparison diagnostics failed:", diagnosticError);
+          }
         }
         if (!imagesRef.current.has(NOVA_FILES.base)) {
           throw new Error(`Required Nova v21 base image is missing: ${sourceUrl(NOVA_FILES.base)}`);
