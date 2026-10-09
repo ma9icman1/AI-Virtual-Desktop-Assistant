@@ -1,6 +1,6 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
-import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
+import { Mic, Volume2, Maximize2, Layers } from "lucide-react";
 
 export type EyeState = "open" | "half" | "closed";
 export type MouthState =
@@ -67,30 +67,6 @@ type NovaSource = string;
 type RGBAImage = {
   source: NovaSource;
   image: HTMLImageElement;
-};
-
-type DevLayerSettings = {
-  x: number;
-  y: number;
-  scale: number;
-  opacity: number;
-  visible: boolean;
-};
-
-type DevControls = {
-  mouth: DevLayerSettings;
-  face: DevLayerSettings;
-  eyes: DevLayerSettings;
-  eyebrows: DevLayerSettings;
-};
-
-const DEV_STORAGE_KEY = "nova_avatar_dev_controls_v2";
-
-const DEFAULT_DEV_CONTROLS: DevControls = {
-  mouth: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
-  face: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
-  eyes: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
-  eyebrows: { x: 0, y: 0, scale: 1, opacity: 1, visible: true },
 };
 
 const DIFF_THRESHOLD = 1;
@@ -189,64 +165,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [eyeState, setEyeState] = useState<EyeState>("open");
-  const [blinkDebugStatus, setBlinkDebugStatus] = useState("Waiting for first blink…");
-  const [mouthState, setMouthState] = useState<MouthState>("closed");
-  const [parallax, setParallax] = useState({ x: 0, y: 0 });
-  const [showDevControls, setShowDevControls] = useState(true);
-  const [devAutoAnimate, setDevAutoAnimate] = useState(true);
-  const [devMouthIndex, setDevMouthIndex] = useState(2);
-  const [devEyeIndex, setDevEyeIndex] = useState(0);
-  const [devFaceIndex, setDevFaceIndex] = useState(0);
-  const [devBrowIndex, setDevBrowIndex] = useState(0);
-  const [devControls, setDevControls] = useState<DevControls>(DEFAULT_DEV_CONTROLS);
-  const [devPanelPosition, setDevPanelPosition] = useState({ x: 16, y: 16 });
-  const devPanelDragRef = useRef({ dragging: false, offsetX: 0, offsetY: 0 });
-
-  useEffect(() => {
-    const toggleProductionDevGui = () => setShowDevControls((current) => !current);
-    window.addEventListener("nova-production-dev-gui-toggle", toggleProductionDevGui);
-    return () => window.removeEventListener("nova-production-dev-gui-toggle", toggleProductionDevGui);
-  }, []);
-
-  const handleDevPanelPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    const panel = event.currentTarget.parentElement;
-    const shell = event.currentTarget.closest(".avatar2d-shell");
-    if (!panel || !shell) return;
-
-    const shellRect = shell.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-
-    devPanelDragRef.current = {
-      dragging: true,
-      offsetX: event.clientX - panelRect.left,
-      offsetY: event.clientY - panelRect.top,
-    };
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      if (!devPanelDragRef.current.dragging) return;
-      const nextX = moveEvent.clientX - shellRect.left - devPanelDragRef.current.offsetX;
-      const nextY = moveEvent.clientY - shellRect.top - devPanelDragRef.current.offsetY;
-      const maxX = Math.max(8, shellRect.width - panelRect.width - 8);
-      const maxY = Math.max(8, shellRect.height - panelRect.height - 8);
-      setDevPanelPosition({
-        x: Math.max(8, Math.min(maxX, nextX)),
-        y: Math.max(8, Math.min(maxY, nextY)),
-      });
-    };
-
-    const handleUp = () => {
-      devPanelDragRef.current.dragging = false;
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-    };
-
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp, { once: true });
-  }, []);
-
   const sources = useMemo(() => {
     const values: NovaSource[] = [
       NOVA_FILES.base,
@@ -276,57 +194,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const getImage = useCallback((source: NovaSource) => {
     return imagesRef.current.get(imageKey(source)) ?? null;
   }, []);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(DEV_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<DevControls>;
-        setDevControls((current) => ({
-          ...current,
-          ...parsed,
-          mouth: { ...current.mouth, ...(parsed.mouth ?? {}) },
-          face: { ...current.face, ...(parsed.face ?? {}) },
-          eyes: { ...current.eyes, ...(parsed.eyes ?? {}) },
-          eyebrows: { ...current.eyebrows, ...(parsed.eyebrows ?? {}) },
-        }));
-      }
-    } catch (error) {
-      console.warn("[Nova 2.5D] dev control restore failed", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(devControls)); } catch {}
-  }, [devControls]);
-
-  const updateDevLayer = useCallback((layer: keyof DevControls, patch: Partial<DevLayerSettings>) => {
-    setDevControls((current) => ({ ...current, [layer]: { ...current[layer], ...patch } }));
-  }, []);
-
-  const resetDevControls = useCallback(() => {
-    setDevControls(DEFAULT_DEV_CONTROLS);
-    setDevMouthIndex(2);
-    setDevEyeIndex(0);
-    setDevFaceIndex(0);
-    setDevBrowIndex(0);
-    setDevAutoAnimate(true);
-  }, []);
-
-  const mouthSources: NovaSource[] = [
-  "mouth/Mouth Press_100.png","mouth/Mouth Smile_100.png","mouth/Mouth Stretch_60.png",
-  "mouth/Mouth Upper Up_100.png","mouth/Mouth Pucker_80.png"
-];
-  const eyeSources: NovaSource[] = ["blinks/open.png","blinks/half.png","blinks/closed.png"];
-  const faceSources: NovaSource[] = [
-    "face_deform/lip_25.png","face_deform/smile_50.png","face_deform/frown_50.png",
-    "face_deform/cheek_50.png","face_deform/mouth wide_75.png"
-  ];
-  const browSources: NovaSource[] = [
-    "eyebrows/Brow Down_50.png","eyebrows/Brow Up_50.png","eyebrows/Brow Inner Up_50.png",
-    "eyebrows/Brow Outer Up Left_50.png","eyebrows/Brow Outer Up Right_50.png",
-    "eyebrows/Brow Squeeze_50.png","eyebrows/Brow Down_100.png"
-  ];
 
   const getMask = useCallback(
     (source: NovaSource): HTMLCanvasElement | null => {
@@ -422,7 +289,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       draw(mouth);
       if (smile > .25) draw("face_deform/smile_50.png", .65);
     } else {
-      draw(devAutoAnimate ? "mouth/Mouth Press_20.png" : mouthSources[devMouthIndex]);
+      draw("mouth/Mouth Press_20.png");
     }
 
     const brow = currentWeightsRef.current.browInnerUp ?? 0;
@@ -432,12 +299,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     // are full renders turned into difference masks; their masks can still
     // touch pixels around the eyes. Drawing blink earlier lets those later
     // layers repaint the eyes open again even while eyeState says "closed".
-    if (devAutoAnimate && eyeState !== "open") {
-      draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
-    } else if (!devAutoAnimate && devEyeIndex > 0) {
-      draw(devEyeIndex === 1 ? "blinks/half.png" : "blinks/closed.png");
-    }
-  }, [eyeState, isSpeaking, isListening, devAutoAnimate, devEyeIndex, devMouthIndex, mouthSources, parallax, enableParallax, getImage, getMask]);
+    if (eyeState !== "open") draw(eyeState === "half" ? "blinks/half.png" : "blinks/closed.png");
+  }, [eyeState, isSpeaking, isListening, parallax, enableParallax, getImage, getMask]);
 
   useEffect(() => {
     let cancelled = false;
@@ -503,8 +366,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     const unsub = LipSyncEngine.getInstance().subscribe((weights) => {
       currentWeightsRef.current = weights;
 
-      if (!devAutoAnimate) return;
-
       if (!isSpeaking) {
         setMouthState(
           (weights.mouthSmileLeft ?? 0) > 0.2 || isListening
@@ -534,7 +395,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     });
 
     return () => unsub();
-  }, [isSpeaking, isListening, devAutoAnimate]);
+  }, [isSpeaking, isListening]);
 
 
   useEffect(() => {
@@ -544,41 +405,34 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     let blinkReturnTimeout = 0;
     let cancelled = false;
 
-    setBlinkDebugStatus(devAutoAnimate ? "SCHEDULER ACTIVE — waiting" : "AUTO ANIMATION OFF");
-    console.debug("[Nova Blink Debug] scheduler effect started; auto animation:", devAutoAnimate);
-
     const executeBlink = (onComplete: () => void) => {
-      if (cancelled || !devAutoAnimate) {
+      if (cancelled) {
         onComplete();
         return;
       }
-      setBlinkDebugStatus("BLINK START → HALF");
-      console.debug("[Nova Blink Debug] blink start -> half");
+
       setEyeState("half");
       blinkHalfTimeout = window.setTimeout(() => {
-        if (cancelled || !devAutoAnimate) return onComplete();
-        setBlinkDebugStatus("HALF → CLOSED");
-        console.debug("[Nova Blink Debug] half -> closed");
+        if (cancelled) return onComplete();
+
         setEyeState("closed");
         blinkClosedTimeout = window.setTimeout(() => {
-          if (cancelled || !devAutoAnimate) return onComplete();
-          setBlinkDebugStatus("CLOSED → HALF");
-          console.debug("[Nova Blink Debug] closed -> half");
+          if (cancelled) return onComplete();
+
           setEyeState("half");
           blinkReturnTimeout = window.setTimeout(() => {
-            if (cancelled || !devAutoAnimate) return onComplete();
-            setBlinkDebugStatus("OPEN — blink complete");
-            console.debug("[Nova Blink Debug] half -> open; blink complete");
+            if (cancelled) return onComplete();
+
             setEyeState("open");
             onComplete();
-          }, 110);
-        }, 140);
-      }, 90);
+          }, 70);
+        }, 90);
+      }, 65);
     };
 
     const scheduleNextBlink = () => {
-      // Frequent, visible blinks: 2.5–5.5 seconds between blinks.
-      const delay = Math.random() * 3000 + 2500;
+      // Natural, slightly quicker blinks: about 2–4.2 seconds apart.
+      const delay = Math.random() * 2200 + 2000;
       blinkTimeout = window.setTimeout(() => {
         executeBlink(() => {
           if (Math.random() < 0.25) {
@@ -600,7 +454,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
       window.clearTimeout(blinkReturnTimeout);
       setEyeState("open");
     };
-  }, [devAutoAnimate]);
+  }, []);
 
   useEffect(() => {
     if (!enableParallax) return;
@@ -675,87 +529,6 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         </div>
       </div>
 
-      {showDevControls && (
-        <div
-          className="absolute z-[9999] pointer-events-auto w-[300px] max-w-[calc(100vw-24px)] max-h-[46vh] min-h-0 overflow-y-auto rounded-xl border border-cyan-500/30 bg-slate-950/90 p-2 shadow-2xl backdrop-blur-md"
-          style={{ left: devPanelPosition.x, top: devPanelPosition.y }}
-        >
-          <div
-            className="mb-1 flex items-center justify-between gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/30 px-2 py-1.5 cursor-grab active:cursor-grabbing touch-none pointer-events-auto"
-            onPointerDown={handleDevPanelPointerDown}
-            title="Drag to move the Nova 2.5D developer GUI"
-          >
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-cyan-300">Nova 2.5D PRODUCTION DEV</div>
-              <div className="text-[9px] text-slate-500">Drag this header to move • Live controls linked directly to production animation images</div>
-            </div>
-            <button
-              type="button"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => { event.stopPropagation(); resetDevControls(); }}
-              className="shrink-0 rounded border border-slate-700 px-2 py-1 text-[9px]"
-            >
-              RESET
-            </button>
-          </div>
-          <label className="mb-2 flex items-center justify-between rounded bg-slate-900 p-1.5 text-[10px] pointer-events-auto">
-            <span>Auto animation</span>
-            <input
-              onPointerDown={(e)=>e.stopPropagation()}
-              type="checkbox"
-              checked={devAutoAnimate}
-              onChange={(e) => {
-                const enabled = e.currentTarget.checked;
-                setDevAutoAnimate(enabled);
-                if (!enabled) {
-                  setEyeState("open");
-                  setMouthState("closed");
-                }
-              }}
-            />
-          </label>
-          <div className="mb-2 rounded bg-slate-900 p-1.5">
-            <div className="mb-1 text-[10px] font-bold text-pink-300">MOUTH IMAGE</div>
-            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Lip-sync" : ["Closed","Smile","Open Small","Open Wide","O"][devMouthIndex]}</span><span className="truncate text-cyan-400/70">{mouthSources[devMouthIndex]}</span></div>
-            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="4" step="1" value={devMouthIndex} disabled={devAutoAnimate} onChange={(e) => setDevMouthIndex(Number(e.target.value))} />
-            <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.x} onChange={(e)=>updateDevLayer("mouth",{x:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.mouth.y} onChange={(e)=>updateDevLayer("mouth",{y:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.mouth.scale} onChange={(e)=>updateDevLayer("mouth",{scale:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.mouth.opacity} onChange={(e)=>updateDevLayer("mouth",{opacity:Number(e.target.value)})}/></label>
-          </div>
-          <div className="mb-3 rounded bg-slate-900 p-2">
-            <div className="mb-1 text-[10px] font-bold text-cyan-300">EYES / BLINK</div>
-            <div className="mb-1 rounded border border-cyan-500/20 bg-black/40 px-1.5 py-1 text-[9px] font-bold text-emerald-300">
-              BLINK DEBUG: {blinkDebugStatus}
-            </div>
-            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? eyeState : ["Open","Half","Closed"][devEyeIndex]}</span><span className="truncate text-cyan-400/70">{eyeSources[devEyeIndex]}</span></div>
-            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="2" step="1" value={devEyeIndex} disabled={devAutoAnimate} onChange={(e)=>setDevEyeIndex(Number(e.target.value))}/>
-            <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.x} onChange={(e)=>updateDevLayer("eyes",{x:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyes.y} onChange={(e)=>updateDevLayer("eyes",{y:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.eyes.scale} onChange={(e)=>updateDevLayer("eyes",{scale:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.eyes.opacity} onChange={(e)=>updateDevLayer("eyes",{opacity:Number(e.target.value)})}/></label>
-          </div>
-          <div className="rounded bg-slate-900 p-2">
-            <div className="mb-1 text-[10px] font-bold text-violet-300">FACE DEFORM</div>
-            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Auto state" : ["Neutral","Smile","Frown","Cheek","Wide"][devFaceIndex]}</span><span className="truncate text-cyan-400/70">{faceSources[devFaceIndex]}</span></div>
-            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="4" step="1" value={devFaceIndex} disabled={devAutoAnimate} onChange={(e)=>setDevFaceIndex(Number(e.target.value))}/>
-            <label className="block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.face.x} onChange={(e)=>updateDevLayer("face",{x:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.face.y} onChange={(e)=>updateDevLayer("face",{y:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.face.scale} onChange={(e)=>updateDevLayer("face",{scale:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.face.opacity} onChange={(e)=>updateDevLayer("face",{opacity:Number(e.target.value)})}/></label>
-          </div>
-          <div className="mt-2 rounded bg-slate-900 p-1.5">
-            <div className="mb-1 text-[10px] font-bold text-amber-300">EYEBROWS</div>
-            <div className="flex items-center gap-2 text-[9px] text-slate-500"><span>{devAutoAnimate ? "Neutral" : ["Neutral","Up","Inner Up","Outer Left","Outer Right","Squeeze","Down"][devBrowIndex]}</span><span className="truncate text-cyan-400/70">{browSources[devBrowIndex]}</span></div>
-            <input onPointerDown={(e)=>e.stopPropagation()} className="w-full pointer-events-auto cursor-pointer" type="range" min="0" max="6" step="1" value={devBrowIndex} disabled={devAutoAnimate} onChange={(e)=>setDevBrowIndex(Number(e.target.value))}/>
-            <label className="mt-2 block text-[9px]">X <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.x} onChange={(e)=>updateDevLayer("eyebrows",{x:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Y <input className="w-full" type="range" min="-120" max="120" value={devControls.eyebrows.y} onChange={(e)=>updateDevLayer("eyebrows",{y:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Scale <input className="w-full" type="range" min=".75" max="1.25" step=".01" value={devControls.eyebrows.scale} onChange={(e)=>updateDevLayer("eyebrows",{scale:Number(e.target.value)})}/></label>
-            <label className="block text-[9px]">Opacity <input className="w-full" type="range" min="0" max="1" step=".01" value={devControls.eyebrows.opacity} onChange={(e)=>updateDevLayer("eyebrows",{opacity:Number(e.target.value)})}/></label>
-          </div>
-        </div>
-      )}
-
       <div className="avatar2d-controls absolute flex flex-col items-center z-20">
         <div
           className="relative flex items-center justify-center rounded-full border border-slate-700/80 bg-slate-950/90 shadow-lg shadow-black/30"
@@ -829,21 +602,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
               <Maximize2 className="w-4 h-4" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setShowDevControls((v) => !v)}
-            className={`avatar2d-tool !flex !flex-row !gap-1.5 !px-3 !text-[11px] !font-black !tracking-wide ${
-              showDevControls
-                ? "!bg-cyan-600 !text-white shadow-lg shadow-cyan-600/30"
-                : "!text-cyan-300 hover:!text-cyan-100 hover:!bg-cyan-950"
-            }`}
-            title={showDevControls ? "Hide Nova 2.5D Production Developer GUI" : "Open Nova 2.5D Production Developer GUI"}
-            aria-label="Open Nova 2.5D Production Developer GUI"
-          >
-            <SlidersHorizontal className="!h-4 !w-4" />
-            <span>DEV GUI</span>
-          </button>
-        </div>
+      </div>
       </div>
     </div>
   );
