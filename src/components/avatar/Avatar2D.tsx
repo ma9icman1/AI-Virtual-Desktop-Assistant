@@ -718,7 +718,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
         className="avatar2d-stage relative w-full h-full flex items-center justify-center"
         style={{
           transformStyle: "preserve-3d",
-          transform: `translateX(-8%) rotateY(${rotY}deg) rotateX(${rotX}deg)`,
+          transform: `translateX(0%) rotateY(${rotY}deg) rotateX(${rotX}deg)`,
         }}
       >
         <div
@@ -730,7 +730,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             aria-label="Nova 2.5D avatar"
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             style={{
-              transform: `translateZ(0px) scale(1.22)`,
+              transform: `translateZ(0px) scale(1.38)`,
               transformOrigin: "center center",
               filter: "drop-shadow(0 20px 30px rgba(0,0,0,0.5))",
             }}
