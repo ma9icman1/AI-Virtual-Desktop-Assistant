@@ -759,7 +759,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             onSendMessage(message);
             setChatInput("");
           }}
-          className="absolute bottom-[5.5rem] left-1/2 z-[9998] flex w-[min(360px,calc(100vw-24px))] -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-1.5 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
+          className="absolute bottom-5 left-1/2 z-[9998] flex w-[min(720px,calc(100vw-28px))] -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-1.5 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
           onPointerDown={(event) => event.stopPropagation()}
         >
           <input
@@ -768,13 +768,13 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             onChange={(event) => setChatInput(event.target.value)}
             placeholder="Message Nova…"
             aria-label="Message Nova"
-            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-white placeholder:text-slate-400 outline-none focus:border-cyan-300/70"
+            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-cyan-300/70"
           />
           <button
             type="submit"
             disabled={!chatInput.trim()}
             aria-label="Send message to Nova"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Send size={18} />
           </button>
