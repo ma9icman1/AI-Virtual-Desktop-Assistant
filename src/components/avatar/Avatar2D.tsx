@@ -1,6 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LipSyncEngine, VisemeWeights } from "../../services/lipSyncEngine";
-import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal } from "lucide-react";
+import { Mic, Volume2, Maximize2, Layers, SlidersHorizontal, Send } from "lucide-react";
 
 export type EyeState = "open" | "half" | "closed";
 export type MouthState =
@@ -17,6 +17,7 @@ interface Avatar2DProps {
   onSpeakGreeting?: () => void;
   onToggleListening?: () => void;
   onToggleFullView?: () => void;
+  onSendMessage?: (text: string) => void;
   onSwitchMode?: (mode: "avatar" | "avatar2d" | "orb") => void;
   status?: string;
   voiceNotice?: string | null;
@@ -171,6 +172,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   onSpeakGreeting,
   onToggleListening,
   onToggleFullView,
+  onSendMessage,
   onSwitchMode,
   status = "idle",
   voiceNotice = null,
@@ -193,6 +195,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
   const [eyeState, setEyeState] = useState<EyeState>("open");
   const [mouthState, setMouthState] = useState<MouthState>("closed");
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  const [chatInput, setChatInput] = useState("");
   const [showDevControls, setShowDevControls] = useState(false);
   const [devAutoAnimate, setDevAutoAnimate] = useState(true);
   const [devMouthIndex, setDevMouthIndex] = useState(2);
@@ -462,10 +465,10 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     const px = enableParallax ? parallax.x : 0;
     const py = enableParallax ? parallax.y : 0;
     const eye =
-      Math.abs(px) < .33 && Math.abs(py) < .33 ? "eyes/center.png" :
-      py < -.33 ? (px < -.33 ? "eyes/up_left.png" : px > .33 ? "eyes/up_right.png" : "eyes/up.png") :
-      py > .33 ? (px < -.33 ? "eyes/down_left.png" : px > .33 ? "eyes/down_right.png" : "eyes/down.png") :
-      px < -.33 ? "eyes/left.png" : "eyes/right.png";
+      Math.abs(px) < .12 && Math.abs(py) < .12 ? "eyes/center.png" :
+      py < -.12 ? (px < -.12 ? "eyes/up_left.png" : px > .12 ? "eyes/up_right.png" : "eyes/up.png") :
+      py > .12 ? (px < -.12 ? "eyes/down_left.png" : px > .12 ? "eyes/down_right.png" : "eyes/down.png") :
+      px < -.12 ? "eyes/left.png" : "eyes/right.png";
     draw(eye);
 
     if (devAutoAnimate && eyeState !== "open") {
@@ -745,6 +748,37 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
           )}
         </div>
       </div>
+
+      {onSendMessage && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const message = chatInput.trim();
+            if (!message) return;
+            onSendMessage(message);
+            setChatInput("");
+          }}
+          className="absolute bottom-5 left-1/2 z-[9998] flex w-[min(720px,calc(100vw-28px))] -translate-x-1/2 items-center gap-2 rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-2 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(event) => setChatInput(event.target.value)}
+            placeholder="Message Nova…"
+            aria-label="Message Nova"
+            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-cyan-300/70"
+          />
+          <button
+            type="submit"
+            disabled={!chatInput.trim()}
+            aria-label="Send message to Nova"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Send size={18} />
+          </button>
+        </form>
+      )}
 
       {showDevControls && (
         <div
