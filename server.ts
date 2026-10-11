@@ -242,7 +242,7 @@ function normalizeDesktopIntent(message: string, parsed: any, visionContext: any
     "twitter.com": "https://x.com",
   };
   const bareCommonSiteMatch = commandText.match(
-    /^(?:please\\s+)?(?:open|go\\s+to|visit|load|browse\\s+to|navigate\\s+to)\\s+([a-z0-9.-]+)(?:\\s+website)?$/i
+    /^(?:please\s+)?(?:open|go\s+to|visit|load|browse\s+to|navigate\s+to)\s+([a-z0-9.-]+)(?:\s+website)?$/i
   );
   if (bareCommonSiteMatch) {
     const key = String(bareCommonSiteMatch[1] || "").toLowerCase();
