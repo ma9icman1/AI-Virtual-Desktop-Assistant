@@ -6,7 +6,6 @@ import {
   Bluetooth,
   Mic,
   ShieldCheck,
-  Zap,
   Sliders,
   Cpu,
   RefreshCw,
@@ -46,10 +45,8 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({
     ollamaHost: "http://127.0.0.1:11434",
     ollamaModel: "minicpm-v:latest",
     ollamaVisionModel: "minicpm-v:latest",
-    geminiModel: "gemini-2.5-flash",
     ollamaOnline: false,
     availableOllamaModels: [],
-    hasGeminiKey: false,
   });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
@@ -149,41 +146,13 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({
           </div>
         </div>
 
-        {/* Provider Switch */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => updateAiConfig({ provider: "ollama" })}
-            className={`p-2.5 rounded-xl border text-left transition flex items-start gap-2.5 ${
-              aiConfig.provider === "ollama"
-                ? "bg-purple-500/20 border-purple-500/50 text-purple-200"
-                : "bg-slate-800/40 border-white/5 text-slate-400 hover:text-white"
-            }`}
-          >
-            <Cpu className="w-4 h-4 mt-0.5 text-purple-400 shrink-0" />
-            <div>
-              <div className="font-semibold text-xs">Local Ollama</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Offline, Private & Local GPU</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => updateAiConfig({ provider: "gemini" })}
-            className={`p-2.5 rounded-xl border text-left transition flex items-start gap-2.5 ${
-              aiConfig.provider === "gemini"
-                ? "bg-sky-500/20 border-sky-500/50 text-sky-200"
-                : "bg-slate-800/40 border-white/5 text-slate-400 hover:text-white"
-            }`}
-          >
-            <Zap className="w-4 h-4 mt-0.5 text-sky-400 shrink-0" />
-            <div>
-              <div className="font-semibold text-xs">Google Gemini</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Cloud API (Gemini 2.5 Flash)</div>
-            </div>
-          </button>
+        <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 text-purple-200">
+          <div className="font-semibold text-xs">Local Ollama only</div>
+          <div className="mt-1 text-[10px] text-slate-400">Nova uses your local models. Cloud AI providers have been removed from Settings.</div>
         </div>
 
         {/* Ollama Settings Section */}
-        {aiConfig.provider === "ollama" && (
+        {true && (
           <div className="space-y-2.5 pt-1">
             {/* Ollama Host */}
             <div className="space-y-1">
