@@ -680,8 +680,14 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     if (!enableParallax) return;
 
     const handleMouseMove = (event: MouseEvent) => {
-      const nx = (event.clientX / window.innerWidth) * 2 - 1;
-      const ny = (event.clientY / window.innerHeight) * 2 - 1;
+      // Track gaze relative to Nova's canvas, not the whole desktop/window.
+      // This keeps the eyes responsive when the avatar is docked or resized.
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const nx = ((event.clientX - (rect.left + rect.width / 2)) / (rect.width / 2));
+      const ny = ((event.clientY - (rect.top + rect.height / 2)) / (rect.height / 2));
       targetParallax.current = {
         x: Math.max(-1, Math.min(1, nx)),
         y: Math.max(-1, Math.min(1, ny)),
@@ -730,7 +736,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             aria-label="Nova 2.5D avatar"
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             style={{
-              transform: `translateZ(0px) scale(1.22)`,
+              transform: `translateZ(0px) scale(1.0)`,
               transformOrigin: "center center",
               filter: "drop-shadow(0 20px 30px rgba(0,0,0,0.5))",
             }}
@@ -759,7 +765,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             onSendMessage(message);
             setChatInput("");
           }}
-          className="absolute bottom-5 left-1/2 z-[9998] flex w-[min(720px,calc(100vw-28px))] -translate-x-1/2 items-center gap-2 rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-2 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
+          className="absolute bottom-5 left-1/2 z-[9998] flex w-[min(720px,calc(100vw-28px))] -translate-x-1/2 items-center gap-2 rounded-2xl border border-cyan-300/25 bg-slate-950/55 p-2 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
           onPointerDown={(event) => event.stopPropagation()}
         >
           <input
@@ -768,7 +774,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             onChange={(event) => setChatInput(event.target.value)}
             placeholder="Message Nova…"
             aria-label="Message Nova"
-            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-cyan-300/70"
+            className="min-w-0 flex-1 rounded-xl border border-slate-700/80 bg-slate-900/55 px-4 py-3 text-sm text-white placeholder:text-slate-300 outline-none focus:border-cyan-300/70"
           />
           <button
             type="submit"
