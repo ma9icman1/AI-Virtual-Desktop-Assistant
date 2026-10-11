@@ -85,7 +85,7 @@ export default function App() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [visualMode, setVisualMode] = useState<"avatar" | "orb">("avatar");
   const [avatarMode, setAvatarMode] = useState<"2d" | "3d">("2d");
-  const [experienceMode, setExperienceMode] = useState<"full" | "model">("model");
+  const [experienceMode, setExperienceMode] = useState<"full" | "model">("full");
   const [showVisualStage, setShowVisualStage] = useState(false);
   const [modelConnected, setModelConnected] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
