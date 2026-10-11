@@ -1196,7 +1196,7 @@ export default function App() {
 
           console.log("[PLAN EXECUTOR] YouTube direct-search override", {
             query,
-            url: normalizedSteps[0].params.url
+            url: normalizedSteps[0]?.params?.url
           });
         }
       }
