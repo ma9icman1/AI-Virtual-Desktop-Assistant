@@ -564,3 +564,15 @@ body.avatar-overlay .avatar2d-tool {
   height: 30px !important;
   min-width: 30px !important;
 }
+
+
+/* [nova-desktop-shell-transparent-overlay-v2] */
+/* The Electron desktop shell and the avatar overlay classes are both active
+   together. This higher-specificity rule keeps the overlay transparent while
+   leaving the normal desktop/chat window opaque. */
+body.desktop-shell.avatar-overlay,
+body.desktop-shell.avatar-overlay #root {
+  background: transparent !important;
+  background-color: rgba(0, 0, 0, 0) !important;
+  background-image: none !important;
+}
