@@ -12,6 +12,7 @@ import {
   Eye,
   CheckCircle2,
   AlertCircle,
+  Zap,
 } from "lucide-react";
 import { SystemMetrics, VoiceSettings, PermissionLevel, AIConfig } from "../../types";
 
