@@ -1,7 +1,5 @@
 ﻿import express from "express";
 import path from "path";
-import { Readable } from "stream";
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -21,17 +19,13 @@ app.use((_req, res, next) => {
   next();
 });const APP_ROOT = process.env.MAGIC_APP_ROOT || process.cwd();
 const PORT = Number(process.env.PORT || 3000);
-const DRIVE_MODEL_URL =
-  "https://drive.usercontent.google.com/download?id=1vcrb7KBpUkOlfpXYcE30FzVxpTaNvEp2&export=download&confirm=t";
-
 // AI Engine Configuration State
 let OLLAMA_HOST = process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
-let activeProvider: "ollama" | "gemini" = (process.env.AI_PROVIDER as any) || "ollama";
+let activeProvider: "ollama" = "ollama";
 const DEFAULT_OLLAMA_MODEL = "minicpm-magic-assistant:latest";
 const DEFAULT_OLLAMA_VISION_MODEL = "minicpm-v:latest";
 let activeOllamaModel = process.env.OLLAMA_CHAT_MODEL || DEFAULT_OLLAMA_MODEL;
 let activeOllamaVisionModel = process.env.OLLAMA_VISION_MODEL || DEFAULT_OLLAMA_VISION_MODEL;
-let activeGeminiModel = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
 function describeOllamaError(error: any): string {
   const message = String(error?.message || error || "Unknown Ollama error");
@@ -1177,27 +1171,7 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use("/models", express.static(path.join(APP_ROOT, "public", "models")));
 app.use(express.static(path.join(APP_ROOT, "public")));
 
-app.get("/api/models/nova.compressed.glb", async (_req, res) => {
-  try {
-    const localPath = path.join(APP_ROOT, "public", "models", "nova.compressed.glb");
-    if (fs.existsSync(localPath)) {
-      return res.sendFile(localPath);
-    }
-
-    const modelResponse = await fetch(DRIVE_MODEL_URL);
-    if (!modelResponse.ok || !modelResponse.body) {
-      return res.status(modelResponse.status || 502).send("Unable to download avatar model");
-    }
-
-    res.setHeader("Content-Type", modelResponse.headers.get("content-type") || "model/gltf-binary");
-    const contentLength = modelResponse.headers.get("content-length");
-    if (contentLength) res.setHeader("Content-Length", contentLength);
-    Readable.fromWeb(modelResponse.body as any).pipe(res);
-  } catch (error) {
-    console.error("Error proxying avatar model:", error);
-    if (!res.headersSent) res.status(502).send("Unable to download avatar model");
-  }
-});
+app.get("/api/models/nova.compressed.glb", (_req, res) => { const localPath = path.join(APP_ROOT, "public", "models", "nova.compressed.glb"); if (fs.existsSync(localPath)) return res.sendFile(localPath); return res.status(404).send("Local avatar model is not installed."); });
 
 // ==========================================
 // Neural TTS System: Option 1 (Edge TTS) + Option 3 (Kokoro TTS Offline) + SAPI Falloff
@@ -1581,140 +1555,12 @@ function parseLooseJson(raw: string): any | null {
   return null;
 }
 
-// Gemini initialization
-let aiClient: GoogleGenAI | null = null;
-function getAI(): GoogleGenAI {
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY || "",
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-  }
-  return aiClient;
-}
+// Cloud transcription removed; voice recognition stays local.
+app.post("/api/transcribe", (_req, res) => res.status(410).json({ available: false, error: "Cloud transcription was removed. Use local voice recognition." }));
 
-// Helper: Gemini fallback generator
-async function generateContentWithFallback(ai: GoogleGenAI, baseConfig: any, timeoutMs = 8000) {
-  const fallbackModels = [activeGeminiModel, "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"];
-  let lastErr: any = null;
-
-  for (let i = 0; i < fallbackModels.length; i++) {
-    const model = fallbackModels[i];
-    try {
-      const callPromise = ai.models.generateContent({
-        ...baseConfig,
-        model,
-      });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout generating with ${model}`)), timeoutMs)
-      );
-      const response = (await Promise.race([callPromise, timeoutPromise])) as any;
-      return response;
-    } catch (err: any) {
-      lastErr = err;
-      const code = err?.status || err?.code || err?.error?.code;
-      console.warn(`[Gemini] ${model} unavailable (${err?.message || code}). Attempting next fallback...`);
-      if (i < fallbackModels.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      }
-    }
-  }
-
-  throw lastErr;
-}
-
-// Low-confidence voice correction. The local Windows recognizer remains the
-// first pass; this endpoint is only used when the renderer asks for a retry.
-app.post("/api/transcribe", async (req, res) => {
-  try {
-    const { audioBase64, mimeType = "audio/webm" } = req.body || {};
-    if (!audioBase64 || typeof audioBase64 !== "string") {
-      return res.status(400).json({ error: "audioBase64 is required" });
-    }
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(503).json({ available: false, error: "Cloud transcription is not configured." });
-    }
-
-    const ai = getAI();
-    const response = await generateContentWithFallback(ai, {
-      contents: [{
-        role: "user",
-        parts: [
-          {
-            inlineData: {
-              data: audioBase64.replace(/^data:[^;]+;base64,/, ""),
-              mimeType,
-            },
-          },
-          {
-            text: "Transcribe the spoken English in this recording exactly. Return only the words spoken, with no explanation. If there is no clear speech, return an empty string.",
-          },
-        ],
-      }],
-    }, 15000);
-
-    const text = String(response.text || "")
-      .replace(/^```(?:text)?\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-    return res.json({ available: true, text, confidence: text ? 0.9 : 0 });
-  } catch (error: any) {
-    console.warn("[Voice] Cloud transcription failed:", error?.message || error);
-    return res.status(502).json({ available: false, error: "Cloud transcription failed." });
-  }
-});
-
-// GET AI Configuration & Status
-app.get("/api/ai/config", async (_req, res) => {
-  const ollama = await getOllamaStatus();
-  res.json({
-    provider: activeProvider,
-    ollamaHost: OLLAMA_HOST,
-    ollamaModel: activeOllamaModel,
-    ollamaVisionModel: activeOllamaVisionModel,
-    geminiModel: activeGeminiModel,
-    ollamaOnline: ollama.online,
-    availableOllamaModels: ollama.models,
-    hasGeminiKey: !!process.env.GEMINI_API_KEY,
-  });
-});
-
-// POST update AI configuration
-app.post("/api/ai/config", async (req, res) => {
-  const { provider, ollamaHost, ollamaModel, ollamaVisionModel, geminiModel } = req.body;
-  if (provider === "ollama" || provider === "gemini") {
-    activeProvider = provider;
-  }
-  if (ollamaHost && typeof ollamaHost === "string") {
-    OLLAMA_HOST = ollamaHost.trim();
-  }
-  if (ollamaModel && typeof ollamaModel === "string") {
-    activeOllamaModel = ollamaModel.trim();
-  }
-  if (ollamaVisionModel && typeof ollamaVisionModel === "string") {
-    activeOllamaVisionModel = ollamaVisionModel.trim();
-  }
-  if (geminiModel && typeof geminiModel === "string") {
-    activeGeminiModel = geminiModel.trim();
-  }
-
-  const ollama = await getOllamaStatus();
-  res.json({
-    success: true,
-    provider: activeProvider,
-    ollamaHost: OLLAMA_HOST,
-    ollamaModel: activeOllamaModel,
-    ollamaVisionModel: activeOllamaVisionModel,
-    geminiModel: activeGeminiModel,
-    ollamaOnline: ollama.online,
-    availableOllamaModels: ollama.models,
-    hasGeminiKey: !!process.env.GEMINI_API_KEY,
-  });
-});
+// AI configuration — local Ollama only.
+app.get("/api/ai/config", async (_req, res) => { const ollama = await getOllamaStatus(); res.json({ provider: "ollama", ollamaHost: OLLAMA_HOST, ollamaModel: activeOllamaModel, ollamaVisionModel: activeOllamaVisionModel, ollamaOnline: ollama.online, availableOllamaModels: ollama.models }); });
+app.post("/api/ai/config", async (req, res) => { const { ollamaHost, ollamaModel, ollamaVisionModel } = req.body || {}; if (typeof ollamaHost === "string" && ollamaHost.trim()) OLLAMA_HOST = ollamaHost.trim(); if (typeof ollamaModel === "string" && ollamaModel.trim()) activeOllamaModel = ollamaModel.trim(); if (typeof ollamaVisionModel === "string" && ollamaVisionModel.trim()) activeOllamaVisionModel = ollamaVisionModel.trim(); const ollama = await getOllamaStatus(); res.json({ success: true, provider: "ollama", ollamaHost: OLLAMA_HOST, ollamaModel: activeOllamaModel, ollamaVisionModel: activeOllamaVisionModel, ollamaOnline: ollama.online, availableOllamaModels: ollama.models }); });
 
 // List Ollama models
 app.get("/api/ollama/models", async (_req, res) => {
@@ -1731,7 +1577,6 @@ app.get("/api/health", async (_req, res) => {
     version: "1.0.0-win11",
     activeProvider,
     ollamaOnline: ollama.online,
-    hasApiKey: !!process.env.GEMINI_API_KEY,
   });
 });
 
@@ -1854,132 +1699,17 @@ Return ONLY valid JSON matching this structure:
   "status": "idle" | "listening" | "executing" | "complete"
 }`;
 
-    // Check if Ollama should be used (default or if selected or if no Gemini key)
-    const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
-
-    if (useOllama) {
-      try {
-        const chatMessages = [
-          ...history.slice(-4).map((h: any) => ({
-            role: h.role === "assistant" ? "assistant" : "user",
-            content: h.content,
-          })),
-          {
-            role: "user",
-            content: message,
-          },
-        ];
-
-        let rawContent: string;
-        let lastChatError: any;
-        for (const model of [activeOllamaModel, DEFAULT_OLLAMA_MODEL, "minicpm-v:latest"].filter(
-          (model, index, models) => model && models.indexOf(model) === index
-        )) {
-          try {
-            rawContent = await callOllamaChat({ model, systemPrompt, messages: chatMessages, formatJson: true, options: { temperature: 0.2, num_ctx: 4096, num_predict: 180 } });
-            lastChatError = null;
-            break;
-          } catch (error) {
-            lastChatError = error;
-          }
-        }
-        if (lastChatError || !rawContent!) throw lastChatError || new Error("No Ollama chat response");
-
-        let parsed: any;
         try {
-          parsed = JSON.parse(rawContent);
-        } catch {
-          const match = rawContent.match(/\{[\s\S]*\}/);
-          parsed = match ? JSON.parse(match[0]) : null;
-        }
-
-        if (!parsed) {
-          parsed = {
-            spokenResponse: rawContent.replace(/```json|```/g, "").trim() || "How can I assist you?",
-            action: { type: "NONE" },
-            status: "complete",
-          };
-        }
-
-        parsed = normalizeDesktopIntent(message, parsed, visionContext);
-        const spoken = parsed.spokenResponse || parsed.spokenReply || "How can I assist you?";
-        return res.json({
-          ...parsed,
-          spokenResponse: spoken,
-          spokenReply: spoken,
-          provider: "ollama",
-          model: activeOllamaModel,
-        });
-      } catch (ollamaErr: any) {
-        console.warn("[Ollama] Local chat error:", ollamaErr.message);
-        if (!process.env.GEMINI_API_KEY) {
-          return res.json({
-            spokenResponse: describeOllamaError(ollamaErr),
-            spokenReply: describeOllamaError(ollamaErr),
-            action: { type: "NONE" },
-            status: "idle",
-            warning: describeOllamaError(ollamaErr),
-          });
-        }
-        // Fall back to Gemini if available
-      }
-    }
-
-    // Gemini Execution Path
-    const ai = getAI();
-    const contents = [
-      ...history.slice(-4).map((h: any) => ({
-        role: h.role === "assistant" ? "model" : "user",
-        parts: [{ text: h.content }],
-      })),
-      {
-        role: "user",
-        parts: [{ text: message }],
-      },
-    ];
-
-    const response = await generateContentWithFallback(ai, {
-      contents,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-      },
-    });
-
-    const replyText = response.text || "{}";
-    let parsed: any;
-    try {
-      parsed = JSON.parse(replyText);
-    } catch {
-      parsed = {
-        spokenResponse: replyText.replace(/```json|```/g, "").trim(),
-        action: { type: "NONE" },
-        status: "complete",
-      };
-    }
-
-    // Keep Gemini on the same desktop-intent normalization path as Ollama.
-    // This converts raw Gemini desktop actions into the MULTI_STEP_PLAN shape expected by App.tsx.
-    parsed = normalizeDesktopIntent(message, parsed, visionContext);
-    
-    const spoken = parsed.spokenResponse || parsed.spokenReply || "How can I assist you?";
-    res.json({
-      ...parsed,
-      spokenResponse: spoken,
-      spokenReply: spoken,
-      provider: "gemini",
-      model: activeGeminiModel,
-    });
-  } catch (error: any) {
-    console.error("Error in /api/chat:", error);
-    res.json({
-      spokenResponse: "I am experiencing a momentary delay, but I'm ready for your next request.",
-      spokenReply: "I am experiencing a momentary delay, but I'm ready for your next request.",
-      action: { type: "NONE" },
-      status: "idle",
-      warning: error.message,
-    });
-  }
+      const chatMessages = [...history.slice(-4).map((h: any) => ({ role: h.role === "assistant" ? "assistant" : "user", content: h.content })), { role: "user", content: message }];
+      let rawContent: string | null = null; let lastChatError: any;
+      for (const model of [activeOllamaModel, DEFAULT_OLLAMA_MODEL, "minicpm-v:latest"].filter((model, index, models) => model && models.indexOf(model) === index)) { try { rawContent = await callOllamaChat({ model, systemPrompt, messages: chatMessages, formatJson: true, options: { temperature: 0.2, num_ctx: 4096, num_predict: 180 } }); lastChatError = null; break; } catch (error) { lastChatError = error; } }
+      if (lastChatError || !rawContent) throw lastChatError || new Error("No Ollama chat response");
+      let parsed: any; try { parsed = JSON.parse(rawContent); } catch { const match = rawContent.match(/\{[\s\S]*\}/); parsed = match ? JSON.parse(match[0]) : null; }
+      if (!parsed) parsed = { spokenResponse: rawContent.replace(/```json|```/g, "").trim() || "How can I assist you?", action: { type: "NONE" }, status: "complete" };
+      parsed = normalizeDesktopIntent(message, parsed, visionContext); const spoken = parsed.spokenResponse || parsed.spokenReply || "How can I assist you?";
+      return res.json({ ...parsed, spokenResponse: spoken, spokenReply: spoken, provider: "ollama", model: activeOllamaModel });
+    } catch (ollamaErr: any) { console.warn("[Ollama] Local chat error:", ollamaErr.message); const warning = describeOllamaError(ollamaErr); return res.json({ spokenResponse: warning, spokenReply: warning, action: { type: "NONE" }, status: "idle", warning }); }
+  } catch (error: any) { console.error("Error in /api/chat:", error); return res.json({ spokenResponse: "I am experiencing a momentary delay, but I am ready for your next request.", spokenReply: "I am experiencing a momentary delay, but I am ready for your next request.", action: { type: "NONE" }, status: "idle", warning: error.message }); }
 });
 
 // Computer Vision: Screen & Desktop Reading Endpoint
@@ -2194,46 +1924,7 @@ Find the active application and visible actionable controls. Follow the target-s
       }
     }
 
-    // Gemini Vision Fallback
-    const ai = getAI();
-    const response = await generateContentWithFallback(ai, {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              inlineData: {
-                data: cleanBase64,
-                mimeType: "image/jpeg",
-              },
-            },
-            {
-              text: `${prompt}
-${visionSystemPrompt}`,
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    const rawText = response.text || "{}";
-    const cleanedText = rawText.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleanedText);
-    } catch {
-      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
-      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-    }
-
-    if (!parsed) {
-      throw new Error("Could not parse vision analysis response");
-    }
-
-    res.json({ ...parsed, ...coordinateMetadata });
+    return res.json({ ...coordinateMetadata, summary: "Local vision analysis is unavailable. Check Ollama and the configured vision model.", openWindows: [], activeApplication: "Unknown", detectedElements: [], extractedText: "", suggestedActions: ["Check Ollama status", "Try examining the screen again"], warning: "Local vision model unavailable.", provider: "ollama", model: activeOllamaVisionModel });
   } catch (error: any) {
     console.error("Error in /api/vision/analyze:", error);
     res.json({
@@ -2516,53 +2207,10 @@ Respond ONLY with valid JSON:
   "spokenCompletion": "Spoken sentence once all steps are completed"
 }`;
 
-    const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
-
-    if (useOllama) {
-      try {
-        const rawPlan = await callOllamaChat({
-          model: activeOllamaModel,
-          systemPrompt: plannerPrompt,
-          messages: [{ role: "user", content: `Goal: ${goal}` }],
-          formatJson: true,
-        });
-
-        let parsed: any;
-        try {
-          parsed = JSON.parse(rawPlan);
-        } catch {
-          const match = rawPlan.match(/\{[\s\S]*\}/);
-          parsed = match ? JSON.parse(match[0]) : null;
-        }
-
-        if (parsed && parsed.steps) {
-          return res.json(validateAgentPlan(parsed));
-        }
-      } catch (ollamaPlanErr: any) {
-        console.warn("[Ollama] Planner error:", ollamaPlanErr.message);
-      }
-    }
-
-    // Gemini Fallback
-    const ai = getAI();
-    const response = await generateContentWithFallback(ai, {
-      contents: [{ role: "user", parts: [{ text: plannerPrompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    const rawText = response.text || "{}";
-    const cleanedText = rawText.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleanedText);
-    } catch {
-      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
-      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-    }
-
-    res.json(validateAgentPlan(parsed));
+    const rawPlan = await callOllamaChat({ model: activeOllamaModel, systemPrompt: plannerPrompt, messages: [{ role: "user", content: `Goal: ${goal}` }], formatJson: true });
+    let parsed: any; try { parsed = JSON.parse(rawPlan); } catch { const match = rawPlan.match(/\{[\s\S]*\}/); parsed = match ? JSON.parse(match[0]) : null; }
+    if (!parsed || !parsed.steps) return res.status(502).json({ error: "The local Ollama planner returned an invalid plan." });
+    return res.json(validateAgentPlan(parsed));
   } catch (error: any) {
     console.error("Error in /api/agent/plan:", error);
     res.status(502).json({
