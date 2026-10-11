@@ -319,7 +319,7 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({
                 </option>
               ))
             ) : (
-              <option value="default">British Female (Microsoft Hazel / Victoria / Google UK)</option>
+              <option value="default">British Female (Microsoft Hazel / Victoria)</option>
             )}
           </select>
         </div>
