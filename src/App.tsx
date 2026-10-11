@@ -2027,6 +2027,7 @@ export default function App() {
       {experienceMode === "model" ? (
         avatarMode === "2d" ? (
           <Avatar2D
+            onSendMessage={handleSendMessage}
             isSpeaking={isVoiceSpeaking}
             isListening={isListening}
             audioLevel={audioLevel}
