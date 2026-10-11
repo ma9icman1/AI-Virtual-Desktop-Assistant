@@ -730,7 +730,8 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             aria-label="Nova 2.5D avatar"
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             style={{
-              transform: `translateZ(0px)`,
+              transform: `translateZ(0px) scale(1.22)`,
+              transformOrigin: "center center",
               filter: "drop-shadow(0 20px 30px rgba(0,0,0,0.5))",
             }}
           />
