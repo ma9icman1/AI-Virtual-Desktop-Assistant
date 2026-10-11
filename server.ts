@@ -1600,7 +1600,7 @@ app.post("/api/chat", async (req, res) => {
     const configuredAssistantName = typeof assistantName === "string" && assistantName.trim() ? assistantName.trim().slice(0, 32) : "Nova";
 
     // Joke requests are deterministic: use the Official Joke API instead of
-    // asking Ollama/Gemini to invent a joke. This also prevents a follow-up
+    // asking the local model to invent a joke. This also prevents a follow-up
     // "tell me a joke" after weather from falling back to the model's canned reply.
     const jokeIntent = /\b(?:tell|give|share|read)\s+(?:me\s+)?(?:a\s+)?(?:funny\s+)?joke\b/i.test(message)
       || /\b(?:another|one)\s+joke\b/i.test(message)
@@ -1764,7 +1764,7 @@ Use exactly this compact shape:
 {"summary":"short sentence","activeApplication":"focused app","detectedElements":[{"type":"button|input|menu|tab|text|window","label":"short label","boundingBox":{"x":0,"y":0,"width":0,"height":0},"center":{"x":0,"y":0}}]}
 Rules: return at most 8 detectedElements; prioritize clickable/input controls; omit uncertain elements; labels under 6 words; coordinates are pixels in the exact ${visionWidth}x${visionHeight} screenshot; keep the JSON short.`;
 
-    const useOllama = activeProvider === "ollama" || !process.env.GEMINI_API_KEY;
+    const useOllama = true;
 
     if (useOllama) {
       try {
@@ -1909,7 +1909,7 @@ Find the active application and visible actionable controls. Follow the target-s
         });
       } catch (ollamaVisionErr: any) {
         console.warn("[Ollama] Vision analysis error:", ollamaVisionErr.message);
-        if (!process.env.GEMINI_API_KEY) {
+        if (true) {
           return res.json({
             ...coordinateMetadata,
             summary: "I examined your screen. You have active application content open with readable text and controls.",
