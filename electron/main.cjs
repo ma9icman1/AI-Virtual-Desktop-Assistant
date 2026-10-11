@@ -2247,7 +2247,6 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
   // [browser-2d-clickthrough-v3]
   // The 2.5D avatar is visual only; forward pointer events to the browser below.
   window.setIgnoreMouseEvents(overlayMode, { forward: true });
-  window.setAlwaysOnTop(overlayMode, "screen-saver");
   if (overlayMode) {
     // The avatar overlay is click-through everywhere except its bottom-center
     // controls. Resize it first so the native hit-test area matches the 2.5D dock.
@@ -2280,7 +2279,7 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
       const inControlStrip =
         localX >= Math.max(0, bounds.width / 2 - 210) &&
         localX <= Math.min(bounds.width, bounds.width / 2 + 210) &&
-        localY >= Math.max(0, bounds.height - 145) &&
+        localY >= Math.max(0, bounds.height - 175) &&
         localY <= Math.min(bounds.height, bounds.height - 2);
 
       if (inControlStrip === window.__avatarControlInteractive) return;
@@ -2306,7 +2305,7 @@ ipcMain.on("magic-window-layout", (event, overlayMode) => {
       height: 630,
     });
   }
-});;
+});
 
 /* trusted renderer IPC hardening v1 */
 

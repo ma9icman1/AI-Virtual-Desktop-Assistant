@@ -446,7 +446,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
     canvas.width = CANVAS_SIZE;
     canvas.height = CANVAS_SIZE;
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    ctx.drawImage(base, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    // The neutral base is retained only as a reference for difference masks; do not draw it as a visible layer.
 
     // Animation PNGs are complete render plates, not isolated transparent
     // overlays. Drawing a plate directly paints its hair/head over the base.
@@ -759,7 +759,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             onSendMessage(message);
             setChatInput("");
           }}
-          className="absolute bottom-5 left-1/2 z-[9998] flex w-[min(720px,calc(100vw-28px))] -translate-x-1/2 items-center gap-2 rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-2 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
+          className="absolute bottom-5 left-1/2 z-[9998] flex w-[min(720px,calc(100vw-28px))] -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-cyan-300/25 bg-slate-950/90 p-1.5 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl pointer-events-auto"
           onPointerDown={(event) => event.stopPropagation()}
         >
           <input
@@ -880,7 +880,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             }`}
           />
           <span className="w-full px-8 text-center break-words text-slate-100" style={{ color: "#e9f7ff", textShadow: "0 0 10px rgba(0, 170, 255, 0.28)" }}>
-            {speechText.trim() || voiceNotice || ""}
+            {speechText.trim() || voiceNotice || "Nova 2.5D avatar ready"}
           </span>
         </div>
 
