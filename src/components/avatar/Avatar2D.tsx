@@ -880,7 +880,7 @@ export const Avatar2D: React.FC<Avatar2DProps> = ({
             }`}
           />
           <span className="w-full px-8 text-center break-words text-slate-100" style={{ color: "#e9f7ff", textShadow: "0 0 10px rgba(0, 170, 255, 0.28)" }}>
-            {speechText.trim() || voiceNotice || ""}
+            {speechText.trim() || voiceNotice || "Nova 2.5D avatar ready"}
           </span>
         </div>
 
