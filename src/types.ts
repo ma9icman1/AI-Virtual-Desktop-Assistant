@@ -140,7 +140,7 @@ export interface VoiceSettings {
   kokoroVoice?: string;
 }
 
-export type AIProviderType = "ollama" | "gemini";
+export type AIProviderType = "ollama";
 
 export interface OllamaModelInfo {
   name: string;
@@ -159,8 +159,6 @@ export interface AIConfig {
   ollamaHost: string;
   ollamaModel: string;
   ollamaVisionModel: string;
-  geminiModel: string;
   ollamaOnline: boolean;
   availableOllamaModels: OllamaModelInfo[];
-  hasGeminiKey: boolean;
 }
